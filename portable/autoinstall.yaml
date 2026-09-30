@@ -8,7 +8,7 @@ autoinstall:
 
   locale: en_US.UTF-8
   keyboard:
-    layout: de
+    layout: us
 
   source:
     id: ubuntu-desktop-minimal
