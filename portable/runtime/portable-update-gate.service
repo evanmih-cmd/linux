@@ -1,0 +1,14 @@
+[Unit]
+Description=Mandatory pre-session update gate
+Documentation=file:///usr/local/share/doc/portable/README.md
+After=local-fs.target NetworkManager.service systemd-resolved.service
+Wants=NetworkManager.service systemd-resolved.service
+Before=graphical.target
+OnSuccess=graphical.target
+OnFailure=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/portable-update-gate
+TimeoutStartSec=0
+RemainAfterExit=yes
