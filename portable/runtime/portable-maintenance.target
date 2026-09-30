@@ -1,5 +1,0 @@
-[Unit]
-Description=Portable maintenance boot target
-Requires=portable-update-gate.service
-After=portable-update-gate.service
-AllowIsolate=yes

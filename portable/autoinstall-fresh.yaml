@@ -1,0 +1,216 @@
+#cloud-config
+# Declarative fresh-install profile for the portable workstation.
+#
+# REQUIRED before use:
+#   1. Replace __TARGET_DISK_SERIAL__ with the exact target USB disk serial.
+#   2. Replace __LUKS_PASSPHRASE__ in a LOCAL copy only.
+#   3. Replace __PASSWORD_HASH__ with a SHA-512 password hash.
+#
+# This file intentionally contains no helper scripts or custom storage logic.
+autoinstall:
+  version: 1
+
+  refresh-installer:
+    update: true
+    channel: stable/ubuntu-26.04
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  source:
+    id: ubuntu-desktop-minimal
+    search_drivers: false
+
+  identity:
+    hostname: portable
+    realname: Portable User
+    username: portable
+    password: "__PASSWORD_HASH__"
+
+  storage:
+    swap:
+      size: 0
+
+    grub:
+      update_nvram: false
+      reorder_uefi: false
+      remove_duplicate_entries: false
+      probe_additional_os: false
+
+    config:
+      - id: target-disk
+        type: disk
+        ptable: gpt
+        serial: "__TARGET_DISK_SERIAL__"
+        wipe: superblock-recursive
+        grub_device: true
+
+      - id: esp
+        type: partition
+        device: target-disk
+        number: 1
+        size: 1G
+        flag: boot
+        name: PORTABLE_EFI
+
+      - id: boot
+        type: partition
+        device: target-disk
+        number: 2
+        size: 2G
+        name: PORTABLE_BOOT
+
+      - id: encrypted
+        type: partition
+        device: target-disk
+        number: 3
+        size: -1
+        name: PORTABLE_CRYPT
+
+      - id: esp-fs
+        type: format
+        fstype: fat32
+        volume: esp
+        label: PORTABLE_EFI
+
+      - id: boot-fs
+        type: format
+        fstype: ext4
+        volume: boot
+        label: PORTABLE_BOOT
+
+      - id: crypt
+        type: dm_crypt
+        dm_name: portable-crypt
+        volume: encrypted
+        key: "__LUKS_PASSPHRASE__"
+        options:
+          - luks
+
+      - id: vg
+        type: lvm_volgroup
+        name: portable-vg
+        devices:
+          - crypt
+
+      - id: root-lv
+        type: lvm_partition
+        name: root
+        volgroup: vg
+        size: 32G
+
+      - id: home-lv
+        type: lvm_partition
+        name: home
+        volgroup: vg
+        size: 8G
+
+      - id: persist-lv
+        type: lvm_partition
+        name: persist
+        volgroup: vg
+        size: 32G
+
+      - id: logs-lv
+        type: lvm_partition
+        name: logs
+        volgroup: vg
+        size: 4G
+
+      - id: root-fs
+        type: format
+        fstype: ext4
+        volume: root-lv
+        label: PORTABLE_ROOT
+
+      - id: home-fs
+        type: format
+        fstype: ext4
+        volume: home-lv
+        label: PORTABLE_HOME
+
+      - id: persist-fs
+        type: format
+        fstype: ext4
+        volume: persist-lv
+        label: PORTABLE_PERSIST
+
+      - id: logs-fs
+        type: format
+        fstype: ext4
+        volume: logs-lv
+        label: PORTABLE_LOGS
+
+      - id: root-mount
+        type: mount
+        device: root-fs
+        path: /
+
+      - id: boot-mount
+        type: mount
+        device: boot-fs
+        path: /boot
+
+      - id: esp-mount
+        type: mount
+        device: esp-fs
+        path: /boot/efi
+
+      - id: home-mount
+        type: mount
+        device: home-fs
+        path: /home
+
+      - id: persist-mount
+        type: mount
+        device: persist-fs
+        path: /persist
+
+      - id: logs-mount
+        type: mount
+        device: logs-fs
+        path: /var/log
+
+  packages:
+    - cryptsetup-initramfs
+    - lvm2
+    - systemd-zram-generator
+
+  updates: all
+
+  drivers:
+    install: false
+
+  codecs:
+    install: false
+
+  oem:
+    install: false
+
+  # Keep the removable-media fallback boot path current and never modify
+  # firmware boot variables. These are package settings, not custom scripts.
+  debconf-selections: |
+    grub-efi-amd64 grub2/force_efi_extra_removable boolean true
+    grub-efi-amd64 grub2/no_efi_extra_removable boolean false
+    grub-efi-amd64 grub2/update_nvram boolean false
+
+  user-data:
+    write_files:
+      - path: /etc/systemd/zram-generator.conf
+        permissions: "0644"
+        content: |
+          [zram0]
+          zram-size = min(ram / 4, 8192)
+          compression-algorithm = zstd
+          swap-priority = 100
+
+      - path: /etc/systemd/sleep.conf.d/portable.conf
+        permissions: "0644"
+        content: |
+          [Sleep]
+          AllowHibernation=no
+          AllowSuspendThenHibernate=no
+          AllowHybridSleep=no
+
+  shutdown: poweroff
