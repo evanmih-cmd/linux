@@ -93,6 +93,17 @@ fail_closed() {
   systemctl start getty@tty1.service || true
 }
 
+transition_and_wait() {
+  local action="$1"
+  trap - ERR
+  trap - EXIT
+  sync
+  systemctl "$action" --no-block
+  # Do not return success and accidentally release graphical.target while
+  # systemd is transitioning execution state.
+  while :; do sleep 3600; done
+}
+
 trap fail_closed ERR
 
 validate_post_reinit
@@ -131,18 +142,13 @@ expected_kernel="$(newest_kernel)"
 if [[ -n "$expected_kernel" && "$running_kernel" != "$expected_kernel" ]]; then
   echo "A new kernel is installed ($expected_kernel; running $running_kernel)."
   echo "Cold boot is required before an interactive session."
-  sync
-  systemctl poweroff
-  exit 0
+  transition_and_wait poweroff
 fi
 
 if [[ "$before_microcode" != "$after_microcode" ]]; then
   echo "CPU microcode changed. Cold boot is required before an interactive session."
-  sync
-  systemctl poweroff
-  exit 0
+  transition_and_wait poweroff
 fi
 
 echo "Userspace changed; performing soft reboot before interactive session."
-sync
-systemctl soft-reboot
+transition_and_wait soft-reboot
