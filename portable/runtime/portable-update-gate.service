@@ -12,3 +12,6 @@ Type=oneshot
 ExecStart=/usr/local/sbin/portable-update-gate
 TimeoutStartSec=0
 RemainAfterExit=yes
+
+[Install]
+WantedBy=portable-maintenance.target
