@@ -25,9 +25,6 @@ autoinstall:
   storage: {}
   # END GENERATED STORAGE
 
-  swap:
-    size: 0
-
   drivers:
     install: false
 
