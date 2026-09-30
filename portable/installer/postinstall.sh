@@ -13,9 +13,11 @@ fi
 source "$STATE"
 
 install -d -m 0755 "$TARGET/usr/local/sbin"
+install -d -m 0755 "$TARGET/usr/local/share/doc/portable"
 install -d -m 0755 "$TARGET/etc/systemd/system"
-install -d -m 0755 "$TARGET/etc/systemd/system/portable-maintenance.target.wants"
 install -d -m 0755 "$TARGET/etc/apt/apt.conf.d"
+
+install -m 0644 /cdrom/portable/README.md   "$TARGET/usr/local/share/doc/portable/README.md"
 
 cat >"$TARGET/etc/crypttab" <<EOF
 portable-root UUID=$LUKS_UUID none luks
@@ -36,7 +38,7 @@ APT::Periodic::Unattended-Upgrade "0";
 EOF
 
 # No disk-backed hibernation path.
-chroot "$TARGET" systemctl mask hibernate.target hybrid-sleep.target >/dev/null
+systemctl --root="$TARGET" mask hibernate.target hybrid-sleep.target >/dev/null
 
 # zram is intentionally modest; it is a pressure valve, not capacity planning.
 cat >"$TARGET/etc/systemd/zram-generator.conf" <<'EOF'
@@ -51,8 +53,8 @@ install -m 0755 /cdrom/portable/runtime/portable-update-gate.sh   "$TARGET/usr/l
 install -m 0644 /cdrom/portable/runtime/portable-update-gate.service   "$TARGET/etc/systemd/system/portable-update-gate.service"
 install -m 0644 /cdrom/portable/runtime/portable-maintenance.target   "$TARGET/etc/systemd/system/portable-maintenance.target"
 
-ln -sfn ../portable-update-gate.service   "$TARGET/etc/systemd/system/portable-maintenance.target.wants/portable-update-gate.service"
-ln -sfn /etc/systemd/system/portable-maintenance.target   "$TARGET/etc/systemd/system/default.target"
+systemctl --root="$TARGET" enable portable-update-gate.service >/dev/null
+systemctl --root="$TARGET" set-default portable-maintenance.target >/dev/null
 
 # Ensure initramfs knows how to unlock the root device.
 chroot "$TARGET" update-initramfs -u -k all
