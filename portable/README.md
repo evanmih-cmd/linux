@@ -42,7 +42,7 @@ The following are accepted architecture, not open design questions:
 - Normal interactive use is blocked until the mandatory boot-time update gate
   completes successfully.
 - All managed executable software belongs to one update domain.
-- Every managed system mutation gets a rollback point first.
+- Every managed system update gets a rollback point first.
 - System rollback never automatically rolls back persistent user/application
   state.
 - A true cold restart must never be implemented by changing `BootOrder`,
@@ -305,7 +305,7 @@ No disk-backed swap is part of the design.
 
 ## Snapshot policy
 
-Before every managed mutation of executable/system state, create a read-only
+Before every managed update of executable/system state, create a read-only
 snapshot of `@root`.
 
 Typical retained states:
@@ -536,14 +536,13 @@ Reinstall uses the same storage architecture and preserves:
 
 Before replacing the system root:
 
-1. create a read-only snapshot of the current `@root`;
-2. back up current ESP boot artifacts into encrypted snapshot storage;
-3. replace/recreate only `@root`;
-4. reinstall the OS into the canonical `@root`;
-5. rebuild signed UKIs/boot artifacts;
-6. fully update;
-7. validate;
-8. establish the new `last-known-good`.
+1. back up current ESP boot artifacts into encrypted snapshot storage;
+2. replace/recreate only `@root`;
+3. reinstall the OS into the canonical `@root`;
+4. rebuild signed UKIs/boot artifacts;
+5. fully update;
+6. validate;
+7. establish the new `last-known-good`.
 
 Persistent data is not reformatted as part of reinstall.
 
