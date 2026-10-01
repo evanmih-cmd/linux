@@ -25,7 +25,7 @@ The implementation direction is:
 
 ```text
 openSUSE Tumbleweed
-→ Agama unattended provisioning
+→ declarative provisioning (Agama for VM proof; production media still gated)
 → removable SSD only
 → Secure Boot + systemd-boot/BLS
 → TPM2+PIN primary unlock + owner LUKS passphrase for emergency portability
@@ -35,8 +35,10 @@ openSUSE Tumbleweed
 → sensitive workload released only after successful maintenance
 ```
 
-The next proof stage is Oracle VirtualBox. Physical-host checks that cannot be
-proved in a VM are explicitly listed in the architecture document.
+The next proof stage is Oracle VirtualBox using the Agama test medium. Passing
+that proof validates the architecture mechanics, not the testing ISO as a
+production installer. Physical-host and production-provisioning gates are
+listed in the architecture document.
 
 ## Repository principles
 
