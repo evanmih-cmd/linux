@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<profile xmlns="http://www.suse.com/1.0/yast2ns"
+         xmlns:config="http://www.suse.com/1.0/configns">
+  <general>
+    <mode>
+      <confirm config:type="boolean">false</confirm>
+      <final_halt config:type="boolean">true</final_halt>
+      <second_stage config:type="boolean">false</second_stage>
+    </mode>
+    <ask-list config:type="list">
+      <ask>
+        <title>Portable workstation recovery credential</title>
+        <question>Enter the LUKS recovery passphrase</question>
+        <type>string</type>
+        <password config:type="boolean">true</password>
+        <path>general,storage,proposal,encryption_password</path>
+        <stage>initial</stage>
+      </ask>
+      <ask>
+        <title>Portable workstation TPM credential</title>
+        <question>Enter the TPM2 boot PIN</question>
+        <type>string</type>
+        <password config:type="boolean">true</password>
+        <stage>initial</stage>
+        <script>
+          <filename>store-tpm2-pin</filename>
+          <interpreter>shell</interpreter>
+          <environment config:type="boolean">true</environment>
+          <debug config:type="boolean">false</debug>
+          <feedback config:type="boolean">false</feedback>
+          <rerun_on_error config:type="boolean">true</rerun_on_error>
+          <source><![CDATA[
+set -eu
+test -n "${VAL:-}"
+if id="$(/usr/bin/keyctl id %user:sdbootutil-tpm2-pin 2>/dev/null)"; then
+  printf '%s' "$VAL" | /usr/bin/keyctl pupdate "$id" >/dev/null
+else
+  printf '%s' "$VAL" | /usr/bin/keyctl padd user sdbootutil-tpm2-pin @u >/dev/null
+fi
+unset VAL
+]]></source>
+        </script>
+      </ask>
+      <ask>
+        <title>Portable workstation administrator</title>
+        <question>Enter the root password</question>
+        <type>string</type>
+        <password config:type="boolean">true</password>
+        <path>users,0,user_password</path>
+        <stage>initial</stage>
+      </ask>
+    </ask-list>
+  </general>
+
+  <language>
+    <language>en_US</language>
+  </language>
+  <keyboard>
+    <keymap>english-us</keymap>
+  </keyboard>
+  <timezone>
+    <hwclock>UTC</hwclock>
+    <timezone>Europe/Berlin</timezone>
+  </timezone>
+
+  <partitioning config:type="list">
+    <drive>
+      <device>/dev/disk/by-id/ata-VBOX_HARDDISK_PORTABLESSD20260930A</device>
+      <initialize config:type="boolean">true</initialize>
+    </drive>
+  </partitioning>
+
+  <bootloader>
+    <loader_type>systemd-boot</loader_type>
+    <global>
+      <secure_boot>true</secure_boot>
+      <update_nvram>false</update_nvram>
+      <timeout config:type="integer">5</timeout>
+    </global>
+  </bootloader>
+
+  <software>
+    <patterns config:type="list">
+      <pattern>base</pattern>
+    </patterns>
+    <packages config:type="list">
+      <package>sdbootutil</package>
+    </packages>
+    <do_online_update config:type="boolean">false</do_online_update>
+    <install_recommended config:type="boolean">true</install_recommended>
+  </software>
+
+  <users config:type="list">
+    <user>
+      <username>root</username>
+      <user_password>__ASK__</user_password>
+      <encrypted config:type="boolean">false</encrypted>
+    </user>
+  </users>
+</profile>
