@@ -26,8 +26,14 @@ is evidence only for a CONFIG claim; runtime claims require live execution.
 The proof VM must have:
 
 - UEFI firmware;
-- one dedicated virtual target disk representing the removable workstation;
-- no second host/system disk used by the installer;
+- two virtual disks: disk 0 represents the ASUS internal system disk and disk 1
+  represents the removable workstation target;
+- the internal-system disk is deliberately present during installation and is
+  pre-populated with sentinel partition/filesystem data whose pre/post state is
+  compared;
+- the unattended profile is embedded as `/autoinst.json` in the Agama
+  installation image; the installer must discover it by the supported media
+  mechanism and start without an external control-plane injecting configuration;
 - networking only as needed for installation/update testing;
 - virtual TPM only when the installed VirtualBox release exposes a usable TPM
   mode;
@@ -40,8 +46,8 @@ already documented in issue #1.
 
 | # | Claim | Type | Evidence |
 |---|---|---|---|
-| 1 | Agama installs Tumbleweed unattended to the dedicated target disk | BEHAVIOR | Boot installer, submit profile, complete installation, boot installed system |
-| 2 | Installer touches only the dedicated target disk | BOTH | Inspect resulting VM storage graph/partition table; installation must succeed with no second disk present |
+| 1 | Agama installs Tumbleweed unattended from the profile embedded in the installation medium | BEHAVIOR | Boot the generated Agama image containing `/autoinst.json`; installation must start from media discovery without API/UI configuration injection, complete, and boot the installed system |
+| 2 | Installer touches only the portable target while an ASUS-internal disk is present | BOTH | Before install, record the internal disk partition/filesystem/sentinel state and the portable disk identity; after install, prove the portable disk changed as intended and the internal disk state is unchanged |
 | 3 | UEFI installation uses the Tumbleweed systemd-boot/BLS path | BOTH | Read effective bootloader/BLS state, then reboot and boot successfully through it |
 | 4 | NVRAM-update policy is disabled for portable provisioning | CONFIG | Read effective installer/bootloader state showing the supported no-NVRAM-update setting |
 | 5 | External-style fallback boot artifact exists | CONFIG | Inspect ESP for the removable fallback path required by the architecture |
@@ -80,9 +86,15 @@ Those remain physical validation gates.
 1. Establish the narrow VirtualBox control plane from WSL.
 2. Inventory the installed VirtualBox release and available firmware/TPM
    capabilities.
-3. Create the disposable UEFI VM and dedicated target disk.
-4. Boot the official Agama Live ISO as the validation harness.
-5. Drive the declarative Tumbleweed installation.
+3. Create the disposable UEFI VM with two disks: internal-ASUS guard disk first,
+   portable target disk second.
+4. Build the VM harness from the verified Agama ISO by adding the declarative
+   profile as `/autoinst.json` using Agama's supported installation-medium
+   mechanism. This generated image is also the image intended to be written to
+   the physical installer USB later.
+5. Boot that image and let Agama discover the embedded profile and run the
+   installation unattended; do not drive installation by injecting runtime
+   configuration through the Agama API/UI.
 6. Execute CONFIG gates from the installed system.
 7. Execute BEHAVIOR gates by rebooting, updating, failing and rolling back the
    live VM.
