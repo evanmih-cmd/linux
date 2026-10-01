@@ -62,7 +62,7 @@ Reasons:
   by `sdbootutil`;
 - TPM2 measured-FDE integration is distribution-supported;
 - `transactional-update` provides atomic snapshot-based system updates;
-- Agama provides declarative unattended installation for Tumbleweed;
+- Agama provides a declarative unattended Tumbleweed installation model that is useful for validation; the production provisioning medium is still subject to the GA-only rule;
 - the design does not require enterprise management infrastructure or
   additional specialized hardware.
 
@@ -184,9 +184,17 @@ persistence framework.
 
 ### Installer
 
-Use **Agama** for fresh unattended provisioning.
+For VM validation, use the official Agama Live ISO and its unattended profile
+model. The Agama Live ISO is explicitly a development/testing medium, so a
+successful VM proof does **not** by itself approve that ISO as the production
+provisioning path.
 
-The installation profile must:
+Production provisioning remains an implementation gate: use Agama only if a
+supported production Tumbleweed installation path exposes the required profile
+capabilities at deployment time. Otherwise continue evaluating the supported
+YaST/AutoYaST path rather than promoting a testing installer into production.
+
+The declarative installation definition must:
 
 - select `Tumbleweed`;
 - identify the destructive target unambiguously and fail if that identity
@@ -195,6 +203,9 @@ The installation profile must:
 - create the required external ESP and encrypted Btrfs system;
 - use LUKS2 with an owner passphrase;
 - enable the supported TPM-backed unlock method for the primary host;
+- preserve the target architecture of TPM2+PIN; current Agama profile
+  documentation exposes TPM enablement but not a separate PIN selector, so the
+  exact supported enrollment path is part of VM/implementation validation;
 - set `bootloader.updateNvram=false`;
 - install the Tumbleweed-selected EFI bootloader path;
 - leave internal disks, internal ESPs and persistent firmware boot
@@ -207,9 +218,11 @@ The final profile must not identify the target with ambiguous rules such as
 
 ### Declarative preference
 
-The Agama profile is the authoritative provisioning input.
+A validated declarative installer profile is the authoritative provisioning
+input. During VM proof that profile is Agama JSON/Jsonnet; production adoption
+depends on the installer-medium decision above.
 
-Post-install scripts are allowed only for a capability Agama cannot express
+Post-install scripts are allowed only for a capability the selected installer cannot express
 declaratively and only after that product gap is documented. A script must not
 be used merely because it is quicker to write than learning the supported
 declarative mechanism.
@@ -372,7 +385,7 @@ management or TPM policy logic.
 
 Using Oracle VirtualBox, validate:
 
-1. unattended Agama installation to a dedicated virtual target disk;
+1. unattended Agama test installation to a dedicated virtual target disk;
 2. UEFI boot with the Tumbleweed systemd-boot/BLS path;
 3. LUKS2 passphrase plus virtual TPM-backed primary unlock if VirtualBox exposes
    the required TPM behavior;
@@ -416,7 +429,7 @@ firmware-mutation, enterprise-management or bespoke update infrastructure.
 ## Implementation order
 
 1. Prove the architecture in VirtualBox.
-2. Produce the Agama unattended profile from the validated VM configuration.
+2. Preserve the validated declarative profile and resolve the production installer/media gate.
 3. Implement only the minimal systemd maintenance gate required to bind
    transactional-update to the sensitive workload target.
 4. Validate the same artifacts on the physical removable SSD/FA401EA.
