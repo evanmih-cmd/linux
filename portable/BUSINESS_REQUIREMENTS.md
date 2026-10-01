@@ -164,3 +164,9 @@ Technical architecture and implementation choices in other files must serve thes
 **Requirement:** The portable workstation must support the external owner-controlled hardware devices required by the target workload through a practical, supported interaction path.
 
 **Example:** A required USB or HID authorization device can be connected and used from the workload environment without unsupported drivers, custom device forwarding infrastructure, or routine host-specific reconfiguration.
+
+### 26. Offline provisioning and bare-metal recovery
+
+**Requirement:** Creating or recovering the baseline workstation must not depend on network availability or on the presence of working network drivers in the installation environment.
+
+**Example:** The installer USB contains the packages required to create the supported baseline system; networking may be used only after the installed system has booted into the normal maintenance policy.
