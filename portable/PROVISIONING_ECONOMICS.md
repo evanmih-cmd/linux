@@ -109,6 +109,38 @@ After import, no private bootloader implementation is needed:
 honors `UPDATE_NVRAM=no` by using its no-variable behavior. The installed
 target can therefore use the stock Tumbleweed package.
 
+## Secret-separation gate
+
+Current upstream YaST/sdbootutil integration exposes another cost item that must
+be verified against the exact Offline Image packages before acceptance.
+
+For `systemd_fde` with `tpm2+pin`, current YaST bootloader code passes the
+storage encryption password to the legacy generic `sdbootutil` keyring secret.
+Current sdbootutil treats that generic secret as a backward-compatible fallback
+for the TPM2 PIN. Thus the stock automated path can make the LUKS password and
+the normal TPM PIN the same value.
+
+That is not the desired operational model: the emergency LUKS credential must
+remain suitable against offline attack, while the normal TPM PIN can rely on TPM
+rate limiting and should remain practical for routine boot.
+
+The cheapest product-compatible separation candidate is currently:
+
+1. AutoYaST asks for the LUKS/recovery passphrase and supplies it to the normal
+   storage proposal.
+2. A second password-style AutoYaST question receives the TPM PIN without
+   embedding it in the installation medium.
+3. The question's supported script hook places that PIN only in the
+   `%user:sdbootutil-tpm2-pin` kernel-keyring entry. Current sdbootutil gives
+   that specific key precedence over the legacy generic key supplied by YaST.
+4. The key is short-lived and exists only in the installer environment; the
+   target receives the resulting TPM enrollment, not the clear-text PIN file.
+
+This avoids an FDE fork and uses documented AutoYaST ask/script plus documented
+sdbootutil secret-input mechanisms. It is still custom installer glue and must
+be live-tested. The exact Snapshot20260930 RPMs are authoritative; upstream
+`master` is only research evidence until the ISO package contents are checked.
+
 ## Delivery cost of that delta
 
 openSUSE already provides the Driver Update / installation-media tooling:
