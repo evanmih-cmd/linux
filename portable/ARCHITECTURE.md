@@ -12,14 +12,25 @@ must change.
 
 The architecture is intentionally product-first and economy-first:
 
-- use supported production capabilities before custom mechanisms;
-- prefer distribution defaults when they satisfy the requirements;
-- custom code is residual policy glue only;
-- do not maintain a private PKI, custom bootloader, custom updater, bespoke
-  installer framework, or owner-built kernel-signing lifecycle unless a real
-  product gap is proven and consciously accepted;
+- **Product First** is an ordering rule, not a ban on custom work. Evaluate and
+  exhaust supported production product mechanisms before designing an
+  owner-built substitute. Prefer distribution defaults when they satisfy the
+  requirements, because they usually reduce lifecycle cost and uncertainty.
+- **Economy First** is a cost rule, not a component-count rule. Among solutions
+  that satisfy the authoritative requirements, compare total lifecycle cost:
+  implementation effort, recurring administration, maintenance/debugging,
+  infrastructure/capital cost, upgrade burden, recovery burden and expected
+  operational loss from failure. Fewer components or less custom code matter
+  only insofar as they reduce that total cost.
+- Custom code, patches, image customization or additional components are
+  legitimate candidates when their total lifecycle cost is lower than the
+  available product alternatives while still satisfying the requirements.
+- A product mechanism does not win merely because it is built in; product
+  mechanisms get evaluated first. Conversely, a custom mechanism is not
+  rejected merely because it is custom.
 - beta, preview, RC, experimental, or test-only features are not part of the
-  critical path.
+  production critical path unless the business requirements are explicitly
+  changed to accept that risk/cost.
 
 The current design is ready for implementation validation in a VM. Hardware-
 specific behavior is called out explicitly where it still requires proof on the
@@ -237,22 +248,27 @@ boot path.
 
 ### Current provisioning gate
 
-Provisioning remains unresolved. Do not paper over the gap with an installer
-post-script, a custom YaST patch, a private installer fork or a network control
-plane merely to make a test pass.
+Provisioning remains unresolved.
 
-The next product-level research question is whether a currently supported
-offline Tumbleweed installation path can expose Agama-equivalent NVRAM-safe
-BLS/TPM behavior, or whether another supported Tumbleweed boot path satisfies
-all requirements with AutoYaST.
+Product First requires checking the supported Tumbleweed installation/boot
+combinations before designing a custom solution. If none satisfies the
+requirements, custom alternatives such as a small installer transformation,
+YaST patch, image customization or another mechanism remain valid candidates
+and must be compared by total lifecycle cost rather than rejected categorically.
+
+The next research question is therefore two-stage: first determine the cheapest
+supported product path that satisfies the requirements; if no such path exists,
+price the smallest custom delta against switching products or accepting a
+different supported boot/install combination.
 
 ### Declarative preference
 
 The final validated installer profile is the authoritative provisioning input.
-Post-install scripts are allowed only for non-critical residual configuration
-after a documented product gap is consciously accepted; they are not an
-acceptable substitute for target-disk safety, boot trust, NVRAM isolation or
-unlock policy.
+Post-install scripts or other custom mechanisms are not preferred merely for
+convenience, but neither are they categorically excluded from security-critical
+functions. If a product gap exists, the custom delta must be evaluated against
+alternative products and architectures by total lifecycle cost while still
+meeting the same safety/security requirements.
 
 The old `autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` files are
 legacy Ubuntu/Subiquity experiments. They are not valid implementation
