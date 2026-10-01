@@ -379,6 +379,33 @@ Its responsibilities are limited to:
 It must not duplicate package management, snapshot implementation, bootloader
 management or TPM policy logic.
 
+## Validation methodology
+
+Validation follows the same product-first rule as the architecture itself.
+
+Two different kinds of claims must be tested differently:
+
+- **configuration invariants** are verified by reading the effective system
+  configuration/state and proving that the required value is actually set;
+- **behavioral invariants** are verified by exercising the live system and
+  observing the required outcome.
+
+A configuration assertion is not accepted as proof of runtime behavior, and a
+self-referential test that only compares an expected value with the value used
+to construct the test is not evidence.
+
+Examples:
+
+- bootloader selection, NVRAM-update policy, kexec enablement, filesystem
+  layout, active systemd dependencies and TPM enrollment state are
+  configuration/state checks;
+- successful boot, failed-unlock behavior, snapshot rollback, update failure,
+  soft reboot activation, workload blocking/release and persistence across
+  restart are live behavioral tests.
+
+Where a requirement has both a configuration and a behavioral dimension, both
+must be checked independently.
+
 ## Validation gates
 
 ### VM proof required before implementation is considered proven
