@@ -1,0 +1,53 @@
+{
+  "product": {
+    "id": "Tumbleweed"
+  },
+  "localization": {
+    "language": "en_US",
+    "keyboard": "us"
+  },
+  "bootloader": {
+    "updateNvram": false
+  },
+  "root": {
+    "sshPublicKeys": [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMv+U8d847MuRGzYbwpelcUUeAhCZ6+YejDtdzpYOlsJ desktop-linux-vm-proof"
+    ]
+  },
+  "user": {
+    "fullName": "Desktop Linux VM Proof",
+    "userName": "vmproof",
+    "sshPublicKeys": [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMv+U8d847MuRGzYbwpelcUUeAhCZ6+YejDtdzpYOlsJ desktop-linux-vm-proof"
+    ]
+  },
+  "storage": {
+    "drives": [
+      {
+        "search": "/dev/sda",
+        "alias": "target",
+        "partitions": [
+          {
+            "search": "*",
+            "delete": true
+          },
+          {
+            "generate": {
+              "partitions": "default",
+              "encryption": {
+                "luks2": {
+                  "password": "DESKTOP-LINUX-VM-PROOF-ONLY",
+                  "tpm": true
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "boot": {
+      "configure": true,
+      "device": "target"
+    }
+  }
+}
