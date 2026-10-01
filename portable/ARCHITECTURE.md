@@ -62,7 +62,7 @@ Reasons:
   by `sdbootutil`;
 - TPM2 measured-FDE integration is distribution-supported;
 - `transactional-update` provides atomic snapshot-based system updates;
-- the official Tumbleweed Offline Image provides a supported no-network installation source; AutoYaST is the current declarative provisioning candidate;
+- the provisioning mechanism remains an explicit open gate: the final path must be offline, declarative, non-destructive to the host, NVRAM-safe, and compatible with the selected Secure Boot / measured-unlock architecture;
 - the design does not require enterprise management infrastructure or
   additional specialized hardware.
 
@@ -182,88 +182,77 @@ persistence framework.
 
 ## Provisioning
 
-### Offline installer is a requirement
+### Provisioning requirements must be satisfied together
 
-Provisioning and bare-metal recovery must not depend on network availability.
-The installation medium therefore has to contain the packages needed to create
-the baseline workstation.
+No installer is selected merely because it solves one part of provisioning.
+The production path must simultaneously provide:
 
-The current production candidate is the official openSUSE Tumbleweed **Offline
-Image** (DVD/USB installation image), not the Agama Live ISO. The Agama Live
-image requires network access for product packages and is therefore rejected
-from the production path.
+- a supported production/GA Tumbleweed installation medium;
+- all packages required for baseline installation on the medium, so initial
+  provisioning and bare-metal recovery work with networking unavailable;
+- a declarative unattended profile carried by the installation medium itself;
+- unambiguous selection of the removable target while the host internal disk is
+  present;
+- no writes to the host internal disk or its ESP;
+- no persistent host NVRAM/boot-order mutation;
+- the selected Secure Boot + BLS boot architecture;
+- LUKS2 with both the owner recovery passphrase and the supported TPM2+PIN
+  primary-host unlock path;
+- repeatable construction and provenance verification of the installer image.
 
-The unattended control plane is **AutoYaST**. A custom installation image is
-built from a verified immutable Tumbleweed Offline Image by adding
-`/autoinst.xml` to the installation medium. YaST/AutoYaST must discover that
-file from the medium itself; no second machine, network service, remote browser,
-SSH session or runtime API is part of provisioning.
+A candidate that misses any one of these is not the production provisioning
+path.
 
-The same generated installation image is used in VM validation and is later
-written to the physical installer USB. VirtualBox's inability to boot a
-physical USB device is a transport limitation only; VM validation boots the
-same image as a virtual DVD and does not claim to prove physical USB boot.
+### Agama Live ISO
 
-### Installation-source trust
+Agama's native profile model is attractive because current Agama exposes
+`bootloader.updateNvram=false`, declarative target selection, LUKS2/TPM
+configuration and unattended profiles embedded in the installation medium.
 
-Before modification, the immutable upstream Tumbleweed Offline Image must be
-verified by both:
+The current public openSUSE Agama Live ISO is nevertheless rejected from the
+production path because it is documented as a development/testing image and
+does not contain the product package repositories. Baseline installation
+therefore requires networking.
 
-- the upstream SHA-256 checksum; and
-- the upstream detached signature using the openSUSE Project Signing Key
-  fingerprint published by openSUSE.
+It may be used only for isolated product research where the result is not
+mistaken for production-path validation.
 
-The locally generated image is no longer covered by the upstream signature.
-Its provenance is therefore the verified upstream image plus the
-version-controlled `autoinst.xml` and the reproducible image-construction
-step. Record the resulting image SHA-256 and verify the physical USB write
-against that artifact before use.
+### Tumbleweed Offline Image + AutoYaST
 
-No package download is allowed to be necessary for the baseline installation.
-Network may be used only after the installed system boots, under the mandatory
-maintenance gate.
+The official Tumbleweed Offline Image satisfies the offline-media requirement
+and YaST/AutoYaST provides a mature unattended profile mechanism carried by the
+installation medium.
 
-### Disk authority
+However, current YaST bootloader code does not import `update_nvram` from an
+AutoYaST profile for the BLS boot paths that matter to this design
+(`systemd-boot` and `grub2-bls`). Those objects default to updating NVRAM.
+Therefore this combination is **not accepted** as the production path in its
+current form.
 
-The installer is tested and deployed with the host internal disk present.
+Traditional `grub2-efi` AutoYaST does import `update_nvram`, but changing the
+boot architecture is not a workaround by itself. It becomes a candidate only
+if the complete Secure Boot, measured TPM2+PIN unlock, transactional-update,
+rollback and removable-fallback requirements are independently proven with that
+boot path.
 
-The declarative installation definition must:
+### Current provisioning gate
 
-- identify the removable target unambiguously and fail rather than guess;
-- configure only the selected removable SSD;
-- leave the host internal disk, its partitions, filesystems and ESP untouched;
-- create the required external ESP and encrypted Btrfs system;
-- use LUKS2 with an owner passphrase;
-- install the Tumbleweed-selected EFI boot path;
-- avoid persistent firmware boot-order authority;
-- install the packages/configuration required for the browser-centric workload
-  and mandatory startup maintenance flow.
+Provisioning remains unresolved. Do not paper over the gap with an installer
+post-script, a custom YaST patch, a private installer fork or a network control
+plane merely to make a test pass.
 
-The final profile must not identify the target with ambiguous rules such as
-"first USB disk", "largest disk", or "first non-installer disk".
-
-### Known bootloader-profile gate
-
-AutoYaST is not yet considered fully validated for the selected boot
-architecture. Current YaST bootloader source imports `update_nvram` for
-GRUB-based EFI paths but does not import that field for the systemd-boot
-AutoYaST path. Therefore the requirement to avoid persistent host NVRAM
-mutation remains an explicit implementation gate; do not silently paper over
-it with a post-install script.
-
-The production choice must remain declarative and supported. If the current
-Tumbleweed AutoYaST/systemd-boot combination cannot express the required
-no-NVRAM behavior, either a supported equivalent boot path must satisfy the
-same security requirements or the installer choice must be revisited.
+The next product-level research question is whether a currently supported
+offline Tumbleweed installation path can expose Agama-equivalent NVRAM-safe
+BLS/TPM behavior, or whether another supported Tumbleweed boot path satisfies
+all requirements with AutoYaST.
 
 ### Declarative preference
 
-The validated AutoYaST profile is the authoritative provisioning input.
-
-Post-install scripts are allowed only for a capability the selected installer
-cannot express declaratively and only after that product gap is documented and
-accepted. A script must not be used merely because it is quicker to write than
-using the supported declarative mechanism.
+The final validated installer profile is the authoritative provisioning input.
+Post-install scripts are allowed only for non-critical residual configuration
+after a documented product gap is consciously accepted; they are not an
+acceptable substitute for target-disk safety, boot trust, NVRAM isolation or
+unlock policy.
 
 The old `autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` files are
 legacy Ubuntu/Subiquity experiments. They are not valid implementation
@@ -448,24 +437,23 @@ must be checked independently.
 
 ### VM proof required before implementation is considered proven
 
-Using Oracle VirtualBox, validate:
+Using Oracle VirtualBox, validate the final selected provisioning path only after
+it clears the product-level gates above:
 
-1. the verified full Tumbleweed Offline Image installs with VM networking
-   disabled;
-2. the same generated installation image discovers embedded `/autoinst.xml`
-   and performs unattended installation without a remote control plane;
+1. baseline installation succeeds with VM networking disabled;
+2. the installation medium itself supplies the unattended profile;
 3. disk 0 models the ASUS internal disk and contains sentinel state; disk 1
    models the portable target; installation changes disk 1 and leaves disk 0
    unchanged;
-4. UEFI boot with the selected supported Tumbleweed boot path;
-5. LUKS2 passphrase plus virtual TPM-backed primary unlock if VirtualBox exposes
-   the required TPM behavior;
-6. Btrfs/Snapper snapshot and rollback semantics;
-7. transactional `dup` success and failure behavior;
-8. soft reboot into the updated snapshot;
-9. kexec remains disabled;
-10. sensitive workload target remains blocked until maintenance success;
-11. recovery/admin access remains available after forced maintenance failure.
+4. no persistent firmware/NVRAM entry is created by provisioning;
+5. UEFI Secure Boot works through the selected supported Tumbleweed boot path;
+6. LUKS2 owner passphrase and TPM2+PIN primary unlock behave as designed;
+7. Btrfs/Snapper snapshot and rollback semantics work;
+8. transactional `dup` success and failure behavior works;
+9. soft reboot activates qualifying userspace-only updates;
+10. kexec remains disabled;
+11. sensitive workload remains blocked until maintenance success while
+    recovery/admin access remains available on failure.
 
 VirtualBox cannot prove physical ASUS firmware behavior or real external-device
 compatibility.
@@ -498,8 +486,8 @@ firmware-mutation, enterprise-management or bespoke update infrastructure.
 
 ## Implementation order
 
-1. Prove the offline Tumbleweed DVD + AutoYaST path in VirtualBox with networking disabled and an internal guard disk present.
-2. Preserve the validated AutoYaST profile and resolve the remaining bootloader/NVRAM declarative gate.
+1. Resolve the production provisioning gate without relaxing offline, host-isolation, measured-unlock or declarative requirements.
+2. Prove that selected path in VirtualBox with networking disabled and an internal guard disk present.
 3. Implement only the minimal systemd maintenance gate required to bind
    transactional-update to the sensitive workload target.
 4. Validate the same artifacts on the physical removable SSD/FA401EA.
