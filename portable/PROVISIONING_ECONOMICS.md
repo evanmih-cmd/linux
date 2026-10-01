@@ -33,16 +33,21 @@ A lower-cost candidate that fails a hard gate is not cheaper; it is incomplete.
 The current candidate is:
 
 ```text
-verified official Tumbleweed Offline Image
-+ AutoYaST profile embedded in the installation medium
+verified official Tumbleweed Snapshot20260930 Offline Image
++ AutoYaST profile embedded in the initrd
     exact <drive><device>/dev/disk/by-id/...</device>
+    initialize = true
     no explicit partition list
-    general/storage/proposal supplies encryption_password
+    initial ask injects general/storage/proposal/encryption_password
+    second password ask supplies %user:sdbootutil-tpm2-pin
+    language = en_US; keyboard = english-us; timezone = Europe/Berlin
+    software = base + sdbootutil; installer online update = false
     bootloader = systemd-boot
     secure_boot = true
     update_nvram = false
-+ tiny installer-only YaST driver update for the missing
-  systemd-boot AutoYaST update_nvram import
++ installer-only stock keyctl/libkeyutils from the same DVD
++ two-line installer-only YaST import correction for systemd-boot update_nvram
++ stock mkmedia construction and CHECKSUMS re-signing
 ```
 
 This is a candidate, not yet an architectural selection. It must pass the live
@@ -111,8 +116,9 @@ target can therefore use the stock Tumbleweed package.
 
 ## Secret-separation gate
 
-Current upstream YaST/sdbootutil integration exposes another cost item that must
-be verified against the exact Offline Image packages before acceptance.
+The Snapshot20260930 YaST/sdbootutil integration exposes another cost item.
+Its exact Offline Image packages have now been inspected; the remaining gate is
+live enrollment behavior in the proof VM.
 
 For `systemd_fde` with `tpm2+pin`, current YaST bootloader code passes the
 storage encryption password to the legacy generic `sdbootutil` keyring secret.
@@ -133,30 +139,29 @@ The cheapest product-compatible separation candidate is currently:
 3. The question's supported script hook places that PIN only in the
    `%user:sdbootutil-tpm2-pin` kernel-keyring entry. Current sdbootutil gives
    that specific key precedence over the legacy generic key supplied by YaST.
-4. The key is short-lived and exists only in the installer environment; the
-   target receives the resulting TPM enrollment, not the clear-text PIN file.
+4. The key exists only in the installer kernel keyring and is never written to
+   the profile or target filesystem; reboot destroys the installer keyring.
+   The target receives the resulting TPM enrollment, not a clear-text PIN file.
 
-This avoids an FDE fork and uses documented AutoYaST ask/script plus documented
-sdbootutil secret-input mechanisms. It is still custom installer glue and must
-be live-tested. The exact Snapshot20260930 RPMs are authoritative; upstream
-`master` is only research evidence until the ISO package contents are checked.
+This avoids an FDE fork and uses the stock AutoYaST ask/script hook plus the
+stock sdbootutil secret-input mechanism. It is still custom installer glue and
+must be live-tested. All statements above have been checked against the exact
+Snapshot20260930 RPMs rather than upstream `master`.
 
 ## Delivery cost of that delta
 
-openSUSE already provides the Driver Update / installation-media tooling:
+openSUSE's stock `mkmedia` is sufficient; a DUD is not needed.
 
-- `mkdud` can replace files in the installation system or inject an updated
-  package;
-- `mkdud --install instsys` can limit an RPM update to the installer rather
-  than installing it in the target;
-- `mkmedia --initrd <dud>` integrates a DUD into an otherwise stock
-  installation image;
-- `mkmedia` preserves the installation-media model instead of requiring a new
-  distribution to be built.
+The proof build uses `--instsys` to overlay the patched YaST importer and the
+stock `keyctl`/libkeyutils files from the same Snapshot20260930 DVD, and
+`--initrd-config` to point AutoYaST at the profile embedded in the installer.
+Normal `mkmedia --sign` handling recalculates and re-signs the changed
+`/CHECKSUMS` with a transient build key that is also added to the media and
+initrd.
 
-So the candidate custom ownership is currently limited to a tiny installer-time
-delta plus reproducible media construction, not an ongoing fork in the
-installed workstation.
+So the candidate custom ownership is limited to the AutoYaST profile, a
+two-line version-specific YaST import patch, and reproducible media
+construction. No installed Tumbleweed package is forked or replaced.
 
 The maintenance cost of that delta is:
 
@@ -172,7 +177,7 @@ The maintenance cost of that delta is:
 |---|---|---|---|
 | Agama Live ISO | Native declarative target, TPM/FDE and no-NVRAM controls | Low configuration cost | Public image is development/testing and baseline packages are not offline |
 | Offline Image + explicit AutoYaST partition layout | Production/offline; exact by-id target | Higher: profile owns more storage topology and TPM authentication needs additional handling | Duplicates product storage policy and loses the cheapest product-default path |
-| Offline Image + exact-drive/no-partitions AutoYaST fallback | Production/offline; exact by-id target; stock product storage/FDE defaults | Currently one tiny installer-only bootloader import delta | Must be proven live |
+| Offline Image + exact-drive/no-partitions AutoYaST fallback | Production/offline; exact by-id target; stock product storage/FDE defaults | Profile-owned ask hook, same-DVD stock keyutils in the installer, plus a two-line bootloader import correction | Must be proven live |
 | Switch distribution/product | Potentially zero openSUSE-specific delta | Migration/research/revalidation cost across boot, FDE, rollback, updates and hardware | No alternative has yet demonstrated a lower total requirement-satisfying cost |
 
 The third row is therefore the current path to validate first under Product
