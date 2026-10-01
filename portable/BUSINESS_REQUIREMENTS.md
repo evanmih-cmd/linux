@@ -146,3 +146,15 @@ Technical architecture and implementation choices in other files must serve thes
 **Requirement:** Technical architecture must be selected for its ability to satisfy these business requirements with minimal cost, complexity, and maintenance burden; particular internal mechanisms are not goals in themselves.
 
 **Example:** If a supported Ubuntu mechanism satisfies portability, confidentiality, trusted boot, reinstall, and recovery requirements without a previously proposed filesystem, boot format, or storage topology, the supported mechanism is preferred and the technical architecture may be changed.
+
+### 23. Workload fitness
+
+**Requirement:** The portable workstation must reliably support a limited set of browser-centric operations involving sensitive secrets and potentially irreversible high-value actions. System selection must consider only capabilities required for this workload; the presence or absence of unrelated general-purpose desktop functionality is not itself a selection criterion.
+
+**Example:** A modern browser, required browser extensions, and necessary local integrations are material. The presence of an office suite, PDF reader, media player, or other unused applications is neither an advantage nor a disadvantage unless it affects security, maintenance burden, or execution of the target workload.
+
+### 24. Minimal routine administration
+
+**Requirement:** Keeping the portable workstation secure and operational must not require regular manual system administration beyond actions that are genuinely necessary for normal use.
+
+**Example:** In the normal working path, the user should not need to manually maintain boot artifacts, package state, snapshots, keys, recovery state, or routine system updates.
