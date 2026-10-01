@@ -31,10 +31,11 @@ The proof VM must have:
 - the internal-system disk is deliberately present during installation and is
   pre-populated with sentinel partition/filesystem data whose pre/post state is
   compared;
-- the unattended profile is embedded as `/autoinst.json` in the Agama
-  installation image; the installer must discover it by the supported media
-  mechanism and start without an external control-plane injecting configuration;
-- networking only as needed for installation/update testing;
+- the unattended profile is embedded in the final selected installation medium
+  using that installer's supported mechanism; the installer must discover it
+  from the medium itself without an external control plane;
+- networking is disabled during provisioning proof and enabled only for later
+  update/workload tests;
 - virtual TPM only when the installed VirtualBox release exposes a usable TPM
   mode;
 - no dependency on Windows filesystem mounts or WSL/Windows interop.
@@ -46,9 +47,9 @@ already documented in issue #1.
 
 | # | Claim | Type | Evidence |
 |---|---|---|---|
-| 1 | Agama installs Tumbleweed unattended from the profile embedded in the installation medium | BEHAVIOR | Boot the generated Agama image containing `/autoinst.json`; installation must start from media discovery without API/UI configuration injection, complete, and boot the installed system |
+| 1 | The selected production installer installs Tumbleweed unattended from the profile embedded in the installation medium with networking disabled | BEHAVIOR | Boot the generated installation image, prove no guest network is available, let the installer discover its profile from the medium, complete installation, and boot the installed system |
 | 2 | Installer touches only the portable target while an ASUS-internal disk is present | BOTH | Before install, record the internal disk partition/filesystem/sentinel state and the portable disk identity; after install, prove the portable disk changed as intended and the internal disk state is unchanged |
-| 3 | UEFI installation uses the Tumbleweed systemd-boot/BLS path | BOTH | Read effective bootloader/BLS state, then reboot and boot successfully through it |
+| 3 | UEFI installation uses the final selected supported BLS/boot path | BOTH | Read effective bootloader/BLS state, then reboot and boot successfully through it |
 | 4 | NVRAM-update policy is disabled for portable provisioning | CONFIG | Read effective installer/bootloader state showing the supported no-NVRAM-update setting |
 | 5 | External-style fallback boot artifact exists | CONFIG | Inspect ESP for the removable fallback path required by the architecture |
 | 6 | Root storage is LUKS2 over Btrfs with supported Snapper layout | CONFIG | Read block, crypt, filesystem, subvolume and Snapper state from the installed system |
@@ -83,20 +84,19 @@ Those remain physical validation gates.
 
 ## Execution order
 
-1. Establish the narrow VirtualBox control plane from WSL.
-2. Inventory the installed VirtualBox release and available firmware/TPM
+1. Resolve the production provisioning gate in `ARCHITECTURE.md`; no VM
+   installer result is promoted while the installer itself still violates a
+   requirement.
+2. Establish the narrow VirtualBox control plane from WSL.
+3. Inventory the installed VirtualBox release and available firmware/TPM
    capabilities.
-3. Create the disposable UEFI VM with two disks: internal-ASUS guard disk first,
+4. Create the disposable UEFI VM with two disks: internal-ASUS guard disk first,
    portable target disk second.
-4. Build the VM harness from the verified Agama ISO by adding the declarative
-   profile as `/autoinst.json` using Agama's supported installation-medium
-   mechanism. This generated image is also the image intended to be written to
-   the physical installer USB later.
-5. Boot that image and let Agama discover the embedded profile and run the
-   installation unattended; do not drive installation by injecting runtime
-   configuration through the Agama API/UI.
-6. Execute CONFIG gates from the installed system.
-7. Execute BEHAVIOR gates by rebooting, updating, failing and rolling back the
+5. Build the final selected installation image with its supported embedded
+   unattended profile and all baseline packages available offline.
+6. Disable guest networking and perform the unattended installation.
+7. Execute CONFIG gates from the installed system.
+8. Execute BEHAVIOR gates by rebooting, updating, failing and rolling back the
    live VM.
-8. Record each observation in issue #1 and promote only mechanisms that remain
+9. Record each observation in issue #1 and promote only mechanisms that remain
    compatible with the production/GA architecture.
