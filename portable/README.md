@@ -15,6 +15,8 @@ the owner.
   requirements. Technical implementation choices must serve these requirements.
 - [Architecture](ARCHITECTURE.md) — current Tumbleweed architecture and its
   validation gates.
+- [VirtualBox proof plan](VM_PROOF.md) — executable CONFIG/BEHAVIOR validation
+  matrix for the VM proof.
 - [GitHub issue #1](https://github.com/evanmih-cmd/linux/issues/1) — research
   history, rejected alternatives, checkpoints, corrections, and current proof
   work.
