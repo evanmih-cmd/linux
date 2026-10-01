@@ -37,13 +37,13 @@ Technical architecture and implementation choices in other files must serve thes
 
 **Requirement:** The workstation must be an operational product, not a separate software project that requires ongoing custom engineering to remain usable.
 
-**Example:** A supported Ubuntu feature is preferred over maintaining a custom bootloader, custom PKI, or bespoke installer framework.
+**Example:** A supported product capability is preferred over maintaining a custom bootloader, custom PKI, bespoke installer framework, or equivalent owner-maintained mechanism.
 
-### 5. Preserve platform trusted-boot protection
+### 5. Do not weaken relevant platform security
 
-**Requirement:** Using the portable workstation must not require disabling the platform's normal trusted-boot protection.
+**Requirement:** Using the portable workstation must not require weakening or bypassing security protections that materially contribute to the required security of the workload unless the solution replaces them with an equal or stronger supported protection.
 
-**Example:** UEFI Secure Boot remains enabled.
+**Example:** A solution may use UEFI Secure Boot, another vendor-supported verified-execution mechanism, or a different architecture entirely, but it must not gain compatibility merely by removing a protection that the workload still relies on.
 
 ### 6. Detect unauthorized pre-unlock modification
 
@@ -79,7 +79,7 @@ Technical architecture and implementation choices in other files must serve thes
 
 **Requirement:** There must be a supported, repeatable process that turns a selected removable device into a complete ready-to-use workstation with minimal manual work.
 
-**Example:** A supported unattended installation profile creates a ready Ubuntu desktop environment.
+**Example:** A supported installer, image deployment, appliance provisioning flow, or equivalent product mechanism creates the ready working environment.
 
 ### 12. Protect against destruction of the wrong device
 
@@ -87,17 +87,17 @@ Technical architecture and implementation choices in other files must serve thes
 
 **Example:** Provisioning binds to a stable identifier of the selected external SSD rather than choosing the first USB disk.
 
-### 13. Reinstall without loss of persistent state
+### 13. Replace system state without loss of required persistent state
 
-**Requirement:** There must be a reinstall operation that replaces the system portion of the workstation while preserving user data and persistent application state that is intended to survive reinstall.
+**Requirement:** There must be a supported recovery or replacement operation that can replace the workstation's system state with a known-good state while preserving the user and application state that is intended to survive system replacement.
 
-**Example:** The OS is replaced while documents, browser profile, and persistent application data remain intact.
+**Example:** The implementation may use reinstall, image redeployment, reset, rebase, rollback to a clean deployment, or another supported mechanism while preserving required persistent workload state.
 
-### 14. Reinstall need not preserve the previous OS installation
+### 14. System replacement need not preserve the previous system instance
 
-**Requirement:** Preserving persistent state during reinstall does not require preserving the previous system installation or providing a rollback path to that specific installation.
+**Requirement:** Preserving required persistent state during system replacement does not require preserving the previous system instance or providing a return path to that specific instance.
 
-**Example:** The old system root may be destroyed and recreated if the required persistent state is preserved.
+**Example:** A previous installation, deployment, image, or system instance may be discarded completely once the required persistent state is safely preserved.
 
 ### 15. Independent lifecycles for system state and persistent user/application state
 
@@ -117,11 +117,11 @@ Technical architecture and implementation choices in other files must serve thes
 
 **Example:** The workstation can return to a previous snapshot or previous bootable image.
 
-### 18. Required maintenance before normal work
+### 18. Security-maintenance acceptance before sensitive work
 
-**Requirement:** In the normal usage path, the user must not begin an ordinary working session until required system maintenance and validation policies have completed successfully.
+**Requirement:** Sensitive workload must not begin while the workstation is in a system state that is disallowed by the current maintenance and security policy.
 
-**Example:** Required updates and health checks complete before the graphical login is released.
+**Example:** Depending on the selected product, compliance may be established by a pre-session maintenance gate, booting an already updated atomic deployment, validating an immutable image, or another supported mechanism that demonstrates the running state is acceptable.
 
 ### 19. Unified maintenance policy for managed executable software
 
@@ -145,7 +145,7 @@ Technical architecture and implementation choices in other files must serve thes
 
 **Requirement:** Technical architecture must be selected for its ability to satisfy these business requirements with minimal cost, complexity, and maintenance burden; particular internal mechanisms are not goals in themselves.
 
-**Example:** If a supported Ubuntu mechanism satisfies portability, confidentiality, trusted boot, reinstall, and recovery requirements without a previously proposed filesystem, boot format, or storage topology, the supported mechanism is preferred and the technical architecture may be changed.
+**Example:** If a supported product satisfies portability, confidentiality, execution integrity, system replacement, and recovery requirements without a previously proposed operating system, filesystem, boot format, storage topology, or deployment model, the supported product is preferred and the technical architecture may be changed.
 
 ### 23. Workload fitness
 
@@ -158,3 +158,9 @@ Technical architecture and implementation choices in other files must serve thes
 **Requirement:** Keeping the portable workstation secure and operational must not require regular manual system administration beyond actions that are genuinely necessary for normal use.
 
 **Example:** In the normal working path, the user should not need to manually maintain boot artifacts, package state, snapshots, keys, recovery state, or routine system updates.
+
+### 25. External owner-controlled hardware integration
+
+**Requirement:** The portable workstation must support the external owner-controlled hardware devices required by the target workload through a practical, supported interaction path.
+
+**Example:** A required USB or HID authorization device can be connected and used from the workload environment without unsupported drivers, custom device forwarding infrastructure, or routine host-specific reconfiguration.
