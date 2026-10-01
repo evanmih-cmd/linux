@@ -1,0 +1,11 @@
+--- a/usr/share/YaST2/lib/bootloader/autoyast_converter.rb
++++ b/usr/share/YaST2/lib/bootloader/autoyast_converter.rb
+@@ -263,6 +263,8 @@
+       def import_systemd_boot(data, bootloader)
+         bootloader.timeout = data.global.timeout
+         bootloader.secure_boot = data.global.secure_boot == "true"
++        value = data.global.update_nvram
++        bootloader.update_nvram = value == "true" unless value.nil?
+       end
+
+       def import_grub2(data, bootloader)
