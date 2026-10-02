@@ -77,7 +77,7 @@ installer-only correction.
 Relax NG schema.
 Profile SHA-256:
 
-`cecec02c055aba15c08281fe821472f36a8e2b5a8c076a8a4aa38389c3608968`
+`4dcf66e915763f2c6517decad477cbb35b5bbb84684d7dc8b99b05a6c80aece1`
 
 The profile explicitly fixes English (`en_US`), US keyboard, `Europe/Berlin`
 timezone with a UTC hardware clock, installs `sdbootutil`, and disables the
@@ -112,7 +112,7 @@ Canonical output image:
 
 SHA-256:
 
-`c93d8d394b5e03d33fe880612f3ac346f60825871e1229e45718414f6d1765bb`
+`3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f`
 
 `checkmedia` returned both ISO SHA-256 OK and installation-partition SHA-256
 OK. The image has no whole-image signature; its external SHA-256 is the
@@ -122,7 +122,7 @@ Because installer files changed, stock `mkmedia` generated a transient build
 key, recalculated `/CHECKSUMS`, embedded that public key into the media and
 initrd, and signed the new `/CHECKSUMS`. The observed fingerprint is:
 
-`A05F28065D477D6E6B223A5804301C8F5B6BA4AE`
+`82136E32D97E4542AEA3E27413279DE4D0B73901`
 
 Independent GPG verification of `CHECKSUMS.asc` against `CHECKSUMS.key`
 returned both `GOODSIG` and `VALIDSIG` for that fingerprint.

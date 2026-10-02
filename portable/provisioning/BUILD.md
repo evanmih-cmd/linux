@@ -40,7 +40,7 @@ changes are build-host convenience only and are not part of the media design.
 ## Source-controlled inputs
 
 - `autoinst-vm-proof.xml`
-  - SHA-256 `cecec02c055aba15c08281fe821472f36a8e2b5a8c076a8a4aa38389c3608968`
+  - SHA-256 `4dcf66e915763f2c6517decad477cbb35b5bbb84684d7dc8b99b05a6c80aece1`
 - `systemd-boot-update-nvram.patch`
   - SHA-256 `931e7ef8f3f4c877ef6e192c7fccb949209fefba0c23ce6dcf55de40f04b4c9f`
 
@@ -121,11 +121,11 @@ After the build:
 
 The canonical proof image produced on 2026-10-02 has SHA-256:
 
-`c93d8d394b5e03d33fe880612f3ac346f60825871e1229e45718414f6d1765bb`
+`3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f`
 
 Its transient CHECKSUMS signing-key fingerprint is:
 
-`A05F28065D477D6E6B223A5804301C8F5B6BA4AE`
+`82136E32D97E4542AEA3E27413279DE4D0B73901`
 
 ## Reproducibility boundary
 
