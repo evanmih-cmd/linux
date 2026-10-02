@@ -33,28 +33,41 @@ only how the VM is observed and controlled.
 
 ## Primary observability channel
 
-Oracle VirtualBox exposes a standard 16550A-compatible virtual UART. Configure:
+Oracle VirtualBox exposes a standard 16550A-compatible virtual UART. In
+this WSL/Windows harness configure:
 
 ```text
 COM1
 I/O base 0x3f8
 IRQ 4
 UART 16550A
-host mode TCP server
-host port 22023
+host mode RawFile
+host path \\wsl.localhost\runner02\home\github-runner\.cache\desktop-linux\vbox-proof\<run>-serial.log
 ```
 
-The WSL test runner connects to the Windows-host TCP serial endpoint and records
-the entire byte stream to a timestamped proof artifact.
+VirtualBox writes the raw UART byte stream directly into the WSL proof cache.
+This avoids guest networking and the WSL-to-Windows TCP/firewall boundary.
+VirtualBox TCP serial is supported by the product but is not used by this
+harness because the Windows-host TCP endpoint was not reachable from WSL during
+Gate 0 validation.
 
-For AutoYaST installer diagnostic/proof runs, append:
+The exact Snapshot20260930 ISO GRUB configuration prints:
 
 ```text
-console=ttyS0,115200 textmode=1
+Please press 't' to show the boot menu on this console
 ```
 
-to the installer kernel command line. SUSE documents `console=ttyS0` as the
-headless AutoYaST serial-console path and `textmode=1` as the text YaST path.
+and defines a hidden `t` hotkey that switches GRUB output to the serial
+console. Installer boots therefore use this deterministic sequence:
+
+1. press `t` and require the complete GRUB menu to appear in the UART log;
+2. press `e` and require the edit buffer to appear in the UART log;
+3. append `console=ttyS0,115200 textmode=1` to the exact kernel line;
+4. reconstruct the ANSI terminal screen and verify the edited kernel line;
+5. only then press Ctrl+X.
+
+SUSE documents `console=ttyS0` as the headless AutoYaST serial-console path
+and `textmode=1` as the text YaST path.
 
 This boot-line modification is allowed for installer observability only. It is
 not evidence for the installed-system measured-boot command line.
@@ -101,25 +114,43 @@ Preconditions:
 
 - one registered VM;
 - VM powered off and session unlocked;
-- COM1 TCP serial configured exactly as above;
+- COM1 RawFile serial configured exactly as above;
 - NIC0..3 disabled;
 - EFI64 + TPM2 + Secure Boot enabled.
 
 Procedure:
 
-1. attach the official Snapshot20260930 ISO and current OEMDRV layer;
-2. start the VM;
-3. select the official installer entry;
-4. add `console=ttyS0,115200 textmode=1`;
-5. connect the serial recorder.
+1. remove the previous run's serial file;
+2. attach the official Snapshot20260930 ISO and current OEMDRV layer;
+3. start the VM;
+4. press `t` and require the serial GRUB menu;
+5. press `e` and require the serial edit buffer;
+6. append and verify `console=ttyS0,115200 textmode=1`;
+7. press Ctrl+X only after the reconstructed terminal screen confirms the
+   expected kernel line.
 
 PASS:
 
-- serial transcript shows Linux/linuxrc and YaST startup within the timeout.
+- serial transcript shows kernel output, linuxrc, installation-system loading,
+  YaST startup and the source-controlled AutoYaST recovery-credential ask within
+  the timeout.
 
 FAIL:
 
-- no serial output after kernel startup.
+- any required serial milestone is absent within its timeout.
+
+Gate 0 passed live on 2026-10-02. The proof transcript reached:
+
+```text
+openSUSE Tumbleweed installation program v9.6
+Loading Installation System (1/6) ... (6/6)
+starting yast...
+*** Starting YaST ***
+Portable workstation recovery credential
+Enter the LUKS recovery passphrase
+```
+
+No provisioning credential was entered during Gate 0.
 
 No provisioning gate is run until Gate 0 passes.
 

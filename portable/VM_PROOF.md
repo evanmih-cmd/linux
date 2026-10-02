@@ -26,6 +26,24 @@ Every gate is classified before execution.
 No gate passes because a test fixture contains the expected value. A declaration
 is evidence only for a CONFIG claim; runtime claims require live execution.
 
+### Harness validation — PASS
+
+The deterministic serial harness in `VM_TEST_PLAN.md` passed live on
+2026-10-02 using the single registered proof VM.
+
+VirtualBox COM1 was configured as a 16550A UART writing a RawFile through the
+existing `\\wsl.localhost\runner02` path. With guest NICs still disabled, the
+exact official Snapshot20260930 ISO was switched to its serial GRUB menu, booted
+with `console=ttyS0,115200 textmode=1`, and produced a continuous UART
+transcript through kernel, linuxrc, installation-system loading, YaST startup
+and the source-controlled AutoYaST recovery-credential ask.
+
+Evidence:
+
+- `provisioning/evidence/gate0-serial-harness.txt`.
+
+Screenshots are no longer used as the primary installer progress detector.
+
 ## VM boundary
 
 The proof VM must have:
