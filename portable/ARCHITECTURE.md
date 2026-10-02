@@ -36,6 +36,45 @@ The current design is ready for implementation validation in a VM. Hardware-
 specific behavior is called out explicitly where it still requires proof on the
 primary ASUS host.
 
+## Architecture freeze
+
+**Frozen baseline: 2026-10-02.**
+
+The choices in this document are implementation constraints, not suggestions.
+A VM result, installer default, convenience argument, or alternative that is
+merely easier to test does **not** silently replace them.
+
+In particular, the frozen critical-path choices are:
+
+- platform: openSUSE Tumbleweed;
+- boot: Secure Boot through the supported shim + systemd-boot/BLS/sdbootutil
+  path, with removable fallback boot artifacts and no persistent host boot-order
+  dependency;
+- root encryption: LUKS2 using the supported systemd-FDE path;
+- root filesystem and snapshot layer: **Btrfs + Snapper**;
+- system-update transaction layer: **transactional-update on Btrfs snapshots**;
+- persistent user/application state: Btrfs-backed state excluded from normal
+  root rollback according to the supported Tumbleweed layout;
+- provisioning: verified official Offline ISO plus a separately verifiable
+  Desktop-Linux OEMDRV/AutoYaST layer;
+- target selection: exact persistent target identity and fail-closed behavior;
+- **no LVM, LVM-thin, ZFS, mdraid, or second snapshot/storage abstraction in
+  the portable root stack.**
+
+A frozen choice may be changed only when:
+
+1. a business requirement changes, or live evidence proves the frozen design
+   cannot satisfy an existing requirement;
+2. the conflict and alternatives are recorded in GitHub issue #1;
+3. Product First and Economy First are re-evaluated against the concrete
+   evidence;
+4. `ARCHITECTURE.md` is changed in a dedicated architecture-decision commit
+   **before** implementation proceeds on the replacement design.
+
+Until such a commit exists, test failures are implementation/provisioning
+problems to solve within this architecture, not permission to substitute a
+different storage or boot stack.
+
 ## Hardware and workload baseline
 
 Primary host:
@@ -162,30 +201,70 @@ behavior without repair or restoration.
 
 ## Storage and state model
 
+### Frozen storage graph
+
 The selected storage model is:
 
 ```text
-GPT
-├── EFI System Partition
-│   └── systemd-boot / shim / BLS boot artifacts
-└── LUKS2
-    └── Btrfs
-        ├── root/system state managed with Snapper
-        └── persistent user/application state outside root rollback
+removable SSD
+└── GPT
+    ├── EFI System Partition (unencrypted boot partition)
+    │   └── shim / systemd-boot / BLS boot artifacts
+    ├── LUKS2 root container
+    │   └── Btrfs
+    │       ├── root/system state
+    │       │   └── Snapper + transactional-update snapshots
+    │       └── persistent user/application state
+    │           └── excluded from normal root rollback by the supported layout
+    └── encrypted swap when created by the supported Tumbleweed guided layout
 ```
 
-Use the Tumbleweed-supported Btrfs/Snapper layout unless a requirement proves a
-need to diverge from it. Do not recreate the earlier owner-designed Ubuntu
-subvolume topology merely for aesthetic symmetry.
+**There is no LVM layer in this graph.** Btrfs is both the root filesystem and
+the snapshot substrate. Snapper and `transactional-update` operate on Btrfs
+snapshots; LVM snapshots are neither required nor permitted by the frozen
+architecture.
+
+### LVM decision record
+
+LVM has been considered twice and rejected twice:
+
+1. In the earlier Ubuntu/Subiquity prototype it was introduced because Curtin
+   could express LVM/ext4 preserve/reformat boundaries declaratively while it
+   could not express the desired Btrfs-subvolume lifecycle. That changed the
+   architecture to fit the installer and was reverted as an implementation
+   error.
+2. During the later openSUSE/Agama design work LVM was reconsidered in
+   discussion as a convenient declarative state/snapshot separation mechanism.
+   The committed Agama VM profile itself did not encode LVM: it delegated to
+   Tumbleweed `partitions: default` under LUKS2. The LVM idea was nevertheless
+   another installer-driven design detour and was not accepted. Tumbleweed
+   already provides Btrfs/Snapper as its native snapshot/recovery layer, and
+   `transactional-update` is built around Btrfs snapshots. Adding LVM would
+   duplicate the storage/snapshot abstraction without satisfying a requirement
+   that Btrfs cannot satisfy.
+
+Neither episode establishes an LVM requirement. Reintroducing LVM requires the
+architecture-unfreeze process above and concrete evidence that the frozen
+Btrfs/Snapper design cannot satisfy an authoritative requirement.
+
+The installer may choose partition sizes appropriate to the physical target and
+may create encrypted swap according to the supported Tumbleweed guided layout.
+Those sizing details do not change the storage architecture. The VM proof's
+observed ESP + LUKS2/Btrfs root + encrypted-swap layout is therefore an
+implementation of this graph, not a new architecture.
 
 Required invariants:
 
 - only the removable SSD contains required workstation state;
 - user/browser state must not roll back automatically with a system rollback;
-- root/system state must have snapshot-based recovery;
+- root/system state uses Btrfs snapshots for recovery;
+- Snapper rollback and transactional updates share the Btrfs snapshot layer;
 - snapshots are rollback points, not backups;
-- no LVM or ZFS layer is introduced without a requirement that Btrfs cannot
-  satisfy.
+- no LVM, LVM-thin, ZFS, mdraid, or additional snapshot/storage abstraction is
+  introduced without first unfreezing the architecture through the process
+  defined above;
+- do not recreate the earlier owner-designed Ubuntu subvolume topology merely
+  for aesthetic symmetry; use the supported Tumbleweed Btrfs/Snapper layout.
 
 Normal browser profile and user state should live in the distribution-supported
 persistent user-state area (normally `/home`) rather than in a custom
@@ -343,9 +422,9 @@ The validated AutoYaST profile is the authoritative provisioning input.
 Custom installer-time logic is limited to irreducible product gaps and must be
 small, manifestable, version-bound and independently verifiable.
 
-The old `autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` files are
-legacy Ubuntu/Subiquity experiments. They are not valid implementation
-artifacts for this architecture.
+The obsolete Ubuntu/Subiquity LVM/ext4 installer profiles have been removed
+from the current tree. Their history remains available in git, but they are not
+implementation artifacts for this architecture.
 
 ## System update model
 

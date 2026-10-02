@@ -58,10 +58,8 @@ physically and infrastructurally independent from Factory:
 - Prefer a simpler supported product outcome over a technically elegant custom
   subsystem.
 
-## Legacy files
+## Legacy history
 
-`autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` are obsolete
-Ubuntu/Subiquity experiments from the earlier design. They do **not** describe
-the current architecture and must not be used for provisioning. They remain
-temporarily as research history until the validated Agama profile replaces
-them.
+The obsolete Ubuntu/Subiquity LVM/ext4 installer profiles were removed from the
+current tree. They remain available in git history only. Current provisioning
+artifacts are the Tumbleweed AutoYaST/OEMDRV files under `provisioning/`.
