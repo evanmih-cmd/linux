@@ -5,7 +5,7 @@ Source-controlled installer delta:
 
 1. autoinst-vm-proof.xml
    SHA-256:
-   50298c8699b3baf6c44c3744ea7b65171d3431b10487d828dfa522886b0b973d
+   cecec02c055aba15c08281fe821472f36a8e2b5a8c076a8a4aa38389c3608968
    Embedded as /autoinst.xml in the initrd append stream.
 
 2. systemd-boot-update-nvram.patch
@@ -42,7 +42,7 @@ Delivery mechanism:
 No target-system package is replaced by this overlay.
 
 Observed canonical proof ISO SHA-256:
-8b52870c107cb2b4516a22820c4af6cb02189de97630f650d38b48abe9517452
+c93d8d394b5e03d33fe880612f3ac346f60825871e1229e45718414f6d1765bb
 
 Observed transient CHECKSUMS signing-key fingerprint:
-001F4F7DA362FBA92459083509B5E87D2445E157
+A05F28065D477D6E6B223A5804301C8F5B6BA4AE

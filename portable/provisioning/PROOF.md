@@ -77,7 +77,7 @@ installer-only correction.
 Relax NG schema.
 Profile SHA-256:
 
-`50298c8699b3baf6c44c3744ea7b65171d3431b10487d828dfa522886b0b973d`
+`cecec02c055aba15c08281fe821472f36a8e2b5a8c076a8a4aa38389c3608968`
 
 The profile explicitly fixes English (`en_US`), US keyboard, `Europe/Berlin`
 timezone with a UTC hardware clock, installs `sdbootutil`, and disables the
@@ -108,11 +108,11 @@ The rebuilt initrd contains the exact option:
 
 Canonical output image:
 
-`openSUSE-Tumbleweed-DVD-x86_64-Snapshot20260930-DesktopLinuxProof-canonical.iso`
+`openSUSE-Tumbleweed-DVD-x86_64-Snapshot20260930-DesktopLinuxProof.iso`
 
 SHA-256:
 
-`8b52870c107cb2b4516a22820c4af6cb02189de97630f650d38b48abe9517452`
+`c93d8d394b5e03d33fe880612f3ac346f60825871e1229e45718414f6d1765bb`
 
 `checkmedia` returned both ISO SHA-256 OK and installation-partition SHA-256
 OK. The image has no whole-image signature; its external SHA-256 is the
@@ -122,7 +122,7 @@ Because installer files changed, stock `mkmedia` generated a transient build
 key, recalculated `/CHECKSUMS`, embedded that public key into the media and
 initrd, and signed the new `/CHECKSUMS`. The observed fingerprint is:
 
-`001F4F7DA362FBA92459083509B5E87D2445E157`
+`A05F28065D477D6E6B223A5804301C8F5B6BA4AE`
 
 Independent GPG verification of `CHECKSUMS.asc` against `CHECKSUMS.key`
 returned both `GOODSIG` and `VALIDSIG` for that fingerprint.
@@ -155,13 +155,18 @@ A VirtualBox 7.2.20 proof VM has been created with effective state read back as:
 - Secure Boot enabled;
 - guest NICs disabled.
 
-The ASUS guard VDI is attached first on SATA Port 0 with serial
-`ASUSINTERNAL20260930`.
+The ASUS guard VDI is attached first on SATA Port 0 with model
+`ASUS INTERNAL SSD` and serial `ASUSINTERNAL00000001`. A diagnostic installer
+boot observed the guest link
+`/dev/disk/by-id/ata-ASUS_INTERNAL_SSD_ASUSINTERNAL00000001 -> /dev/sda`.
 
 The portable target VDI exists in the proof cache but is intentionally not
-attached yet, so the first installation run can exercise the required
-absent-target failure path. Its planned serial is
-`PORTABLESSD20260930A`.
+attached for the absent-target run. Its configured model is
+`PORTABLE WORKSTATION SSD` and serial `PORTABLETARGET000001`; the same
+diagnostic boot previously observed
+`/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001 -> /dev/sdb`.
+The AutoYaST profile now binds destructive provisioning to that exact observed
+target identity.
 
 There is no media-staging blocker. VirtualBox can open both the upstream and
 derived ISOs directly through the existing WSL UNC namespace. The working

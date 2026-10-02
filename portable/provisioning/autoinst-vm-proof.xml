@@ -65,7 +65,7 @@ unset VAL
 
   <partitioning config:type="list">
     <drive>
-      <device>/dev/disk/by-id/ata-VBOX_HARDDISK_PORTABLESSD20260930A</device>
+      <device>/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001</device>
       <initialize config:type="boolean">true</initialize>
     </drive>
   </partitioning>
