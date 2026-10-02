@@ -43,11 +43,28 @@ Installer-root stock-file inputs, all from the same Snapshot20260930 DVD:
 
 No target-system package is replaced by this layer.
 
-Current delivery requirement:
-- AutoYaST profile and installer-only update are discovered from a small local
-  Desktop-Linux layer without network or host-side control plane.
-- Exact transport/container format is promoted only after live proof.
-- The release layer must include an exhaustive size + SHA-256 manifest.
+Current OEMDRV proof artifact:
+- DUD builder: upstream mkdud commit
+  173a908c5760f015886afe23879dcb93675bd7cf
+- DUD product/installer: openSUSE Tumbleweed / YaST
+- DUD UpdateID: 92d2555c29130997
+- intermediate desktop-linux.dud:
+  size 35009 bytes
+  SHA-256 cc3b71061868be72c2bb4964db1f13c23a1a07905f055b565e6e682a827d1699
+- combined Desktop-Linux-Snapshot20260930-OEMDRV.iso:
+  ISO9660 volume label OEMDRV
+  size 526336 bytes
+  SHA-256 942dc86d83608c63944e76e76ca3afd7e2735ae9da2455b571e9458541a2120f
+
+Current transport candidate:
+- /autoinst.xml is at OEMDRV filesystem root.
+- The standard unpacked YaST DUD tree is under /linux/suse/x86_64-tw.
+- mkdud --show reports unpacked OEMDRV application as supported.
+- The finished OEMDRV ISO contains BASE-ISO.sha256, SOURCE-IDENTITY.txt,
+  SHA256SUMS and SYMLINKS.
+- Independent ISO extraction followed by sha256sum -c SHA256SUMS passes for
+  every listed file.
+- Automatic discovery/application remains a live VM gate before promotion.
 
 Historical derived proof ISO SHA-256:
 3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f

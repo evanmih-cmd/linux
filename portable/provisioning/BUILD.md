@@ -78,8 +78,26 @@ A layer build must:
 5. generate a complete manifest of every layer file, including size and
    SHA-256;
 6. verify the built layer against that manifest before VM boot.
-The exact supported local-media transport is part of the current live proof.
-Once proven, its format and creation command become normative here.
+The current transport candidate uses the stock YaST DUD/OEMDRV convention:
+
+```text
+OEMDRV filesystem
+├── /autoinst.xml
+└── /linux/suse/x86_64-tw/
+    ├── dud.config
+    └── inst-sys/...
+```
+
+The DUD is generated with upstream `mkdud` for `--dist tw --installer yast`.
+`mkdud --show` must report the unpacked `OEMDRV` method as supported.
+The finished layer is then packaged as a small ISO9660 filesystem with volume
+label `OEMDRV` for VirtualBox. The production USB carries the same logical
+filesystem content in its custom writable area.
+
+Current proof layer identity and read-back evidence are recorded in
+`LAYER_PROOF.md`. Automatic discovery/application is still a live gate and
+must pass before this transport is promoted from candidate to proven release
+format.
 
 ## VirtualBox deployment
 
