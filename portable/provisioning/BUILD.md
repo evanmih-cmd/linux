@@ -1,148 +1,135 @@
-# Rebuilding the Snapshot20260930 proof media
+# Building the Desktop-Linux provisioning layer
 
-## Scope
+## Purpose
 
-This procedure rebuilds the provisioning proof image from the immutable
-openSUSE Tumbleweed Snapshot20260930 Offline Image. It is a media-construction
-procedure, not target-system runtime code.
+The production build unit is the **small Desktop-Linux provisioning layer**,
+not a repacked Tumbleweed DVD.
 
-The target-system packages remain the stock DVD packages. The only custom
-owned inputs are the AutoYaST profile and the two-line installer-only
-systemd-boot AutoYaST import correction.
+The installation inputs are logically:
 
-## Immutable input
+```text
+verified official openSUSE Tumbleweed Snapshot20260930 Offline ISO
++
+Desktop-Linux provisioning layer
+```
 
-Input image:
+VirtualBox presents them as two media. The final writable USB device co-locates
+them after the verified ISO is written with Rufus or an equivalent image
+writer.
+
+## Immutable upstream base
+
+File:
 
 `openSUSE-Tumbleweed-DVD-x86_64-Snapshot20260930-Media.iso`
 
 Required SHA-256:
 
 `0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99`
-
-Do not build if that digest does not match.
-
-The checksum metadata used to establish that digest was previously verified
-with the openSUSE Project Signing Key fingerprint:
+The checksum metadata establishing this identity was verified with the
+openSUSE Project Signing Key fingerprint:
 
 `AD485664E901B867051AB15F35A2F86E29B700A4`
 
-## Builder
+Do not construct or test a layer against a different ISO while claiming this
+snapshot identity.
 
-Use stock openSUSE `mkmedia` 6.3. The proof used git commit:
+## Source-controlled layer inputs
 
-`dc56f31df44bee0d7d71d513614794abdb107e2b`
+The layer is defined by:
 
-A rootless WSL proof can use unpacked host dependencies and a copy of
-`mkmedia` whose only local changes select those host-tool paths. Those
-changes are build-host convenience only and are not part of the media design.
+- `autoinst-vm-proof.xml`;
+- `systemd-boot-update-nvram.patch`;
+- stock `/usr/bin/keyctl` from the exact Snapshot20260930 DVD;
+- stock `/usr/lib64/libkeyutils.so.1.10` and symlink from that DVD;
+- the patched installer-only
+  `/usr/share/YaST2/lib/bootloader/autoyast_converter.rb`;
+- `installer-overlay-manifest.txt`, expanded into the complete layer manifest
+  once the local-media transport format is finalized.
 
-## Source-controlled inputs
+Current AutoYaST profile SHA-256:
 
-- `autoinst-vm-proof.xml`
-  - SHA-256 `4dcf66e915763f2c6517decad477cbb35b5bbb84684d7dc8b99b05a6c80aece1`
-- `systemd-boot-update-nvram.patch`
-  - SHA-256 `931e7ef8f3f4c877ef6e192c7fccb949209fefba0c23ce6dcf55de40f04b4c9f`
+`4dcf66e915763f2c6517decad477cbb35b5bbb84684d7dc8b99b05a6c80aece1`
 
-Validate the profile against the Snapshot20260930 AutoYaST
-`profile.rng` before building.
+Current fixed target identity:
 
-## Installer-root stock inputs
+`/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001`
+Current installer-only stock-file identities:
 
-Read these from the same verified DVD:
+- `keyctl`:
+  `a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c`;
+- `libkeyutils.so.1.10`:
+  `a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e`;
+- patched `autoyast_converter.rb`:
+  `7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612`.
 
-- `/usr/bin/keyctl` from `keyutils-1.6.3-7.9.x86_64.rpm`
-  - SHA-256 `a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c`
-- `/usr/lib64/libkeyutils.so.1.10` from
-  `libkeyutils1-1.6.3-7.9.x86_64.rpm`
-  - SHA-256 `a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e`
-Create the symlink:
+## Layer build rule
 
-`/usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10`
+Routine development must not rebuild the 4.4 GiB upstream ISO.
 
-Extract the stock
-`/usr/share/YaST2/lib/bootloader/autoyast_converter.rb` from the exact
-Snapshot20260930 installer root and apply
-`systemd-boot-update-nvram.patch`.
+A layer build must:
 
-The expected patched-file SHA-256 is:
+1. validate `autoinst-vm-proof.xml` against the exact Snapshot20260930
+   AutoYaST Relax NG schema;
+2. extract any stock installer file only from the verified upstream ISO;
+3. apply the source-controlled YaST correction to that exact installer version;
+4. construct the smallest supported local-media payload that lets the
+   Snapshot20260930 installer discover `autoinst.xml` and the installer update;
+5. generate a complete manifest of every layer file, including size and
+   SHA-256;
+6. verify the built layer against that manifest before VM boot.
+The exact supported local-media transport is part of the current live proof.
+Once proven, its format and creation command become normative here.
 
-`7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612`
+## VirtualBox deployment
 
-The installer overlay must contain only:
+Attach:
 
 ```text
-usr/bin/keyctl
-usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
-usr/lib64/libkeyutils.so.1.10
-usr/share/YaST2/lib/bootloader/autoyast_converter.rb
+optical:
+  verified official Snapshot20260930 ISO
+
+small local medium:
+  Desktop-Linux layer
 ```
 
-Place `autoinst-vm-proof.xml` as `autoinst.xml` in a separate initrd
-overlay directory.
+Networking remains disabled for provisioning proof.
 
-## mkmedia invocation
+The VM arrangement intentionally keeps the two trust layers separate even
+though the production USB will contain both on one writable physical device.
 
-With `$INPUT_ISO`, `$OUTPUT_ISO`, `$INITRD_OVERLAY`,
-`$INSTSYS_OVERLAY`, and `$TMPDIR` bound to local paths, run:
+## Physical USB deployment
 
-```sh
-mkmedia --no-mount-iso \
-  --tmp-dir "$TMPDIR" \
-  --initrd "$INITRD_OVERLAY" \
-  --instsys "$INSTSYS_OVERLAY" \
-  --initrd-config 'AutoYaST=file:///autoinst.xml' \
-  --create "$OUTPUT_ISO" \
-  "$INPUT_ISO"
-```
-Run the same command once with `--dry-run` before creating the image.
-The canonical proof dry-run exited successfully after recognizing the
-Snapshot20260930 repository, installer root, legacy boot path and UEFI boot
-image.
+The release procedure is:
 
-## Verification gates
+1. verify the downloaded official ISO using its signed checksum metadata and
+   expected SHA-256;
+2. write that already verified ISO to the USB device with Rufus or an
+   equivalent image writer;
+3. add the exact release Desktop-Linux layer to the same writable USB device;
+4. verify the layer from its release manifest;
+5. boot and perform the physical-host validation gates.
+No requirement says that the whole USB device must retain the ISO's SHA-256
+after the custom layer has been added. The security identities are the verified
+upstream ISO and the independently verified custom layer.
 
-After the build:
+## Historical derived-ISO proof
 
-1. Run `checkmedia`; both ISO SHA-256 and installation-partition SHA-256
-   must be OK.
-2. Extract the initrd append stream and verify that `autoinst.xml` hashes
-   to the source-controlled profile and that
-   `etc/linuxrc.d/61_mkmedia` contains
-   `AutoYaST=file:///autoinst.xml`.
-3. Extract `boot/x86_64/root` and verify the patched importer, `keyctl`,
-   `libkeyutils.so.1.10`, and its symlink.
-4. Verify `CHECKSUMS.asc` against `CHECKSUMS.key`.
-5. Verify that the UEFI boot image equals the upstream image.
-6. Compare SHA-256 manifests for every RPM under `/noarch` and
-   `/x86_64`; the manifests must be identical.
-7. Record the resulting external image SHA-256 in
-   `installer-overlay-manifest.txt` and `PROOF.md`.
+Earlier development repacked the upstream ISO with `mkmedia --initrd` /
+`--instsys`. That work remains useful evidence that the profile and installer
+files can be composed and that package payloads/UEFI image were preserved.
 
-The canonical proof image produced on 2026-10-02 has SHA-256:
+It is **not** the normal production build loop anymore. See `PROOF.md` for
+that historical evidence.
 
-`3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f`
+## Promotion gate
 
-Its transient CHECKSUMS signing-key fingerprint is:
+The two-layer delivery model becomes proven only when the VM demonstrates:
 
-`82136E32D97E4542AEA3E27413279DE4D0B73901`
-
-## Reproducibility boundary
-
-The procedure is repeatable, but the ISO is not expected to be byte-identical
-across builds while `mkmedia` generates a new transient CHECKSUMS signing
-key. Each accepted build therefore has its own external SHA-256 and transient
-key fingerprint.
-
-A fixed signing key could make that part deterministic, but it would create a
-persistent key-management obligation. The current proof does not add that
-cost because byte-identical rebuilds are not a business requirement; verified
-input identity, controlled deltas, and repeatable validation are.
-
-## Live-proof boundary
-
-A successful media build is not proof that destructive installation is safe.
-The candidate remains unpromoted until the two-disk VM gates in
-`../VM_PROOF.md` prove absent-target failure, internal-disk non-modification,
-target-only installation, FDE/TPM behavior, no-NVRAM bootloader behavior and
-cold Secure Boot.
+- local discovery of the AutoYaST profile with networking disabled;
+- application of the installer-only update layer;
+- fail-closed behavior when the exact target is absent;
+- unchanged internal guard disk;
+- successful target-only installation when the target is present;
+- no-NVRAM behavior, fallback ESP artifact, FDE/TPM/passphrase behavior and
+  Secure Boot as specified by `../VM_PROOF.md`.

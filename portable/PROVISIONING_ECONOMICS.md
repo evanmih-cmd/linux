@@ -30,28 +30,35 @@ A lower-cost candidate that fails a hard gate is not cheaper; it is incomplete.
 
 ## Current lowest-delta candidate
 
-The current candidate is:
+The current candidate is deliberately split into two independently verifiable
+logical layers:
 
 ```text
-verified official Tumbleweed Snapshot20260930 Offline Image
-+ AutoYaST profile embedded in the initrd
-    exact <drive><device>/dev/disk/by-id/...</device>
+immutable base:
+  verified official Tumbleweed Snapshot20260930 Offline ISO
+  SHA-256 0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
+
+small Desktop-Linux layer:
+  AutoYaST profile
+    exact /dev/disk/by-id target
     initialize = true
     no explicit partition list
-    initial ask injects general/storage/proposal/encryption_password
-    second password ask supplies %user:sdbootutil-tpm2-pin
-    language = en_US; keyboard = english-us; timezone = Europe/Berlin
-    software = base + sdbootutil; installer online update = false
-    bootloader = systemd-boot
-    secure_boot = true
-    update_nvram = false
-+ installer-only stock keyctl/libkeyutils from the same DVD
-+ two-line installer-only YaST import correction for systemd-boot update_nvram
-+ stock mkmedia construction and CHECKSUMS re-signing
+    recovery/LUKS passphrase ask
+    separate TPM2 PIN ask
+    systemd-boot + secure_boot=true + update_nvram=false
+  same-DVD stock keyctl/libkeyutils for the installer runtime
+  minimal installer-only YaST import correction
+  complete manifest + hashes
 ```
 
-This is a candidate, not yet an architectural selection. It must pass the live
-VM gates below.
+In VirtualBox these are two attached media. On the final writable USB device
+they are co-located after the verified upstream ISO is written to the device.
+
+The large upstream ISO is no longer rebuilt for routine profile/overlay
+iterations. A monolithic derived ISO is only an optional diagnostic/archive
+artifact.
+
+This is still a candidate until the live VM gates pass.
 
 ## Why the storage delta is currently zero
 
@@ -150,26 +157,54 @@ Snapshot20260930 RPMs rather than upstream `master`.
 
 ## Delivery cost of that delta
 
-openSUSE's stock `mkmedia` is sufficient; a DUD is not needed.
+The lowest-cost delivery model is now the two-layer model rather than routine
+whole-ISO reconstruction.
 
-The proof build uses `--instsys` to overlay the patched YaST importer and the
-stock `keyctl`/libkeyutils files from the same Snapshot20260930 DVD, and
-`--initrd-config` to point AutoYaST at the profile embedded in the installer.
-Normal `mkmedia --sign` handling recalculates and re-signs the changed
-`/CHECKSUMS` with a transient build key that is also added to the media and
-initrd.
+The immutable Offline ISO is verified once and reused unchanged. Development
+iterations rebuild only the small Desktop-Linux layer. That layer must contain
+an exhaustive manifest so its complete custom content can be verified
+independently.
 
-So the candidate custom ownership is limited to the AutoYaST profile, a
-two-line version-specific YaST import patch, and reproducible media
-construction. No installed Tumbleweed package is forked or replaced.
+For the VM proof:
 
-The maintenance cost of that delta is:
+```text
+official Offline ISO
++ small local Desktop-Linux layer medium
+```
 
-- when adopting a new Offline Image, check whether upstream now imports
-  `update_nvram` for systemd-boot;
-- if not, verify the tiny overlay still applies to that YaST version;
-- rebuild the installer artifact and rerun the provisioning gates;
-- if upstream fixes the omission, delete the delta.
+For production USB deployment:
+
+```text
+verify official ISO
+→ write it to USB with Rufus or equivalent
+→ add the verified Desktop-Linux layer to the same writable USB
+```
+
+The installer-side transport for the custom files must use supported
+local-media mechanisms and must pass live proof. Network delivery or a host-side
+control plane is not an acceptable substitute.
+
+This lowers lifecycle cost relative to repeated `mkmedia` reconstruction:
+
+- edits to `autoinst.xml` do not require reading/writing/hashing 4.4 GiB;
+- upstream ISO provenance remains directly recognizable;
+- the custom trust surface is a small manifestable object;
+- VM iteration and final physical deployment use the same logical inputs;
+- adopting a new Snapshot means revalidating the layer against the new
+  installer, not treating a large locally re-signed ISO as the primary source.
+
+The previous monolithic derived ISO remains useful historical/static evidence,
+but it is no longer the normal delivery or development loop.
+
+The maintenance cost of the custom delta is:
+
+- verify the signed metadata and ISO hash when adopting a new Offline Image;
+- check whether upstream now imports `update_nvram` for systemd-boot;
+- check whether the installer runtime now supplies the keyring tooling needed by
+  the supported sdbootutil PIN input;
+- delete any layer component made unnecessary by upstream;
+- rebuild and reverify only the small custom layer;
+- rerun the provisioning gates.
 
 ## Alternatives and present cost picture
 
@@ -177,7 +212,7 @@ The maintenance cost of that delta is:
 |---|---|---|---|
 | Agama Live ISO | Native declarative target, TPM/FDE and no-NVRAM controls | Low configuration cost | Public image is development/testing and baseline packages are not offline |
 | Offline Image + explicit AutoYaST partition layout | Production/offline; exact by-id target | Higher: profile owns more storage topology and TPM authentication needs additional handling | Duplicates product storage policy and loses the cheapest product-default path |
-| Offline Image + exact-drive/no-partitions AutoYaST fallback | Production/offline; exact by-id target; stock product storage/FDE defaults | Profile-owned ask hook, same-DVD stock keyutils in the installer, plus a two-line bootloader import correction | Must be proven live |
+| Offline Image + separate Desktop-Linux AutoYaST layer | Production/offline; upstream ISO remains independently verified; exact by-id target; stock storage/FDE defaults | Small manifestable profile/installer delta; no routine 4.4 GiB rebuild | Local-media discovery/update transport and full installation behavior must be proven live |
 | Switch distribution/product | Potentially zero openSUSE-specific delta | Migration/research/revalidation cost across boot, FDE, rollback, updates and hardware | No alternative has yet demonstrated a lower total requirement-satisfying cost |
 
 The third row is therefore the current path to validate first under Product

@@ -193,82 +193,148 @@ persistence framework.
 
 ## Provisioning
 
+### Two-layer installation medium
+
+The production provisioning model is a **verified upstream base plus a
+separately verifiable Desktop-Linux layer**.
+
+The two logical layers are:
+
+```text
+Layer 1 — immutable upstream base
+  official openSUSE Tumbleweed Snapshot20260930 Offline Image
+  verified before deployment from openSUSE-signed checksum metadata
+  expected ISO SHA-256:
+  0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
+
+Layer 2 — Desktop-Linux provisioning delta
+  AutoYaST profile
+  installer-only files required by the profile
+  minimal version-specific YaST correction, while upstream requires it
+  complete manifest containing hashes of every owned file
+```
+
+The upstream ISO is not rebuilt merely to carry Desktop-Linux configuration.
+Its cryptographic identity is established on the downloaded ISO before it is
+written to installation media.
+
+For VM development and validation the two logical layers are deliberately
+presented as two media:
+
+```text
+VirtualBox optical medium
+  verified official Snapshot20260930 ISO
+        +
+small Desktop-Linux layer medium
+  mutable during development
+```
+
+This avoids repeatedly rebuilding and hashing a 4.4 GiB derived ISO when only
+the Desktop-Linux profile or installer delta changed.
+
+The production physical medium is one writable USB device. Deployment is:
+
+1. verify the official ISO cryptographically;
+2. write that verified ISO to the USB device with a normal image-writing tool
+   such as Rufus;
+3. add the independently constructed and verified Desktop-Linux layer to the
+   same writable USB device;
+4. verify the Desktop-Linux layer from its manifest.
+
+Physical co-location does not collapse the trust boundaries. The base is
+identified by the verified upstream ISO; the custom layer is identified by its
+complete manifest. A whole-device hash after adding the custom layer is not a
+substitute for those two independent identities.
+
 ### Provisioning requirements must be satisfied together
 
-No installer is selected merely because it solves one part of provisioning.
-The production path must simultaneously provide:
+The combined physical installation medium must simultaneously provide:
 
-- a supported production/GA Tumbleweed installation medium;
-- all packages required for baseline installation on the medium, so initial
-  provisioning and bare-metal recovery work with networking unavailable;
-- a declarative unattended profile carried by the installation medium itself;
-- unambiguous selection of the removable target while the host internal disk is
-  present;
-- no writes to the host internal disk or its ESP;
-- no persistent host NVRAM/boot-order mutation;
+- a supported production/GA Tumbleweed installation base;
+- all baseline packages on the upstream Offline Image, so provisioning and
+  bare-metal recovery work with networking unavailable;
+- the declarative unattended profile on the same physical USB medium;
+- unambiguous persistent identity of the removable target;
+- fail-closed behavior when that exact target is absent;
+- no writes to the host internal disk or ESP;
+- no persistent host NVRAM/BootOrder mutation;
 - the selected Secure Boot + BLS boot architecture;
-- LUKS2 with both the owner recovery passphrase and the supported TPM2+PIN
-  primary-host unlock path;
-- repeatable construction and provenance verification of the installer image.
+- LUKS2 with owner recovery passphrase and TPM2+PIN primary-host unlock;
+- a complete manifest of the Desktop-Linux layer;
+- repeatable independent verification of both logical layers.
 
 A candidate that misses any one of these is not the production provisioning
 path.
 
-### Agama Live ISO
-
-Agama's native profile model is attractive because current Agama exposes
-`bootloader.updateNvram=false`, declarative target selection, LUKS2/TPM
-configuration and unattended profiles embedded in the installation medium.
-
-The current public openSUSE Agama Live ISO is nevertheless rejected from the
-production path because it is documented as a development/testing image and
-does not contain the product package repositories. Baseline installation
-therefore requires networking.
-
-It may be used only for isolated product research where the result is not
-mistaken for production-path validation.
-
 ### Tumbleweed Offline Image + AutoYaST
 
-The official Tumbleweed Offline Image satisfies the offline-media requirement
-and YaST/AutoYaST provides a mature unattended profile mechanism carried by the
-installation medium.
+The official Tumbleweed Offline Image is the immutable upstream base. YaST /
+AutoYaST remains the provisioning mechanism.
 
-However, current YaST bootloader code does not import `update_nvram` from an
-AutoYaST profile for the BLS boot paths that matter to this design
-(`systemd-boot` and `grub2-bls`). Those objects default to updating NVRAM.
-Therefore this combination is **not accepted** as the production path in its
-current form.
+The Desktop-Linux profile owns the persistent target identity and policy
+inputs, while storage topology remains delegated to the normal Tumbleweed
+guided proposal for that one selected drive. Snapshot20260930 product defaults
+provide `systemd_fde`, `argon2id`, `tpm2+pin`, Btrfs and Snapper.
 
-Traditional `grub2-efi` AutoYaST does import `update_nvram`, but changing the
-boot architecture is not a workaround by itself. It becomes a candidate only
-if the complete Secure Boot, measured TPM2+PIN unlock, transactional-update,
-rollback and removable-fallback requirements are independently proven with that
-boot path.
+Two small installer-time gaps remain in Snapshot20260930:
 
-### Current provisioning gate
+- the installer runtime lacks `keyctl`, required to place the separately
+  entered TPM2 PIN into the sdbootutil-specific kernel keyring entry;
+- the systemd-boot AutoYaST importer omits `global/update_nvram`, although the
+  runtime bootloader object supports the setting.
 
-Provisioning remains unresolved.
+The Desktop-Linux layer therefore currently owns:
 
-Product First requires checking the supported Tumbleweed installation/boot
-combinations before designing a custom solution. If none satisfies the
-requirements, custom alternatives such as a small installer transformation,
-YaST patch, image customization or another mechanism remain valid candidates
-and must be compared by total lifecycle cost rather than rejected categorically.
+```text
+autoinst.xml
+stock keyctl + libkeyutils from the same verified Snapshot20260930 DVD
+minimal installer-only AutoYaST importer correction for update_nvram=false
+manifest of all layer files and hashes
+```
 
-The next research question is therefore two-stage: first determine the cheapest
-supported product path that satisfies the requirements; if no such path exists,
-price the smallest custom delta against switching products or accepting a
-different supported boot/install combination.
+No installed Tumbleweed package is forked or replaced. The importer correction
+is version-specific and must be deleted when upstream supplies the required
+behavior.
+
+The exact supported installer-side transport for the separate local layer is a
+live proof item. The architectural requirement is the two-layer trust model;
+it does not require repacking the upstream ISO.
+
+### Development and release workflow
+
+Routine development iterations rebuild only the small Desktop-Linux layer:
+
+```text
+edit profile / installer delta
+        ↓
+rebuild small layer
+        ↓
+verify layer manifest
+        ↓
+boot verified official ISO + layer in VirtualBox
+        ↓
+run provisioning gates
+```
+
+A monolithic derived ISO may still be built as a diagnostic or archival
+artifact, but it is not the source of truth and is not required for each
+iteration.
+
+The release source of truth is the exact upstream ISO identity plus the exact
+Desktop-Linux layer manifest and its source-controlled inputs. This is both the
+VM proof model and the physical-USB model; only physical placement differs.
+
+### Agama status
+
+Agama remains useful research history, but the public Agama Live ISO previously
+evaluated is a development/testing image and does not provide the required
+complete offline product repository. It is not the current production path.
 
 ### Declarative preference
 
-The final validated installer profile is the authoritative provisioning input.
-Post-install scripts or other custom mechanisms are not preferred merely for
-convenience, but neither are they categorically excluded from security-critical
-functions. If a product gap exists, the custom delta must be evaluated against
-alternative products and architectures by total lifecycle cost while still
-meeting the same safety/security requirements.
+The validated AutoYaST profile is the authoritative provisioning input.
+Custom installer-time logic is limited to irreducible product gaps and must be
+small, manifestable, version-bound and independently verifiable.
 
 The old `autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` files are
 legacy Ubuntu/Subiquity experiments. They are not valid implementation

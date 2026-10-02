@@ -1,12 +1,21 @@
+Packaging model:
+- immutable base: verified official Snapshot20260930 Offline ISO
+- custom unit: separately manifestable Desktop-Linux provisioning layer
+- VirtualBox: base ISO and custom layer are separate attached media
+- physical USB: same two logical layers are co-located after the verified ISO
+  is written to the writable USB device
+- whole derived ISO is historical proof, not the routine build artifact
+
 Snapshot: openSUSE Tumbleweed 20260930
-Input ISO SHA-256: 0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
+Input ISO SHA-256:
+0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
 
 Source-controlled installer delta:
 
 1. autoinst-vm-proof.xml
    SHA-256:
    4dcf66e915763f2c6517decad477cbb35b5bbb84684d7dc8b99b05a6c80aece1
-   Embedded as /autoinst.xml in the initrd append stream.
+   Layer destination: /autoinst.xml
 
 2. systemd-boot-update-nvram.patch
    SHA-256:
@@ -28,21 +37,20 @@ Installer-root stock-file inputs, all from the same Snapshot20260930 DVD:
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
    SHA-256:
    a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
+
 5. /usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
 
-Delivery mechanism:
+No target-system package is replaced by this layer.
 
-- stock mkmedia 6.3 (git dc56f31df44bee0d7d71d513614794abdb107e2b);
-- installer additions supplied with --instsys;
-- AutoYaST location supplied with
-  --initrd-config='AutoYaST=file:///autoinst.xml';
-- stock mkmedia CHECKSUMS regeneration/signing is enabled.
+Current delivery requirement:
+- AutoYaST profile and installer-only update are discovered from a small local
+  Desktop-Linux layer without network or host-side control plane.
+- Exact transport/container format is promoted only after live proof.
+- The release layer must include an exhaustive size + SHA-256 manifest.
 
-No target-system package is replaced by this overlay.
-
-Observed canonical proof ISO SHA-256:
+Historical derived proof ISO SHA-256:
 3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f
 
-Observed transient CHECKSUMS signing-key fingerprint:
+Historical derived-ISO transient CHECKSUMS signing-key fingerprint:
 82136E32D97E4542AEA3E27413279DE4D0B73901

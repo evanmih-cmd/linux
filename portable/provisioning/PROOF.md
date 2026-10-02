@@ -1,5 +1,14 @@
 # Snapshot20260930 provisioning-media proof
 
+> **Status:** historical whole-ISO composition proof. The current production
+> provisioning architecture no longer rebuilds this derived ISO for routine
+> development. The source of truth is the cryptographically verified official
+> Snapshot20260930 ISO plus a small separately verified Desktop-Linux layer.
+> The evidence below is retained because it proves the exact profile/installer
+> deltas were successfully composed without changing the upstream RPM payloads
+> or UEFI boot image.
+
+
 ## Scope
 
 This records the construction and static verification of the provisioning

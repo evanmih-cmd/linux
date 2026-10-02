@@ -31,9 +31,12 @@ The proof VM must have:
 - the internal-system disk is deliberately present during installation and is
   pre-populated with sentinel partition/filesystem data whose pre/post state is
   compared;
-- the unattended profile is embedded in the final selected installation medium
-  using that installer's supported mechanism; the installer must discover it
-  from the medium itself without an external control plane;
+- the verified official Offline ISO is attached as the immutable base medium;
+- the Desktop-Linux provisioning layer is attached as a separate small local
+  medium in the VM, modelling the custom area that will coexist on the same
+  writable physical USB device;
+- the installer must discover the unattended profile and installer delta from
+  those local media without a network or external control plane;
 - networking is disabled during provisioning proof and enabled only for later
   update/workload tests;
 - virtual TPM only when the installed VirtualBox release exposes a usable TPM
@@ -47,7 +50,7 @@ already documented in issue #1.
 
 | # | Claim | Type | Evidence |
 |---|---|---|---|
-| 1 | The selected production installer installs Tumbleweed unattended from the profile embedded in the installation medium with networking disabled | BEHAVIOR | Boot the generated installation image, prove no guest network is available, let the installer discover its profile from the medium, complete installation, and boot the installed system |
+| 1 | The selected production installer installs Tumbleweed unattended from the verified official Offline ISO plus the Desktop-Linux layer with networking disabled | BEHAVIOR | Boot the official ISO with the local layer attached, prove no guest network is available, let the installer discover its profile/delta from local media, complete installation, and boot the installed system |
 | 2 | Installer touches only the portable target while an ASUS-internal disk is present | BOTH | Before install, record the internal disk partition/filesystem/sentinel state and the portable disk identity; after install, prove the portable disk changed as intended and the internal disk state is unchanged |
 | 3 | UEFI installation uses the final selected supported BLS/boot path | BOTH | Read effective bootloader/BLS state, then reboot and boot successfully through it |
 | 4 | NVRAM-update policy is disabled for portable provisioning | CONFIG | Read effective installer/bootloader state showing the supported no-NVRAM-update setting |
@@ -92,8 +95,8 @@ Those remain physical validation gates.
    capabilities.
 4. Create the disposable UEFI VM with two disks: internal-ASUS guard disk first,
    portable target disk second.
-5. Build the final selected installation image with its supported embedded
-   unattended profile and all baseline packages available offline.
+5. Build the small Desktop-Linux provisioning layer and verify its manifest;
+   attach it alongside the unchanged verified official Offline ISO.
 6. Disable guest networking and perform the unattended installation.
 7. Execute CONFIG gates from the installed system.
 8. Execute BEHAVIOR gates by rebooting, updating, failing and rolling back the
