@@ -1,0 +1,48 @@
+--- a/usr/share/YaST2/lib/bootloader/bls.rb
++++ b/usr/share/YaST2/lib/bootloader/bls.rb
+@@ -8,6 +8,7 @@
+ require "cfa/grub2/default"
+ 
+ Yast.import "Report"
++Yast.import "Installation"
+ 
+ module Bootloader
+   # Represents bls compatile system calls which can be used
+@@ -127,10 +128,37 @@
+       output.strip
+     end
+ 
++    # systemd's measure-pcr-generator serializes encrypted-volume unlocks in
++    # /etc/crypttab order.  The root volume is marked x-initrd.attach and must
++    # establish the shared TPM PIN / passphrase cache before secondary volumes.
++    def self.prioritize_initrd_crypttab_entries
++      filename = File.join(Yast::Installation.destdir, "etc/crypttab")
++      return unless File.file?(filename)
++
++      lines = File.readlines(filename, chomp: false)
++      indices = lines.each_index.select do |index|
++        line = lines[index]
++        !line.strip.empty? && !line.lstrip.start_with?("#")
++      end
++      return if indices.size < 2
++
++      entries = indices.map { |index| lines[index] }
++      initrd, others = entries.partition do |line|
++        fields = line.strip.split(/\s+/)
++        fields.fetch(3, "").split(",").include?("x-initrd.attach")
++      end
++      ordered = initrd + others
++      return if ordered == entries
++
++      indices.zip(ordered).each { |index, line| lines[index] = line }
++      File.write(filename, lines.join)
++    end
++
+     # Enable TPM2/FIDO2 if it is required
+     # rubocop:disable Metrics/AbcSize
+     def self.set_authentication
+       generate_machine_id
++      prioritize_initrd_crypttab_entries
+       devicegraph = Y2Storage::StorageManager.instance.staging
+ 
+       devicegraph.encryptions&.each do |d|

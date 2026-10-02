@@ -153,6 +153,31 @@ If pre-unlock state covered by the TPM policy changes unexpectedly, normal TPM
 unlock must fail. An unexpected plain LUKS passphrase prompt on the primary
 host is not part of the trusted normal workflow.
 
+### Single-credential unlock invariant
+
+Encrypted secondary volumes must not create additional interactive
+authentication steps. The owner authenticates the workstation **once per boot
+path**, regardless of how many LUKS2 volumes the supported storage layout
+contains.
+
+Required behavior:
+
+- normal primary-host boot asks for the TPM2 PIN at most once; after that
+  `cr_root` and encrypted swap must unlock without another PIN or passphrase
+  prompt;
+- emergency/recovery boot asks for the owner LUKS passphrase at most once;
+  the same cached passphrase must unlock `cr_root` and encrypted swap;
+- root unlock is the credential-establishing operation and must precede
+  secondary encrypted-volume unlocks;
+- separate LUKS2 containers do not imply separate owner credentials;
+- a second interactive prompt for encrypted swap is a boot failure, not an
+  accepted user workflow.
+
+This relies on the supported systemd cryptsetup credential cache. The storage
+graph remains unchanged: the fix for an unlock-ordering defect must not
+introduce LVM, merge state boundaries, or replace the stock encrypted-swap
+layout merely to avoid a second prompt.
+
 ### Emergency portability path
 
 The removable SSD also retains an ordinary owner-held LUKS passphrase.

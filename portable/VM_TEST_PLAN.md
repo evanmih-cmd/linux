@@ -222,7 +222,9 @@ PASS requires:
 
 - firmware reaches the removable fallback path without an installer medium;
 - shim/second-stage/BLS boot succeeds;
-- TPM2+PIN unlock succeeds with the known proof PIN;
+- exactly one interactive TPM2 PIN entry is sufficient for the whole normal
+  boot path; root unlock establishes the credential cache and encrypted swap
+  must not prompt separately;
 - installed root reaches userspace;
 - no persistent named openSUSE NVRAM entry is required;
 - guard remains unchanged.
@@ -259,8 +261,9 @@ Verify directly:
 Verify separately:
 
 - Secure Boot on;
-- normal TPM2+PIN unlock;
-- owner-passphrase recovery unlock;
+- normal TPM2+PIN unlock with exactly one PIN entry across root and swap;
+- owner-passphrase recovery unlock with exactly one passphrase entry across
+  root and swap;
 - measured-state change prevents the normal TPM unlock path;
 - fallback removable boot works;
 - BootOrder/BootNext are not owned or persistently mutated by provisioning.

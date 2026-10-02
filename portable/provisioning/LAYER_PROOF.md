@@ -360,6 +360,71 @@ file. Read-back confirms the exact patched `bls.rb` and `systemdboot.rb`, all
 prior installer corrections, the expected AutoYaST profile, and the preserved
 libkeyutils symlink.
 
-The next gate is repeating the target-present offline install with this layer
-on the same single proof VM, then requiring `/EFI/BOOT/grub.efi` before the
-installed-target cold boot.
+### Portable-layout target install — live PASS
+
+The later serial-driven target-present run completed package installation,
+boot-manager installation and target finalization. Powered-off ESP read-back
+proved the complete removable path:
+
+```text
+/EFI/BOOT/BOOTX64.EFI  present
+/EFI/BOOT/grub.efi     present
+```
+
+The complete `Boot*` NVRAM snapshot was byte-for-byte identical before and
+after provisioning. The installer therefore produced the required removable
+fallback layout without creating or changing an owned openSUSE boot entry.
+
+### Installed-target cold boot — fallback boot PASS, single-credential unlock FAIL
+
+With installer media removed, firmware reached the installed removable target,
+the systemd-boot menu exposed both the normal Tumbleweed and Snapper entries,
+and the installed kernel/systemd booted. The run then stopped at:
+
+```text
+Please enter passphrase for disk PORTABLE_WORKSTATION_SSD (cr_swap):
+```
+
+This is not an accepted workflow. The frozen architecture now requires one
+interactive credential entry for the whole boot path: one TPM2 PIN on the
+normal path or one owner recovery passphrase on the recovery path. Encrypted
+swap must not prompt separately.
+
+Powered-off LUKS2 metadata read-back proves that both `cr_root` and `cr_swap`
+have a `systemd-tpm2` token with `tpm2-pin=true` and `tpm2-pcrlock=true`.
+Therefore the failure is not a missing TPM enrollment for swap.
+
+The installed initrd contains this crypttab order:
+
+```text
+cr_swap ... tpm2-device=auto,tpm2-measure-pcr=yes
+cr_root ... x-initrd.attach,tpm2-device=auto,tpm2-measure-pcr=yes
+```
+
+Exact Snapshot20260930 `measure-pcr-generator` deliberately serializes TPM
+cryptsetup units in crypttab order. With that file it therefore requires
+`cr_swap` before `cr_root`. Exact systemd 261.2 uses shared password-agent
+caches named `tpm2-pin` for the TPM PIN and `cryptsetup` for a regular
+passphrase, with cache read/write enabled by default. Root must therefore be
+the credential-establishing unlock and secondary encrypted volumes must follow
+it.
+
+### Root-first FDE ordering correction — static candidate
+
+`systemd-fde-root-first.patch` applies after the portable-layout correction to
+the exact installer-only `bls.rb`. Before sdbootutil enrollment it preserves
+all active crypttab lines byte-for-byte while stably moving entries containing
+`x-initrd.attach` ahead of secondary encrypted-volume entries.
+
+- patch SHA-256:
+  `6b9d8f44b0bbe11c704239b69a303ee7e22c9b2d540833c857e64cc40c3cddfe`;
+- input `bls.rb` SHA-256:
+  `7804641bb3e13a60e6dafeb672110b9e22281792535455c124f601f02d1b4967`;
+- final `bls.rb` SHA-256:
+  `e5444493d525ab2a80356204924723bd22579e12d8a76549301ea24ebe319184`.
+
+A static transformation test against the actual installed crypttab changed
+only row order from `cr_swap -> cr_root` to `cr_root -> cr_swap`; each complete
+input row retained the same SHA-256. The next live gate is a single rebuild of
+the tiny OEMDRV followed by one target install and one cold boot requiring no
+secondary swap prompt.

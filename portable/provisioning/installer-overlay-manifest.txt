@@ -54,19 +54,33 @@ Source-controlled installer delta:
    Purpose: when systemd-boot has update_nvram=false, request stock
    sdbootutil --portable/removable layout.
 
+5. systemd-fde-root-first.patch
+   SHA-256:
+   6b9d8f44b0bbe11c704239b69a303ee7e22c9b2d540833c857e64cc40c3cddfe
+   Applies after systemd-boot-portable-layout.patch to:
+   /usr/share/YaST2/lib/bootloader/bls.rb
+   input SHA-256:
+   7804641bb3e13a60e6dafeb672110b9e22281792535455c124f601f02d1b4967
+   final patched SHA-256:
+   e5444493d525ab2a80356204924723bd22579e12d8a76549301ea24ebe319184
+   Purpose: before sdbootutil TPM enrollment, preserve all target crypttab
+   entries/options while ordering x-initrd.attach entries before secondary
+   encrypted volumes. This makes root establish systemd's shared TPM-PIN or
+   passphrase cache before encrypted swap is unlocked.
+
 Installer-root stock-file inputs, all from the same Snapshot20260930 DVD:
 
-5. /usr/bin/keyctl
+6. /usr/bin/keyctl
    from /x86_64/keyutils-1.6.3-7.9.x86_64.rpm
    SHA-256:
    a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c
 
-6. /usr/lib64/libkeyutils.so.1.10
+7. /usr/lib64/libkeyutils.so.1.10
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
    SHA-256:
    a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
 
-7. /usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
+8. /usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
 
 No target-system package is replaced by this layer.

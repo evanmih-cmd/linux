@@ -42,6 +42,7 @@ The layer is defined by:
 - `systemd-boot-update-nvram.patch`;
 - `networkmanager-offline-write.patch`;
 - `systemd-boot-portable-layout.patch`;
+- `systemd-fde-root-first.patch`;
 - stock `/usr/bin/keyctl` from the exact Snapshot20260930 DVD;
 - stock `/usr/lib64/libkeyutils.so.1.10` and symlink from that DVD;
 - the patched installer-only
@@ -75,8 +76,12 @@ Current installer-only stock-file identities:
   `056bfbc22722150dad8e1c09dfb668ad1c7afd10f5a9540bc5f2e108bb9440e9`;
 - stock Snapshot20260930 `bls.rb`:
   `8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743`;
-- patched installer-only `bls.rb`:
+- `bls.rb` after the portable-layout correction:
   `7804641bb3e13a60e6dafeb672110b9e22281792535455c124f601f02d1b4967`;
+- `systemd-fde-root-first.patch`:
+  `6b9d8f44b0bbe11c704239b69a303ee7e22c9b2d540833c857e64cc40c3cddfe`;
+- final installer-only `bls.rb` after both corrections:
+  `e5444493d525ab2a80356204924723bd22579e12d8a76549301ea24ebe319184`;
 - stock Snapshot20260930 `systemdboot.rb`:
   `331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58`;
 - patched installer-only `systemdboot.rb`:
