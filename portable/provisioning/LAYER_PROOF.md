@@ -114,23 +114,72 @@ read-back also preserved the `libkeyutils.so.1` symlink.
 
 ## VM proof state
 
-The existing `Desktop-Linux-TW-Proof` VM has been reconfigured to contain:
+Exactly one proof VM is registered for continued testing:
+
+`Desktop-Linux-TW-Negative-20261002`
+
+Its production-like provisioning configuration for the negative run was:
 
 ```text
 SATA0  guard/internal VDI
-SATA1  Desktop-Linux OEMDRV ISO
+SATA1  absent
 SATA2  official Snapshot20260930 Offline ISO
+SATA3  Desktop-Linux OEMDRV ISO
+NIC0..3 disabled
+EFI64 + TPM2 + Secure Boot enabled
 ```
 
-The portable target disk is absent for the next fail-closed run. All guest
-NICs remain disabled.
-Fresh pre-run SHA-256 of the powered-off guard VDI:
+The older duplicate proof VM was unregistered and its VM config deleted after
+confirming that it no longer owned either proof VDI. No proof disk or shared
+installation medium was deleted.
+
+### Live OEMDRV discovery — PASS
+
+The exact official Snapshot20260930 ISO booted with networking disabled and the
+separate OEMDRV layer attached. AutoYaST automatically loaded the layer profile
+and displayed its source-controlled prompts, including the distinct recovery
+credential and TPM2 PIN questions.
+
+Evidence:
+
+- `evidence/oemdrv-autoyast-recovery-ask.png`
+- screenshot SHA-256:
+  `96623664d9fce26c341739ebbc3791f770843e01239fa2fca867425e1b600eb6`
+
+This is live behavioral evidence that the separate OEMDRV layer is discovered
+without repacking the upstream ISO or using network/host-side profile delivery.
+
+### Absent-target fail-closed — PASS
+
+For the destructive-safety negative run, the portable target VDI was detached
+while the ASUS-like internal guard VDI remained attached.
+
+Immediate pre-run guard VDI SHA-256:
 
 `de1c73ea1d0c94d5c30caa571c8e4150ebfb2151fb879862f6619c5895b42fe9`
 
-This value is the immediate before-state for the negative test; the post-run
-guard VDI must match it bit-for-bit.
+After the three AutoYaST asks, storage proposal stopped with the explicit
+partitioning issue:
 
-The live boot result is not yet recorded here. Static layer construction and
-read-back are PASS; automatic discovery/application and absent-target
-fail-closed behavior remain live gates.
+```text
+Disk '/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001'
+was not found
+```
+
+The installer did not enter destructive installation.
+
+Evidence:
+
+- `evidence/absent-target-fail-closed.png`
+- screenshot SHA-256:
+  `421968b7ea5e253773ee207419fa816a0ec399216a80fdf4ce93c417d1e68e24`
+
+After powering off the VM, the guard VDI SHA-256 was again:
+
+`de1c73ea1d0c94d5c30caa571c8e4150ebfb2151fb879862f6619c5895b42fe9`
+
+The before/after hashes are identical. Therefore the exact-target-absent path
+failed closed and left the internal guard disk bit-for-bit unchanged.
+
+The next live gate is the positive run on the same single VM with the exact
+target VDI reattached.

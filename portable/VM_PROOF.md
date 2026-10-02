@@ -71,6 +71,28 @@ already documented in issue #1.
 | 19 | Successful/current maintenance releases the sensitive workload | BEHAVIOR | Complete the maintenance path and prove the workload target becomes startable |
 | 20 | Maintenance result is explicit | BEHAVIOR | Exercise current/success/failure paths and observe distinct user-visible result states |
 
+## Current live provisioning evidence
+
+The separate-media provisioning path has now passed these live subgates:
+
+- **OEMDRV discovery: PASS.** With networking disabled, the unchanged official
+  Snapshot20260930 ISO discovered the separate OEMDRV layer and AutoYaST
+  displayed the source-controlled recovery, TPM2 PIN and administrator asks.
+- **Absent exact target: PASS.** With only the ASUS-like guard VDI attached,
+  storage proposal stopped at `Create partition plans` with:
+  `Disk '/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001'
+  was not found`.
+- **Internal-disk negative safety: PASS.** The guard VDI SHA-256 was
+  `de1c73ea1d0c94d5c30caa571c8e4150ebfb2151fb879862f6619c5895b42fe9`
+  immediately before and after the failed proposal.
+
+This does not yet complete gate 1 or gate 2: the positive target-present
+installation still has to complete and the internal guard must remain unchanged
+through that successful install.
+
+Screenshot evidence is stored under `provisioning/evidence/`; detailed hashes
+and layer identity are recorded in `provisioning/LAYER_PROOF.md`.
+
 ## Non-VM claims
 
 VirtualBox does not approve these claims:
