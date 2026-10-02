@@ -276,12 +276,16 @@ inputs, while storage topology remains delegated to the normal Tumbleweed
 guided proposal for that one selected drive. Snapshot20260930 product defaults
 provide `systemd_fde`, `argon2id`, `tpm2+pin`, Btrfs and Snapper.
 
-Two small installer-time gaps remain in Snapshot20260930:
+Three small installer-time gaps remain in Snapshot20260930:
 
 - the installer runtime lacks `keyctl`, required to place the separately
   entered TPM2 PIN into the sdbootutil-specific kernel keyring entry;
 - the systemd-boot AutoYaST importer omits `global/update_nvram`, although the
-  runtime bootloader object supports the setting.
+  runtime bootloader object supports the setting;
+- when AutoYaST writes a NetworkManager target configuration with
+  `apply_config=false`, `Lan.Write` still waits for a running network and raises
+  a modal `No network running` error. That is inappropriate for the offline
+  target-chroot write path and breaks unattended installation.
 
 The Desktop-Linux layer therefore currently owns:
 
@@ -289,12 +293,15 @@ The Desktop-Linux layer therefore currently owns:
 autoinst.xml
 stock keyctl + libkeyutils from the same verified Snapshot20260930 DVD
 minimal installer-only AutoYaST importer correction for update_nvram=false
+minimal installer-only NetworkManager target-write correction
 manifest of all layer files and hashes
 ```
 
-No installed Tumbleweed package is forked or replaced. The importer correction
-is version-specific and must be deleted when upstream supplies the required
-behavior.
+No installed Tumbleweed package is forked or replaced. Both YaST corrections
+are installer-only, version-specific, and must be deleted when upstream supplies
+the required behavior. The network correction preserves the product-selected
+NetworkManager backend; it only suppresses the running-network check when YaST
+was explicitly asked to write target configuration without applying it.
 
 The exact supported installer-side transport for the separate local layer is a
 live proof item. The architectural requirement is the two-layer trust model;

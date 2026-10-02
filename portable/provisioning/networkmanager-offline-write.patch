@@ -1,0 +1,5 @@
+--- a/usr/share/YaST2/modules/Lan.rb
++++ b/usr/share/YaST2/modules/Lan.rb
+@@
+-      ensure_network_running if yast_config.backend?(:network_manager)
++      ensure_network_running if apply_config && yast_config.backend?(:network_manager)

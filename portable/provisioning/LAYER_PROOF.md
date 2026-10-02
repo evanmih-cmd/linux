@@ -76,7 +76,7 @@ Installer files:
 
 The binaries/libraries are stock files from the same verified Snapshot20260930
 DVD. No target-system package is replaced.
-## Built proof artifacts
+## Negative-gate layer artifact
 
 Intermediate DUD:
 
@@ -88,7 +88,7 @@ SHA-256:
 
 `cc3b71061868be72c2bb4964db1f13c23a1a07905f055b565e6e682a827d1699`
 
-Combined local layer medium:
+Combined local layer medium used for the negative gate:
 
 `Desktop-Linux-Snapshot20260930-OEMDRV.iso`
 
@@ -183,3 +183,71 @@ failed closed and left the internal guard disk bit-for-bit unchanged.
 
 The next live gate is the positive run on the same single VM with the exact
 target VDI reattached.
+
+## Offline NetworkManager target-write correction
+
+A target-present offline run using the negative-gate layer reached the target
+installation phase, then displayed a modal `No network running` error while
+saving target settings.
+
+Exact Snapshot20260930 `/usr/share/YaST2/modules/Lan.rb` has SHA-256:
+
+`21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429`
+
+Its `Lan.Write` path contains:
+
+```ruby
+ensure_network_running if yast_config.backend?(:network_manager)
+```
+
+AutoYaST's target-chroot path deliberately invokes
+`Lan.Write(apply_config: false)`: target configuration is being written, not
+applied to the running installer. Requiring a live NetworkManager connection in
+that path adds a 45-second wait and a modal error, breaking unattended offline
+installation.
+
+Changing the target backend to Wicked or `none` would change the product
+outcome. The candidate therefore keeps NetworkManager and owns the smallest
+version-specific installer-only correction:
+
+```ruby
+ensure_network_running if apply_config && yast_config.backend?(:network_manager)
+```
+
+Source patch:
+
+`networkmanager-offline-write.patch`
+
+SHA-256:
+
+`c9dfaf137a0ae80ea7cb9fc7b9929d8369ae01a804a3d42c3c9814a5d3b49154`
+
+Patched `Lan.rb` SHA-256:
+
+`58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0`
+
+### Current patched layer candidate — static PASS
+
+The layer was rebuilt through the same upstream `mkdud` + OEMDRV path.
+
+Intermediate DUD:
+
+- UpdateID: `1dbc2228122e6506`
+- size: 43,390 bytes
+- SHA-256:
+  `73ad2ad177b0b4af5bd5e1e3279c7b4086e0c82ef0fe815768f4e005e3a9fa33`
+
+OEMDRV ISO:
+
+- filesystem label: `OEMDRV`
+- size: 559,104 bytes
+- SHA-256:
+  `a5442f271181f85628327448be0ddfe87db588fe1dd14c326461e4f23dd70bd4`
+
+Independent extraction of the completed ISO followed by
+`sha256sum -c SHA256SUMS` returned OK for every owned file. Read-back of
+`Lan.rb` contains the exact corrected condition above, and `autoinst.xml`
+retains the observed target by-id.
+
+The next gate is a target-present offline installation using this patched layer
+on the same single proof VM.

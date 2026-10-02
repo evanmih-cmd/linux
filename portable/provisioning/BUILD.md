@@ -40,10 +40,12 @@ The layer is defined by:
 
 - `autoinst-vm-proof.xml`;
 - `systemd-boot-update-nvram.patch`;
+- `networkmanager-offline-write.patch`;
 - stock `/usr/bin/keyctl` from the exact Snapshot20260930 DVD;
 - stock `/usr/lib64/libkeyutils.so.1.10` and symlink from that DVD;
 - the patched installer-only
   `/usr/share/YaST2/lib/bootloader/autoyast_converter.rb`;
+- the patched installer-only `/usr/share/YaST2/modules/Lan.rb`;
 - `installer-overlay-manifest.txt`, expanded into the complete layer manifest
   once the local-media transport format is finalized.
 
@@ -61,7 +63,26 @@ Current installer-only stock-file identities:
 - `libkeyutils.so.1.10`:
   `a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e`;
 - patched `autoyast_converter.rb`:
-  `7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612`.
+  `7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612`;
+- stock Snapshot20260930 `Lan.rb` before correction:
+  `21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429`;
+- `networkmanager-offline-write.patch`:
+  `c9dfaf137a0ae80ea7cb9fc7b9929d8369ae01a804a3d42c3c9814a5d3b49154`;
+- patched installer-only `Lan.rb`:
+  `58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0`.
+
+Current statically verified layer candidate:
+
+- DUD UpdateID: `1dbc2228122e6506`
+- DUD size: 43,390 bytes
+- DUD SHA-256:
+  `73ad2ad177b0b4af5bd5e1e3279c7b4086e0c82ef0fe815768f4e005e3a9fa33`
+- OEMDRV ISO size: 559,104 bytes
+- OEMDRV ISO SHA-256:
+  `a5442f271181f85628327448be0ddfe87db588fe1dd14c326461e4f23dd70bd4`
+
+Independent extraction of this OEMDRV ISO followed by
+`sha256sum -c SHA256SUMS` passed for every listed file.
 
 ## Layer build rule
 

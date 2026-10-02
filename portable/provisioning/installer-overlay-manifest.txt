@@ -26,35 +26,46 @@ Source-controlled installer delta:
    Patched file SHA-256:
    7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612
 
+3. networkmanager-offline-write.patch
+   SHA-256:
+   c9dfaf137a0ae80ea7cb9fc7b9929d8369ae01a804a3d42c3c9814a5d3b49154
+   Applies to:
+   /usr/share/YaST2/modules/Lan.rb
+   from exact Snapshot20260930 installer root.
+   Original file SHA-256:
+   21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
+   Patched file SHA-256:
+   58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0
+
 Installer-root stock-file inputs, all from the same Snapshot20260930 DVD:
 
-3. /usr/bin/keyctl
+4. /usr/bin/keyctl
    from /x86_64/keyutils-1.6.3-7.9.x86_64.rpm
    SHA-256:
    a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c
 
-4. /usr/lib64/libkeyutils.so.1.10
+5. /usr/lib64/libkeyutils.so.1.10
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
    SHA-256:
    a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
 
-5. /usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
+6. /usr/lib64/libkeyutils.so.1 -> libkeyutils.so.1.10
    from /x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm
 
 No target-system package is replaced by this layer.
 
-Current OEMDRV proof artifact:
+Current OEMDRV candidate artifact:
 - DUD builder: upstream mkdud commit
   173a908c5760f015886afe23879dcb93675bd7cf
 - DUD product/installer: openSUSE Tumbleweed / YaST
-- DUD UpdateID: 92d2555c29130997
+- DUD UpdateID: 1dbc2228122e6506
 - intermediate desktop-linux.dud:
-  size 35009 bytes
-  SHA-256 cc3b71061868be72c2bb4964db1f13c23a1a07905f055b565e6e682a827d1699
+  size 43390 bytes
+  SHA-256 73ad2ad177b0b4af5bd5e1e3279c7b4086e0c82ef0fe815768f4e005e3a9fa33
 - combined Desktop-Linux-Snapshot20260930-OEMDRV.iso:
   ISO9660 volume label OEMDRV
-  size 526336 bytes
-  SHA-256 942dc86d83608c63944e76e76ca3afd7e2735ae9da2455b571e9458541a2120f
+  size 559104 bytes
+  SHA-256 a5442f271181f85628327448be0ddfe87db588fe1dd14c326461e4f23dd70bd4
 
 Current transport candidate:
 - /autoinst.xml is at OEMDRV filesystem root.
@@ -64,7 +75,9 @@ Current transport candidate:
   SHA256SUMS and SYMLINKS.
 - Independent ISO extraction followed by sha256sum -c SHA256SUMS passes for
   every listed file.
-- Automatic discovery/application remains a live VM gate before promotion.
+- OEMDRV/AutoYaST automatic discovery already passed live negative testing.
+- The NetworkManager target-write correction remains to pass the positive
+  target-present offline installation gate.
 
 Historical derived proof ISO SHA-256:
 3fb647165a1ba81dcc5840b9f556eb219fe7482115c1c612dc7fe8216925774f

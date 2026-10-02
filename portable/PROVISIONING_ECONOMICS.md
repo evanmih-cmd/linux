@@ -47,7 +47,8 @@ small Desktop-Linux layer:
     separate TPM2 PIN ask
     systemd-boot + secure_boot=true + update_nvram=false
   same-DVD stock keyctl/libkeyutils for the installer runtime
-  minimal installer-only YaST import correction
+  minimal installer-only systemd-boot AutoYaST import correction
+  minimal installer-only NetworkManager offline target-write correction
   complete manifest + hashes
 ```
 
@@ -202,6 +203,8 @@ The maintenance cost of the custom delta is:
 - check whether upstream now imports `update_nvram` for systemd-boot;
 - check whether the installer runtime now supplies the keyring tooling needed by
   the supported sdbootutil PIN input;
+- check whether NetworkManager target-only writes still call
+  `ensure_network_running` when `apply_config=false`;
 - delete any layer component made unnecessary by upstream;
 - rebuild and reverify only the small custom layer;
 - rerun the provisioning gates.
