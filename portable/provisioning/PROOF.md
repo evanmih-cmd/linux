@@ -158,17 +158,17 @@ A VirtualBox 7.2.20 proof VM has been created with effective state read back as:
 The ASUS guard VDI is attached first on SATA Port 0 with serial
 `ASUSINTERNAL20260930`.
 
-The portable target VDI exists but is intentionally not attached yet, so the
-first installation run can exercise the required absent-target failure path.
-Its planned serial is `PORTABLESSD20260930A`.
+The portable target VDI exists in the proof cache but is intentionally not
+attached yet, so the first installation run can exercise the required
+absent-target failure path. Its planned serial is
+`PORTABLESSD20260930A`.
 
-The remaining infrastructure blocker is media staging: the Windows
-VirtualBox service cannot open the ISO through the WSL UNC path, while Windows
-interop and the Windows drive mount are intentionally unavailable in this WSL
-boundary. A VirtualBox `IMediumIO` block-I/O experiment stalled the webservice
-control plane and is not accepted as the staging path. No new share, firewall
-opening, WSL interop, or other authority expansion has been introduced to work
-around that boundary.
+There is no media-staging blocker. VirtualBox can open both the upstream and
+derived ISOs directly through the existing WSL UNC namespace. The working
+namespace is `\\wsl.localhost\runner02\...`; earlier failed staging checks used
+the wrong distro name (`Ubuntu`). The existing proof VM already uses a
+`runner02` UNC path for its optical medium, so no Windows-drive mount, WSL
+interop, new share, firewall change, or other authority expansion is needed.
 
-No VM provisioning gate is marked passed until the derived image is staged to
-a Windows path and the live two-disk tests run.
+No VM provisioning gate is marked passed until the live absent-target and
+two-disk installation tests run.
