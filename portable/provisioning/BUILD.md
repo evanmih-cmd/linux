@@ -72,7 +72,7 @@ Current installer-only stock-file identities:
 - patched installer-only `Lan.rb`:
   `58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0`;
 - `systemd-boot-portable-layout.patch`:
-  `7fb66439ff2faa7f6893280329d4705f911b24035034c34406b8fab1540429ff`;
+  `056bfbc22722150dad8e1c09dfb668ad1c7afd10f5a9540bc5f2e108bb9440e9`;
 - stock Snapshot20260930 `bls.rb`:
   `8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743`;
 - patched installer-only `bls.rb`:

@@ -318,7 +318,7 @@ Candidate installer-only correction:
 
 SHA-256:
 
-`7fb66439ff2faa7f6893280329d4705f911b24035034c34406b8fab1540429ff`
+`056bfbc22722150dad8e1c09dfb668ad1c7afd10f5a9540bc5f2e108bb9440e9`
 
 It is bound to the exact YaST package. It only:
 
