@@ -1,13 +1,18 @@
 # Portable workstation — VirtualBox proof plan
 
+Execution harness, observability channels, timeouts and stop rules are defined
+in `VM_TEST_PLAN.md`. This file defines what must be proven; `VM_TEST_PLAN.md`
+defines how each live gate is executed.
+
 ## Purpose
 
 This plan proves the parts of the portable-workstation architecture that Oracle
 VirtualBox can exercise. It is not a substitute for the ASUS FA401EA hardware
 validation gates.
 
-The VM is a disposable proof environment. The production provisioning medium
-remains subject to the GA-only rule in `ARCHITECTURE.md`.
+The proof uses one persistent registered VM. It is reconfigured between gates
+but is not cloned or multiplied. The production provisioning medium remains
+subject to the GA-only rule in `ARCHITECTURE.md`.
 
 ## Evidence rule
 
