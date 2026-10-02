@@ -1,0 +1,39 @@
+Installed-target removable fallback boot test
+
+Setup:
+- installer ISO detached
+- OEMDRV detached
+- internal guard VDI attached
+- portable target VDI attached
+- Secure Boot enabled
+- TPM2 enabled
+
+VirtualBox log:
+00:00:04.835331 EFI: VBoxDbg> loadimage64 '.efi' 0xdcd9f000 LB 0xde000
+00:00:10.090893 Reset initiated by keyboard controller
+00:00:10.091056 Changing the VM state from 'RUNNING' to 'RESETTING'
+
+The cycle repeats after firmware restart.
+
+Observed ESP layout:
+- /EFI/BOOT/BOOTX64.EFI == shim.efi
+- /EFI/BOOT/grub.efi is absent
+- /EFI/systemd/grub.efi is present
+
+Exact sdbootutil Snapshot20260930 behavior:
+- normal secure-boot install places shim.efi + grub.efi under the permanent esp_dst
+  and also places shim at /EFI/BOOT/BOOTX64.EFI.
+- --portable switches esp_dst to /EFI/BOOT and therefore places the bootloader
+  at /EFI/BOOT/grub.efi next to BOOTX64.EFI.
+- portable mode also suppresses EFI-variable updates.
+
+Exact yast2-bootloader 5.0.42 behavior:
+- SystemdBoot#write invokes Bls.install_bootloader.
+- Bls.install_bootloader invokes /usr/bin/sdbootutil install with no --portable option.
+- update_nvram=false does not change the layout to portable.
+
+Conclusion:
+The live reset loop is a provisioning gap: UPDATE_NVRAM=no prevented YaST/sdbootutil
+from owning persistent NVRAM state, but YaST did not request sdbootutil's supported
+portable/removable layout. The architecture remains unchanged; the installer adapter
+must invoke the supported --portable mode.

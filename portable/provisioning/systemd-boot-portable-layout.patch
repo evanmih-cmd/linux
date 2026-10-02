@@ -1,0 +1,31 @@
+--- a/usr/share/YaST2/lib/bootloader/bls.rb
++++ b/usr/share/YaST2/lib/bootloader/bls.rb
+@@ -33,10 +33,13 @@
+                ), command: e.commands.inspect, stderr: e.stderr)
+       )
+     end
+ 
+-    def self.install_bootloader
+-      Yast::Execute.on_target!(SDBOOTUTIL, "install")
++    def self.install_bootloader(portable: false)
++      command = [SDBOOTUTIL]
++      command << "--portable" if portable
++      command << "install"
++      Yast::Execute.on_target!(*command)
+     rescue Cheetah::ExecutionFailed => e
+       Yast::Report.Error(
+       format(_(
+                "Cannot install bootloader:\n" \
+--- a/usr/share/YaST2/lib/bootloader/systemdboot.rb
++++ b/usr/share/YaST2/lib/bootloader/systemdboot.rb
+@@ -142,9 +142,9 @@
+       super
+       log.info("Writing settings...")
+       write_kernel_parameter
+       if Yast::Stage.initial # while new installation only (currently)
+-        Bls.install_bootloader
++        Bls.install_bootloader(portable: update_nvram == false)
+         Bls.set_authentication
+       end
+ 
+       Bls.create_menu_entries

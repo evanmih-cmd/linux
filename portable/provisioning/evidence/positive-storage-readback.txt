@@ -1,0 +1,66 @@
+Snapshot20260930 positive target read-back
+
+Target VDI SHA-256 after install:
+91daf82111ebbd381a72a205b5d4351493ad35cfab249d5b077003d597eb2284
+
+Internal guard VDI SHA-256 before/after:
+de1c73ea1d0c94d5c30caa571c8e4150ebfb2151fb879862f6619c5895b42fe9
+
+GPT:
+- p1: 1 GiB EFI System Partition
+- p2: root partition, 94,367,744 sectors
+- p3: encrypted swap partition, 4,196,319 sectors
+
+Root LUKS:
+- version: LUKS2
+- UUID: 055c6f57-aba2-4812-899e-e84676eb767f
+- passphrase keyslot PBKDF: argon2id
+- systemd-tpm2 token present
+- tpm2-pin: true
+- tpm2-pcrlock: true
+- TPM token keyslot: 2
+
+Installed initrd /etc/crypttab:
+cr_swap /dev/disk/by-uuid/cafca355-cdff-40ce-a59e-3a857f7bd3e6 none tpm2-device=auto,tpm2-measure-pcr=yes
+cr_root /dev/disk/by-uuid/055c6f57-aba2-4812-899e-e84676eb767f none x-initrd.attach,tpm2-device=auto,tpm2-measure-pcr=yes
+
+Installed initrd root parameters:
+root=UUID=1ac952af-6189-430e-a4e7-60240d9e1eaa
+rootfstype=btrfs
+rootflags=rw,relatime,space_cache=v2,subvolid=264,subvol=/@/.snapshots/1/snapshot,subvol=@/.snapshots/1/snapshot
+rd.driver.pre=btrfs
+
+ESP:
+- /EFI/BOOT/BOOTX64.EFI
+- /EFI/BOOT/MokManager.efi
+- /EFI/BOOT/fallback.efi
+- /EFI/systemd/shim.efi
+- /EFI/systemd/grub.efi
+- /EFI/systemd/installed_by_sdbootutil
+- /EFI/systemd/pcrlock.json
+- /loader/loader.conf
+- /loader/entries/opensuse-tumbleweed-7.2.8-1-default-1.conf
+- /loader/entries/opensuse-tumbleweed-7.2.8-1-default-2.conf
+
+BOOTX64.EFI SHA-256:
+5b241af1bd28ad533412987993182da923a22d2ef2ecbaef54b568417fea75eb
+shim.efi SHA-256:
+5b241af1bd28ad533412987993182da923a22d2ef2ecbaef54b568417fea75eb
+BOOTX64.EFI == shim.efi: yes
+
+BLS entry 1 root:
+root=/dev/mapper/cr_root rootflags=subvol=@/.snapshots/1/snapshot
+
+BLS entry 2:
+Snapper: openSUSE Tumbleweed after installation
+rootflags=subvol=@/.snapshots/2/snapshot
+
+NVRAM after install and installed-target boot attempt:
+- UiApp
+- generic VirtualBox CD-ROM entry
+- generic ASUS internal disk entry
+- generic portable target disk entry
+- BootOrder only references the generic device entries
+- no named openSUSE OS entry
+
+NVRAM inventory was byte-identical before and after the installed-target boot attempt.
