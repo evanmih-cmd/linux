@@ -2,101 +2,102 @@
 
 ## Purpose
 
-This plan proves the parts of the portable-workstation architecture that Oracle
-VirtualBox can exercise. It is not a substitute for the ASUS FA401EA hardware
-validation gates.
+This plan validates the final selected **openSUSE Tumbleweed** topology where
+VirtualBox can model it. It does not approve ASUS firmware behavior or the real
+Ledger device.
 
-The VM is a disposable proof environment. The production provisioning medium
-remains subject to the GA-only rule in `ARCHITECTURE.md`.
+No VM experiment should be run from this document until the current
+documentation/source gates in `ARCHITECTURE.md` are ready for behavioral proof.
 
 ## Evidence rule
 
-Every gate is classified before execution.
+- **CONFIG** — inspect effective configuration/state.
+- **BEHAVIOR** — exercise the live system and observe the outcome.
+- **BOTH** — prove both independently.
 
-- **CONFIG**: read the effective configuration/state and prove the required
-  value is present.
-- **BEHAVIOR**: exercise the live system and prove the observed outcome.
-- **BOTH**: prove configuration and behavior independently.
-
-No gate passes because a test fixture contains the expected value. A declaration
-is evidence only for a CONFIG claim; runtime claims require live execution.
+A fixture containing an expected value is not evidence that the guest actually
+uses it.
 
 ## VM boundary
 
-The proof VM must have:
+The disposable proof VM has:
 
 - UEFI firmware;
-- two virtual disks: disk 0 represents the ASUS internal system disk and disk 1
-  represents the removable workstation target;
-- the internal-system disk is deliberately present during installation and is
-  pre-populated with sentinel partition/filesystem data whose pre/post state is
-  compared;
-- the unattended profile is embedded in the final selected installation medium
-  using that installer's supported mechanism; the installer must discover it
-  from the medium itself without an external control plane;
-- networking is disabled during provisioning proof and enabled only for later
-  update/workload tests;
-- virtual TPM only when the installed VirtualBox release exposes a usable TPM
-  mode;
-- no dependency on Windows filesystem mounts or WSL/Windows interop.
+- disk 0 representing the ASUS internal disk, pre-populated with sentinel state;
+- disk 1 representing the removable workstation target;
+- networking disabled for baseline provisioning;
+- virtual TPM only when the installed VirtualBox version can model the required
+  flow;
+- Secure Boot when the VM firmware permits the selected chain;
+- no dependence on host filesystem mounts or WSL interop from inside the guest.
 
-The WSL control plane may access only the explicitly allowed Windows endpoints
-already documented in issue #1.
+## Final topology under test
+
+```text
+external-style ESP
+└── stock openSUSE removable boot path / vendor-signed UKI candidate
+
+outer LUKS2
+└── LVM
+    ├── root LV  → Btrfs/Snapper
+    ├── home LV  → persistent marker/browser-state surrogate
+    └── swap LV  → encrypted disk-backed swap
+```
+
+Credentials are deliberately separate:
+
+- short TPM2 PIN for the normal TPM-bound path;
+- strong LUKS recovery passphrase for offline/new-host recovery.
 
 ## Gates
 
 | # | Claim | Type | Evidence |
 |---|---|---|---|
-| 1 | The selected production installer installs Tumbleweed unattended from the profile embedded in the installation medium with networking disabled | BEHAVIOR | Boot the generated installation image, prove no guest network is available, let the installer discover its profile from the medium, complete installation, and boot the installed system |
-| 2 | Installer touches only the portable target while an ASUS-internal disk is present | BOTH | Before install, record the internal disk partition/filesystem/sentinel state and the portable disk identity; after install, prove the portable disk changed as intended and the internal disk state is unchanged |
-| 3 | UEFI installation uses the final selected supported BLS/boot path | BOTH | Read effective bootloader/BLS state, then reboot and boot successfully through it |
-| 4 | NVRAM-update policy is disabled for portable provisioning | CONFIG | Read effective installer/bootloader state showing the supported no-NVRAM-update setting |
-| 5 | External-style fallback boot artifact exists | CONFIG | Inspect ESP for the removable fallback path required by the architecture |
-| 6 | Root storage is LUKS2 over Btrfs with supported Snapper layout | CONFIG | Read block, crypt, filesystem, subvolume and Snapper state from the installed system |
-| 7 | Owner passphrase unlock works | BEHAVIOR | Cold boot with TPM path unavailable/unused and unlock with the owner passphrase |
-| 8 | TPM-backed primary unlock works when VirtualBox TPM can model the required path | BOTH | Read enrollment state; cold boot and observe successful TPM-backed unlock |
-| 9 | Unexpected measured-state change prevents normal TPM unlock when the VM can model it | BEHAVIOR | Change a measured pre-unlock component and prove normal TPM unlock fails |
-| 10 | User/application state is outside root rollback | BOTH | Inspect mount/subvolume layout; write user-state marker, roll back root, prove marker survives |
-| 11 | Snapper rollback restores a known-good root | BEHAVIOR | Introduce a root-state change, create/choose rollback point, rollback and verify old root state is restored |
-| 12 | `transactional-update dup` creates/activates a new snapshot | BOTH | Inspect transaction/snapshot state; perform update and boot/activate the new state |
-| 13 | Failed transactional update does not become the active root | BEHAVIOR | Force a real transaction failure and prove the failed state is not activated |
-| 14 | Userspace-only update can activate through systemd soft reboot | BOTH | Verify supported restart policy; perform a qualifying update and observe soft reboot into the new root |
-| 15 | Kernel-level update requires full reboot | BEHAVIOR | Apply a kernel transition and prove a firmware-level reboot is required/used before release |
-| 16 | kexec is disabled | BOTH | Read effective kexec/restart configuration; attempt the relevant path and prove it is not selected/available |
-| 17 | Sensitive workload is blocked before maintenance success | BEHAVIOR | Boot into an update-required or forced-failure state and prove the workload target cannot start |
-| 18 | Recovery/admin path remains available after maintenance failure | BEHAVIOR | Force maintenance failure and prove administrative recovery remains reachable |
-| 19 | Successful/current maintenance releases the sensitive workload | BEHAVIOR | Complete the maintenance path and prove the workload target becomes startable |
-| 20 | Maintenance result is explicit | BEHAVIOR | Exercise current/success/failure paths and observe distinct user-visible result states |
+| 1 | Official Tumbleweed Offline Image + embedded AutoYaST profile installs with networking disabled | BEHAVIOR | Boot final media with guest network absent and complete baseline install |
+| 2 | Destructive work is bound to the exact portable disk identity | BOTH | Profile names stable disk identity; absent identity fails; present identity changes disk 1 only |
+| 3 | Internal-disk sentinel state is unchanged | BOTH | Compare disk 0 GPT/partitions/filesystems/sentinel before and after |
+| 4 | Provisioning leaves persistent UEFI variables/BootOrder unchanged | BOTH | Compare EFI variable state before and after install |
+| 5 | External ESP contains the standard removable fallback path | CONFIG | Inspect ESP artifacts |
+| 6 | Final storage is one outer LUKS2 containing LVM root/home/swap LVs | CONFIG | Inspect block/crypt/LVM/filesystem state |
+| 7 | Root is Btrfs/Snapper and home is a separate preserved filesystem | CONFIG | Inspect mounts/subvolumes/snapshot config |
+| 8 | Swap is real disk-backed swap inside the encrypted boundary and requires no second unlock | BOTH | Inspect swap device; cold boot observes only intended normal credential path |
+| 9 | Strong recovery passphrase independently unlocks the outer LUKS2 volume | BEHAVIOR | Disable/unavailable TPM path and unlock with recovery passphrase |
+| 10 | Normal TPM2 path uses a distinct short PIN, not the recovery passphrase | BOTH | Inspect enrollment/installer secret path and cold-boot with TPM PIN |
+| 11 | TPM PIN is not persisted in installation media or a clear-text target file | CONFIG | Inspect generated media/profile/target secret locations |
+| 12 | Secure Boot succeeds through the selected stock openSUSE chain | BOTH | Inspect Secure Boot state and boot successfully |
+| 13 | Official vendor-signed UKI is the authenticated pre-unlock execution path | BOTH | Inspect loaded image/boot state and observe prompt path |
+| 14 | Unauthorized pre-unlock modification cannot produce a trusted counterfeit PIN prompt | BEHAVIOR | Modify a relevant ESP/BLS/early-boot artifact and prove trusted normal unlock does not proceed |
+| 15 | Normal UKI/kernel update needs no owner signing or recurring MOK enrollment | BOTH | Apply update, inspect artifacts/trust state and reboot |
+| 16 | Snapper rollback restores known-good root without rolling home back | BOTH | Write independent root/home markers, rollback root, prove only root marker changes |
+| 17 | Previous root remains bootable through the selected authenticated boot path | BEHAVIOR | Boot/select old snapshot and verify usable known-good system |
+| 18 | Managed-update failure leaves a usable previous-system recovery point | BEHAVIOR | Force a real update failure and prove previous root remains recoverable |
+| 19 | Sensitive workload gate blocks work until maintenance policy succeeds | BEHAVIOR | Exercise current/success/failure states |
+| 20 | Maintenance result is explicit and stale executable state is cleared before release | BOTH | Observe result state and process/restart behavior |
+| 21 | Reinstall replaces root while preserving the persistent home LV byte-for-byte/logically intact | BOTH | Place persistent markers, execute reinstall profile, compare home state and root identity |
+| 22 | Reinstall can establish fresh TPM enrollment after root replacement | BOTH | Complete reinstall and cold boot through normal TPM path |
 
-## Non-VM claims
+## Physical-only gates
 
-VirtualBox does not approve these claims:
+VirtualBox cannot approve:
 
-- ASUS one-time boot selection behavior across a full reboot;
-- absence of unwanted physical-host NVRAM/internal-ESP mutation during real
-  removable-media provisioning;
-- real Secure Boot key/firmware behavior on the ASUS;
-- real TPM2+PIN UX and measured-state behavior when VirtualBox cannot model it;
-- the actual owner-controlled USB/HID authorization device;
-- emergency portability on another physical compatible host.
+- exact ASUS TUF A14 FA401EA firmware/Secure Boot/TPM behavior;
+- hardware root-of-trust/firmware measurement behavior;
+- whether one-time external selection survives a firmware reboot;
+- real external-SSD enumeration quirks;
+- real Ledger Chrome/WebHID behavior;
+- portability/recovery on a second compatible physical host.
 
-Those remain physical validation gates.
+Those remain physical acceptance tests after the VM proof.
 
 ## Execution order
 
-1. Resolve the production provisioning gate in `ARCHITECTURE.md`; no VM
-   installer result is promoted while the installer itself still violates a
-   requirement.
-2. Establish the narrow VirtualBox control plane from WSL.
-3. Inventory the installed VirtualBox release and available firmware/TPM
-   capabilities.
-4. Create the disposable UEFI VM with two disks: internal-ASUS guard disk first,
-   portable target disk second.
-5. Build the final selected installation image with its supported embedded
-   unattended profile and all baseline packages available offline.
-6. Disable guest networking and perform the unattended installation.
-7. Execute CONFIG gates from the installed system.
-8. Execute BEHAVIOR gates by rebooting, updating, failing and rolling back the
-   live VM.
-9. Record each observation in issue #1 and promote only mechanisms that remain
-   compatible with the production/GA architecture.
+1. Finish source/doc proof of the selected UKI/MOK/sdbootutil lifecycle.
+2. Build the final Offline Image + AutoYaST artifact.
+3. Create the two-disk disposable VM.
+4. Run offline exact-target provisioning.
+5. Run CONFIG gates.
+6. Run boot/FDE/Secure-Boot behavioral gates.
+7. Run update/rollback/workload-gate tests.
+8. Run destructive reinstall-preserve-home proof.
+9. Record every observation in issue #1.
+10. Move to ASUS hardware only after VM-capable gates pass.

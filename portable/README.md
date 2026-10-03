@@ -1,67 +1,98 @@
 # Portable workstation
 
 This directory contains the design and implementation artifacts for a
-self-contained openSUSE Tumbleweed workstation carried on removable storage.
+self-contained security workstation carried on removable storage.
 
-The workstation is intended for a narrow browser-centric sensitive workload. It
-must keep its required system and persistent state on the removable device,
-avoid taking ownership of the host's internal storage or persistent firmware
-configuration, update before sensitive work begins, and remain recoverable by
-the owner.
+The authoritative product requirements are in
+[`BUSINESS_REQUIREMENTS.md`](BUSINESS_REQUIREMENTS.md). The product-selection
+research is closed on **openSUSE Tumbleweed** unless a residual implementation
+gate proves that a business requirement cannot be met without owner-maintained
+security-sensitive infrastructure.
 
 ## Documents
 
-- [Business requirements](BUSINESS_REQUIREMENTS.md) — authoritative product
-  requirements. Technical implementation choices must serve these requirements.
-- [Architecture](ARCHITECTURE.md) — current Tumbleweed architecture and its
-  validation gates.
-- [VirtualBox proof plan](VM_PROOF.md) — executable CONFIG/BEHAVIOR validation
-  matrix for the VM proof.
+- [Business requirements](BUSINESS_REQUIREMENTS.md) — authoritative outcomes.
+- [Architecture](ARCHITECTURE.md) — selected Tumbleweed architecture and the
+  remaining go/no-go proof gates.
+- [Provisioning economics](PROVISIONING_ECONOMICS.md) — smallest supported
+  installer delta and its lifecycle cost.
+- [VirtualBox proof plan](VM_PROOF.md) — later CONFIG/BEHAVIOR validation of the
+  final topology.
 - [GitHub issue #1](https://github.com/evanmih-cmd/linux/issues/1) — research
-  history, rejected alternatives, checkpoints, corrections, and current proof
-  work.
+  history, rejected alternatives, corrections, checkpoints and proof evidence.
 
-## Current direction
-
-The implementation direction is:
+## Selected direction
 
 ```text
 openSUSE Tumbleweed
-→ declarative provisioning (Agama for VM proof; production media still gated)
-→ removable SSD only
-→ Secure Boot + systemd-boot/BLS
-→ TPM2+PIN primary unlock + owner LUKS passphrase for emergency portability
-→ LUKS2 + Btrfs/Snapper
-→ mandatory transactional-update startup maintenance
-→ soft reboot when sufficient; kexec disabled
-→ sensitive workload released only after successful maintenance
+→ official Offline Image + AutoYaST
+→ exact removable-SSD target; internal host disk outside authority
+→ Secure Boot
+→ stock removable EFI path; no persistent UEFI NVRAM writes
+→ official vendor-signed UKI path, with the openSUSE signing certificate
+  enrolled through MOK on the primary host
+→ one outer LUKS2 boundary
+   ├── short routine TPM2 PIN for normal boot
+   └── separate strong owner recovery passphrase for offline/new-host recovery
+→ LVM inside LUKS2
+   ├── replaceable Btrfs root + Snapper
+   ├── persistent /home volume preserved across system replacement
+   └── real disk-backed swap volume; hibernation disabled
+→ native openSUSE update/rollback mechanisms
+→ sensitive Chrome workload released only after maintenance policy succeeds
+→ Ledger through the supported Chrome/WebHID/udev path
 ```
 
-The next proof stage is Oracle VirtualBox using the Agama test medium. Passing
-that proof validates the architecture mechanics, not the testing ISO as a
-production installer. Physical-host and production-provisioning gates are
-listed in the architecture document.
+Btrfs, LVM, MOK and a particular updater are implementation choices rather than
+business requirements. They are selected only where they lower total lifecycle
+cost while satisfying the required outcomes.
+
+## Credential model
+
+The normal and recovery credentials are deliberately **different**.
+
+- The normal TPM2 PIN is short enough for routine boot and relies on TPM-backed
+  authorization/rate limiting.
+- The recovery passphrase is high-entropy / high-work-factor material suitable
+  for an attacker who has the SSD and can attempt offline guessing.
+- The recovery passphrase must work without the original host TPM.
+- The TPM PIN is not accepted as the offline recovery secret.
+
+Current `sdbootutil` exposes a dedicated TPM2-PIN secret channel. If YaST on
+the selected Offline Image still feeds the storage password into the legacy
+generic secret channel, AutoYaST may use a tiny installer-only ask/script hook
+to place the separately entered PIN into the supported
+`%user:sdbootutil-tpm2-pin` keyring entry. That is residual provisioning glue,
+not a new FDE implementation.
 
 ## Repository principles
 
-This project inherits the Factory architecture discipline even though it is
-physically and infrastructurally independent from Factory:
+This project follows Factory's Product First + Economy First discipline:
 
-- **Product first** — exhaust mature supported product capabilities before
-  introducing custom mechanisms.
-- **Economy first** — minimize implementation, operational, maintenance, and
-  debugging cost.
-- Custom code is residual glue only.
-- Critical-path beta/preview/experimental functionality is treated as
-  unavailable.
-- Installer/tool limitations do not redefine the business requirements.
-- Prefer a simpler supported product outcome over a technically elegant custom
-  subsystem.
+- exhaust supported production product capabilities before custom mechanisms;
+- compare total lifecycle cost, including expected security loss for
+  irreversible high-value actions;
+- for this workstation, silent pre-unlock secret theft is much more expensive
+  than fail-closed recovery inconvenience;
+- custom code is residual glue only after a product gap is demonstrated;
+- RC/preview/test-only product paths are unavailable for production;
+- an upstream “experimental” interface label is not by itself a security
+  verdict: assess the concrete failure mode, distro ownership and recurring
+  lifecycle cost;
+- installer/tool limitations do not redefine the business requirements.
 
-## Legacy files
+## Current phase
 
-`autoinstall-fresh.yaml` and `autoinstall-reinstall.yaml` are obsolete
-Ubuntu/Subiquity experiments from the earlier design. They do **not** describe
-the current architecture and must not be used for provisioning. They remain
-temporarily as research history until the validated Agama profile replaces
-them.
+Do not restart general OS-selection research unless a residual gate falsifies the
+selected product.
+
+The next work is to prove the final Tumbleweed topology:
+
+1. authenticated pre-unlock UKI path and counterfeit-prompt resistance;
+2. vendor-managed UKI update/PCR lifecycle without owner signing;
+3. Snapper/rollback compatibility with that boot path;
+4. AutoYaST reinstall that replaces root while preserving the persistent
+   volume;
+5. exact-target, offline, no-internal-disk and no-NVRAM behavior on the final
+   topology;
+6. ASUS TUF A14 FA401EA Secure Boot/TPM behavior plus Chrome + Ledger.

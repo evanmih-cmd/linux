@@ -2,202 +2,199 @@
 
 ## Purpose
 
-This file tracks the provisioning candidates by **total lifecycle cost** while
-preserving all authoritative requirements in `BUSINESS_REQUIREMENTS.md`.
+This file tracks the smallest provisioning delta for the **selected**
+openSUSE Tumbleweed product while preserving
+[`BUSINESS_REQUIREMENTS.md`](BUSINESS_REQUIREMENTS.md).
 
-Product First determines the order of investigation. Economy First determines
-which requirement-satisfying result is preferable. Neither rule bans custom
-components.
+Product selection is no longer open merely because provisioning still has proof
+work. Reopen selection only if the remaining delta becomes security-sensitive
+owner infrastructure rather than narrow installer plumbing.
 
 ## Hard gates
 
-A production provisioning path must satisfy all of these together:
+Production provisioning must simultaneously provide:
 
-- production/GA installation path;
-- baseline installation and bare-metal recovery work offline;
-- unattended configuration is carried by the installation medium itself;
-- destructive work is bound to the intended removable SSD by a persistent,
-  unambiguous identity and fails if that identity is absent;
-- the host internal disk and ESP are not modified;
-- provisioning does not require persistent host NVRAM/BootOrder mutation;
-- Secure Boot remains enabled;
-- the selected BLS boot path supports the normal measured TPM2+PIN unlock;
-- the owner LUKS passphrase remains available for emergency portability;
-- the target uses the supported Btrfs/Snapper system layout;
-- construction and verification of the installer artifact are repeatable.
+- production/GA Tumbleweed Offline Image;
+- offline baseline install and bare-metal recovery;
+- unattended profile carried by the media;
+- fail-closed stable identification of the removable target;
+- no write to the host internal disk/ESP;
+- no persistent host NVRAM/BootOrder mutation;
+- Secure Boot;
+- authenticated normal pre-unlock path;
+- one outer LUKS2 boundary;
+- **separate** short TPM2 PIN and strong owner recovery passphrase;
+- LVM root/home/swap separation inside LUKS2;
+- root Btrfs/Snapper;
+- preserve-home system reinstall;
+- reproducible media construction/provenance.
 
-A lower-cost candidate that fails a hard gate is not cheaper; it is incomplete.
+A cheaper path that misses one hard gate is incomplete, not economical.
 
-## Current lowest-delta candidate
-
-The current candidate is:
+## Selected provisioning direction
 
 ```text
 verified official Tumbleweed Offline Image
-+ AutoYaST profile embedded in the installation medium
-    exact <drive><device>/dev/disk/by-id/...</device>
-    no explicit partition list
-    general/storage/proposal supplies encryption_password
-    bootloader = systemd-boot
-    secure_boot = true
-    update_nvram = false
-+ tiny installer-only YaST driver update for the missing
-  systemd-boot AutoYaST update_nvram import
++ AutoYaST profile embedded in installation media
+    exact /dev/disk/by-id/... target
+    final LUKS2 → LVM topology
+    strong recovery passphrase entered by owner
+    short TPM PIN entered separately
+    Btrfs root + persistent home LV + swap LV
+    stock Secure Boot/BLS/sdbootutil mechanisms
++ only the minimum installer-time adapters still required by the exact ISO
 ```
 
-This is a candidate, not yet an architectural selection. It must pass the live
-VM gates below.
+The installed workstation must remain stock where security-sensitive lifecycle
+matters. Installer adaptations may feed existing product properties/secrets but
+must not become a custom bootloader, FDE engine, TPM policy implementation or
+private signing service.
 
-## Why the storage delta is currently zero
+## Exact-target economics
 
-Current `yast-storage-ng` already composes the needed mechanisms:
+AutoYaST/yast-storage-ng can resolve a fixed drive identity through persistent
+udev names and constrain destructive storage planning to the named drive.
 
-1. `AutoinstDrivesMap#find_disk` resolves a fixed AutoYaST drive device using
-   `devicegraph.find_by_any_name`. Persistent udev links such as
-   `/dev/disk/by-id/...` therefore resolve to the actual disk. Its own tests
-   verify that a udev link is converted to the corresponding kernel disk name.
-2. When the selected drive has no explicit partitions,
-   `AutoinstProposal#propose_devicegraph` intentionally falls back to the
-   normal guided product proposal.
-3. `proposal_settings_for_disks` restricts that guided proposal to
-   `drives.disk_names`, so the product proposal receives only the exact disk
-   selected by the AutoYaST drive section.
-4. `AutoinstSpaceMaker#cleaned_devicegraph` applies destructive cleanup only
-   while iterating entries in that drives map. A host disk that is not in the
-   map is therefore not a cleanup target.
-5. Tumbleweed's current product control file selects:
-   `systemd_fde`, `argon2id`, and `tpm2+pin`.
-6. `ProposalSettings#load_encryption` imports those product defaults.
-   AutoYaST creates those settings from the current product first and permits
-   `encryption_password` as a profile override without replacing the method,
-   PBKDF, or authentication defaults.
-7. The guided devices planner copies the resulting password, encryption method,
-   PBKDF and authentication to the planned encrypted device.
+The final profile must explicitly prove the selected external SSD identity and
+fail if it is absent. The internal ASUS disk is present during proof as a guard
+disk with sentinel state.
 
-Thus the profile can potentially combine exact persistent target identity with
-the stock Tumbleweed storage/security proposal instead of reimplementing the
-partition layout.
+## Storage topology economics
 
-## Remaining bootloader delta
+Earlier work tried to minimize layers. The final architecture deliberately adds
+LVM because requirements 13 and 15 create a real lifecycle boundary requirement.
 
-Current `yast-bootloader` has the required runtime capability but an AutoYaST
-serialization omission.
-
-`Bootloader::SystemdBoot`:
-
-- has an `update_nvram` property;
-- defaults it to `true`;
-- writes it to `/etc/sysconfig/bootloader`;
-- is installed through `sdbootutil`.
-
-Current `AutoyastConverter#import_systemd_boot` imports `timeout` and
-`secure_boot` but does not import `global/update_nvram`.
-
-The minimum runtime correction is conceptually:
-
-```ruby
-value = data.global.update_nvram
-bootloader.update_nvram = value == "true" unless value.nil?
+```text
+LUKS2
+└── LVM
+    ├── root LV  → disposable/replaceable Btrfs system
+    ├── home LV  → persistent state preserved by reinstall
+    └── swap LV  → encrypted disk-backed swap
 ```
 
-An upstream-quality change should also export the field and add unit tests.
-For this workstation, only the import is required by the installation runtime
-because the profile is version-controlled and authored directly.
+This is cheaper than relying on filesystem-subvolume conventions during a
+destructive reinstall because the installer can preserve or destroy whole LVs
+unambiguously.
 
-After import, no private bootloader implementation is needed:
-`SystemdBoot#prepare` writes the effective sysconfig and stock `sdbootutil`
-honors `UPDATE_NVRAM=no` by using its no-variable behavior. The installed
-target can therefore use the stock Tumbleweed package.
+## Bootloader/no-NVRAM delta
+
+Current YaST/systemd-boot runtime has a no-NVRAM property and current
+`sdbootutil` has no-variable/portable behavior. Historical research found an
+AutoYaST import omission for the relevant BLS path in the then-current packages.
+
+Before carrying any patch forward, inspect the exact selected Offline Image.
+
+If the omission still exists, the acceptable delta is a tiny installer-only
+YaST driver update that imports the already-supported `update_nvram` property.
+It must not modify the installed bootloader implementation. If upstream fixed
+the omission, delete the delta.
 
 ## Secret-separation gate
 
-Current upstream YaST/sdbootutil integration exposes another cost item that must
-be verified against the exact Offline Image packages before acceptance.
+The normal TPM PIN and the recovery LUKS passphrase must **not** be the same
+secret.
 
-For `systemd_fde` with `tpm2+pin`, current YaST bootloader code passes the
-storage encryption password to the legacy generic `sdbootutil` keyring secret.
-Current sdbootutil treats that generic secret as a backward-compatible fallback
-for the TPM2 PIN. Thus the stock automated path can make the LUKS password and
-the normal TPM PIN the same value.
+Reason:
 
-That is not the desired operational model: the emergency LUKS credential must
-remain suitable against offline attack, while the normal TPM PIN can rely on TPM
-rate limiting and should remain practical for routine boot.
+- the TPM PIN is routine human input and may be short because its security model
+  includes TPM authorization/rate limiting;
+- the recovery passphrase must withstand offline guessing by an attacker who
+  possesses the SSD;
+- using the same short value for both would collapse the recovery credential to
+  the weaker threat model.
 
-The cheapest product-compatible separation candidate is currently:
+Current `sdbootutil` explicitly exposes separate secret sources:
 
-1. AutoYaST asks for the LUKS/recovery passphrase and supplies it to the normal
-   storage proposal.
-2. A second password-style AutoYaST question receives the TPM PIN without
-   embedding it in the installation medium.
-3. The question's supported script hook places that PIN only in the
-   `%user:sdbootutil-tpm2-pin` kernel-keyring entry. Current sdbootutil gives
-   that specific key precedence over the legacy generic key supplied by YaST.
-4. The key is short-lived and exists only in the installer environment; the
-   target receives the resulting TPM enrollment, not the clear-text PIN file.
+- current LUKS password: `cryptenroll`;
+- recovery key/PIN channels;
+- TPM2 PIN: `%user:sdbootutil-tpm2-pin`.
 
-This avoids an FDE fork and uses documented AutoYaST ask/script plus documented
-sdbootutil secret-input mechanisms. It is still custom installer glue and must
-be live-tested. The exact Snapshot20260930 RPMs are authoritative; upstream
-`master` is only research evidence until the ISO package contents are checked.
+Current/earlier YaST integration may still feed the storage encryption password
+into the legacy generic secret, allowing it to become the TPM PIN by fallback.
+That behavior is not accepted for this workstation.
 
-## Delivery cost of that delta
+The lowest-cost product-compatible separation is:
 
-openSUSE already provides the Driver Update / installation-media tooling:
+1. AutoYaST asks for the strong LUKS recovery passphrase and uses it for storage
+   creation/recovery.
+2. A second password-style AutoYaST question asks for the short routine TPM PIN.
+3. A supported installer script hook places that PIN only in
+   `%user:sdbootutil-tpm2-pin`.
+4. `sdbootutil` consumes the short-lived keyring secret during enrollment.
+5. No clear-text PIN is embedded in the media or persisted in the target.
 
-- `mkdud` can replace files in the installation system or inject an updated
-  package;
-- `mkdud --install instsys` can limit an RPM update to the installer rather
-  than installing it in the target;
-- `mkmedia --initrd <dud>` integrates a DUD into an otherwise stock
-  installation image;
-- `mkmedia` preserves the installation-media model instead of requiring a new
-  distribution to be built.
+This is custom installer glue, but it composes documented product secret-input
+mechanisms and does not own cryptography or TPM policy. It remains acceptable
+only while it stays this narrow.
 
-So the candidate custom ownership is currently limited to a tiny installer-time
-delta plus reproducible media construction, not an ongoing fork in the
-installed workstation.
+## MOK economics
 
-The maintenance cost of that delta is:
+The selected authenticated-UKI candidate currently requires one-time enrollment
+of an openSUSE vendor **public signing certificate** through MOK.
 
-- when adopting a new Offline Image, check whether upstream now imports
-  `update_nvram` for systemd-boot;
-- if not, verify the tiny overlay still applies to that YaST version;
-- rebuild the installer artifact and rerun the provisioning gates;
-- if upstream fixes the omission, delete the delta.
+Accepted:
 
-## Alternatives and present cost picture
+- one-time enrollment on a primary host;
+- vendor/project owns the private signing key and UKI signing lifecycle.
 
-| Candidate | Product coverage | Custom lifecycle cost | Current blocking fact |
-|---|---|---|---|
-| Agama Live ISO | Native declarative target, TPM/FDE and no-NVRAM controls | Low configuration cost | Public image is development/testing and baseline packages are not offline |
-| Offline Image + explicit AutoYaST partition layout | Production/offline; exact by-id target | Higher: profile owns more storage topology and TPM authentication needs additional handling | Duplicates product storage policy and loses the cheapest product-default path |
-| Offline Image + exact-drive/no-partitions AutoYaST fallback | Production/offline; exact by-id target; stock product storage/FDE defaults | Currently one tiny installer-only bootloader import delta | Must be proven live |
-| Switch distribution/product | Potentially zero openSUSE-specific delta | Migration/research/revalidation cost across boot, FDE, rollback, updates and hardware | No alternative has yet demonstrated a lower total requirement-satisfying cost |
+Rejected as too costly unless all product paths fail:
 
-The third row is therefore the current path to validate first under Product
-First + Economy First. That is a sequencing decision, not a final selection.
+- owner-generated Secure Boot key infrastructure;
+- owner signing of every kernel/UKI;
+- recurring re-enrollment after routine updates.
 
-## Required live proof before promotion
+The proof must establish the actual certificate scope and that ordinary updates
+do not turn this one-time cost into recurring administration.
 
-The candidate is not accepted until a two-disk VirtualBox run proves:
+## Reinstall economics
 
-1. networking is disabled for the entire baseline installation;
-2. disk 0 represents the ASUS internal disk and contains partition/filesystem
-   sentinel state;
-3. disk 1 has the persistent identity named by the AutoYaST profile;
-4. the installer fails rather than selecting another disk when that identity is
-   absent;
-5. with the identity present, only disk 1 is changed;
-6. disk 0 GPT/partition/filesystem/sentinel evidence is unchanged after install;
-7. effective target storage is the Tumbleweed Btrfs/Snapper layout;
-8. effective encryption is LUKS2/systemd_fde with `tpm2+pin` enrollment plus
-   the owner passphrase path;
-9. effective `/etc/sysconfig/bootloader` contains the no-NVRAM setting;
-10. VM EFI variable state shows no provisioning-created persistent boot entry or
-    BootOrder mutation;
-11. the target ESP contains the removable fallback boot artifact;
-12. the installed system cold-boots successfully with Secure Boot enabled.
+A broken system or broken TPM relationship does not need heroic in-place repair.
 
-Only after those observations should the candidate replace the open
-provisioning gate in `ARCHITECTURE.md`.
+The supported recovery objective is:
+
+```text
+trusted offline media
+→ strong owner recovery passphrase
+→ preserve home LV
+→ replace root/system
+→ recreate stock boot artifacts
+→ establish fresh host-specific TPM/MOK state
+```
+
+This is cheaper and easier to audit than maintaining repair tooling for every
+possible damaged installation state.
+
+The exact AutoYaST preservation semantics must be verified against the selected
+packages. Reinstall must fail safely rather than guess which LV is persistent.
+
+## Remaining accepted custom ownership
+
+At the product-selection checkpoint, project-owned provisioning code is limited
+to two possible installer-only adapters, each conditional on the exact ISO:
+
+1. import the existing no-NVRAM property if AutoYaST still omits it;
+2. deliver a separately entered TPM PIN through the dedicated
+   `sdbootutil-tpm2-pin` keyring channel.
+
+Everything else should be declarative product configuration.
+
+## Go/no-go proof
+
+The provisioning path is accepted only when a two-disk VM proof demonstrates:
+
+1. install succeeds fully offline;
+2. missing exact target causes failure;
+3. internal guard disk remains unchanged;
+4. NVRAM remains unchanged;
+5. removable fallback boot artifacts exist;
+6. final LUKS2→LVM root/home/swap topology exists;
+7. recovery passphrase and TPM PIN are distinct and each works only in its
+   intended path;
+8. TPM PIN is not persisted in media/target clear text;
+9. Secure Boot + selected authenticated UKI path boots successfully;
+10. reinstall replaces root and preserves home;
+11. normal update lifecycle needs no owner signing or recurring MOK work.
+
+If satisfying these gates expands project ownership into boot verification,
+private PKI, custom FDE/TPM policy or a bespoke updater, stop and reopen product
+selection.
