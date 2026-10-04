@@ -698,3 +698,132 @@ def run(cfg=None):
         return result
     finally:
         bench.close()
+
+def verify_installed_boot(cfg=None):
+    bench = BenchRun(cfg)
+    try:
+        bench.set_stage("installed-boot-prepare")
+        credentials = load_credentials(bench.cfg)
+        required = {"recovery", "pin", "root"}
+        if set(credentials) != required:
+            raise RuntimeError(
+                "installed boot verification requires all three VM test credentials"
+            )
+        if not credentials["pin"]:
+            raise RuntimeError("VM test TPM PIN is empty")
+        if credentials["pin"] == credentials["recovery"]:
+            raise RuntimeError(
+                "VM test TPM PIN must differ from the recovery secret"
+            )
+        bench.boot_pin = credentials["pin"]
+
+        target = bench.cfg.bench / "target.vdi"
+        if not target.exists() or alloc_bytes(target) < 1024**3:
+            raise RuntimeError("installed target VDI is missing or not substantial")
+        if not bench.cfg.guard.exists():
+            raise RuntimeError("guard disk is missing")
+
+        control = VBox(bench.cfg)
+        try:
+            if control.state() != "PoweredOff":
+                raise RuntimeError(
+                    f"installed boot verification requires PoweredOff VM, got {control.state()}"
+                )
+            serial_path = bench.dir / "serial.log"
+            serial_path.parent.mkdir(parents=True, exist_ok=True)
+            if serial_path.exists():
+                serial_path.unlink()
+            control.set_serial_raw_file(unc(serial_path))
+            validate_runtime_serial(
+                control.serial_config(),
+                unc(serial_path),
+                "installed-boot",
+            )
+            bench.nvram_before = control.nvram_boot_variables()
+        finally:
+            control.logoff()
+
+        bench.pre = {
+            "target_sha256": sha256(target),
+            "target_allocated": alloc_bytes(target),
+            "guard_sha256": sha256(bench.cfg.guard),
+        }
+        (bench.dir / "preflight.json").write_text(
+            json.dumps(bench.pre, indent=2, sort_keys=True) + "\n"
+        )
+        (bench.dir / "nvram.before.json").write_text(
+            json.dumps(bench.nvram_before, indent=2, sort_keys=True) + "\n"
+        )
+
+        bench.set_stage("installed-boot-launch")
+        bench.box = VBox(bench.cfg)
+        bench.term = RawSerialMonitor(bench.dir / "serial.log", bench.dir, bench.event)
+        bench.launch_session = bench.box.launch()
+        bench.post_install_boot_mark = 0
+        bench.event(
+            "installed-boot-vm-running",
+            vm=bench.box.actual_vm_name,
+            serial=str(bench.dir / "serial.log"),
+        )
+
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            text = clean_text(bench.term._bytes())
+            if "openSUSE Tumbleweed 20260930" in text:
+                bench.event("installed-systemd-boot-observed")
+                break
+            if "VMBENCH_PROFILE_READY" in text or "Loading Installation System" in text:
+                raise RuntimeError("boot-only probe selected the installer instead of target")
+            time.sleep(0.25)
+        else:
+            raise TimeoutError("installed systemd-boot menu was not observed")
+
+        bench.verify_tpm_pin_unlock()
+
+        bench.set_stage("installed-boot-postcheck")
+        after_nvram = bench.snapshot_nvram("nvram.after.json")
+        guard_sha = sha256(bench.cfg.guard)
+        post = {
+            "vm_state": bench.vm_state(),
+            "guard_sha256": guard_sha,
+            "guard_unchanged": guard_sha == bench.pre["guard_sha256"],
+            "target_allocated": alloc_bytes(target),
+            "persistent_nvram_unchanged": (
+                persistent_boot_state(after_nvram)
+                == persistent_boot_state(bench.nvram_before or {})
+            ),
+        }
+        (bench.dir / "postcheck.json").write_text(
+            json.dumps(post, indent=2, sort_keys=True) + "\n"
+        )
+        if not post["guard_unchanged"]:
+            raise RuntimeError("guard disk changed during installed boot probe")
+        if not post["persistent_nvram_unchanged"]:
+            raise RuntimeError("persistent UEFI boot state changed during installed boot probe")
+
+        bench.stage = "complete"
+        bench.event("INSTALLED_BOOT_PASS")
+        return bench.result("PASS", post=post)
+    except Exception as exc:
+        failure_stage = bench.stage
+        failure = bench.failure_summary(exc, failure_stage)
+        bench.event(
+            "INSTALLED_BOOT_FAIL",
+            failure_stage=failure_stage,
+            exception_type=failure["exception_type"],
+            reason=failure["reason"],
+            why=failure["why"],
+        )
+        bench.capture_failure_logs()
+        if bench.term:
+            (bench.dir / "serial-tail.txt").write_text(bench.term.tail(120000))
+        (bench.dir / "traceback.txt").write_text(traceback.format_exc())
+        result = bench.result(
+            "FAIL",
+            error=repr(exc),
+            failure=failure,
+            stage=failure_stage,
+        )
+        return result
+    finally:
+        bench.close()

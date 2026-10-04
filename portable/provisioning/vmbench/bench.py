@@ -3,7 +3,7 @@ import argparse
 import json
 import sys
 
-from runner import run
+from runner import run, verify_installed_boot
 from media import build_release_oemdrv
 from workflow import static_check, status
 
@@ -15,6 +15,7 @@ def main():
     release = sub.add_parser("build-release")
     release.add_argument("--target-device", required=True)
     sub.add_parser("run")
+    sub.add_parser("verify-installed-boot")
     sub.add_parser("status")
     args = parser.parse_args()
 
@@ -28,6 +29,11 @@ def main():
         ))
     elif args.command == "run":
         result = run()
+        print(json.dumps(result, indent=2))
+        if result.get("status") != "PASS":
+            sys.exit(1)
+    elif args.command == "verify-installed-boot":
+        result = verify_installed_boot()
         print(json.dumps(result, indent=2))
         if result.get("status") != "PASS":
             sys.exit(1)

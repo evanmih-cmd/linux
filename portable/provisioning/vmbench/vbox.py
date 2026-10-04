@@ -105,6 +105,31 @@ class VBox:
             "irq": get("ISerialPort_getIRQ"),
         }
 
+    def set_serial_raw_file(self, path):
+        if self.state() != "PoweredOff":
+            raise RuntimeError(
+                f"serial path can only be changed while PoweredOff, got {self.state()}"
+            )
+        session = self.lock("Write")
+        try:
+            machine = self.session_machine(session)
+            serial = self._vals(
+                "IMachine_getSerialPort",
+                [("_this", machine), ("slot", "0")],
+            )[0]
+            for operation, key, value in (
+                ("ISerialPort_setEnabled", "enabled", "true"),
+                ("ISerialPort_setPath", "path", path),
+                ("ISerialPort_setHostMode", "hostMode", "RawFile"),
+            ):
+                self._vals(
+                    operation,
+                    [("_this", serial), (key, value)],
+                )
+            self.save_settings(machine)
+        finally:
+            self.unlock(session)
+
     def attachments(self):
         out = []
         root = self._raw(
