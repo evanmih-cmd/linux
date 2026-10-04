@@ -207,7 +207,7 @@ POST_PATCH_HASHES = {
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
         "8dbebc3a2b83fcc67780e16e0c40d3e5eff4b80d793403123208cf6b2226baa8",
     "usr/share/YaST2/lib/y2storage/encryption.rb":
-        "14ef42f2c4d6842d3caf29f80567bb389d15701b7d38d300af3955b391e10b2c",
+        "7150ecfe3fc8e0e4766c6a7ced9d7108588d7a20e11d0c37db4ec62e2b7576ab",
     "usr/share/YaST2/modules/Lan.rb":
         "58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0",
 }
@@ -419,7 +419,7 @@ def verify_patchset_against_snapshot(cfg=None):
             """def authentication=(value)
       save_userdata(:encryption_authentication, value)
       adjust_crypt_options""",
-            'authentication&.is?(:tpm2, :tpm2+pin)',
+            'authentication&.is?(:tpm2, :"tpm2+pin")',
             'self.crypt_options |= ["tpm2-device=auto"]',
             'self.crypt_options -= ["tpm2-device=auto"]',
         )
@@ -432,6 +432,11 @@ def verify_patchset_against_snapshot(cfg=None):
             raise RuntimeError(
                 "systemd-FDE TPM crypttab lifecycle invariant missing: "
                 + repr(missing_tpm_activation)
+            )
+
+        if ":tpm2+pin" in encryption_source:
+            raise RuntimeError(
+                "invalid Ruby TPM2+PIN symbol form present; use :\"tpm2+pin\""
             )
 
         actual = {

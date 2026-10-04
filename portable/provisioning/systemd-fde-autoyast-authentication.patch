@@ -53,7 +53,7 @@
          self.crypt_options |= [crypttab_opt] if mount_points.any? { |m| m.path == mountpoint }
        end
 +
-+      tpm2 = method&.is?(:systemd_fde) && authentication&.is?(:tpm2, :tpm2+pin)
++      tpm2 = method&.is?(:systemd_fde) && authentication&.is?(:tpm2, :"tpm2+pin")
 +      if tpm2
 +        self.crypt_options |= ["tpm2-device=auto"]
 +      else
