@@ -57,10 +57,11 @@ def validate_runtime_serial(serial_config, expected_path, phase):
     expected = {
         "enabled": "true",
         "host_mode": "RawFile",
-        "path": str(expected_path),
         "io_address": "1016",
         "irq": "4",
     }
+    if expected_path is not None:
+        expected["path"] = str(expected_path)
     mismatches = {
         key: {"expected": value, "actual": serial_config.get(key)}
         for key, value in expected.items()

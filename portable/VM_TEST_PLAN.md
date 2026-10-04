@@ -19,9 +19,9 @@ only how the VM is observed and controlled.
    TPM/NVRAM/disk evidence is collected from the real single-VM state.
 3. **NICs stay disabled during provisioning proof.**
    Serial transport is a VirtualBox host-control channel, not guest networking.
-4. **Serial is the primary installer progress channel.**
-   Screenshots are corroborating evidence only; a black or unchanged screenshot
-   is never interpreted as progress.
+4. **Serial is the mandatory installer progress and diagnostic channel.**
+   COM1 writes directly into the current run directory from VM launch onward.
+   Correctness and diagnosis never depend on screenshots.
 5. **Every run starts powered off and unlocked.**
    Attachments, firmware, TPM, Secure Boot, NIC state, NVRAM and disk hashes are
    read back before launch.
@@ -197,10 +197,12 @@ PASS requires all of:
 
 - guard VDI unchanged;
 - target VDI changed;
-- GPT has ESP + encrypted root + encrypted swap as product-generated;
-- root is LUKS2 with owner-passphrase keyslot;
-- TPM2 token has PIN and PCR-lock metadata;
-- installed root declares Btrfs;
+- GPT has an ESP plus one outer encrypted payload partition;
+- the outer payload is LUKS2 with the owner recovery-passphrase keyslot;
+- the same outer LUKS2 device has the TPM2 token with PIN/PCR-lock metadata;
+- the unlocked payload contains LVM VG `system`;
+- VG `system` contains root, home and swap LVs;
+- root is Btrfs and home is the persistent-state LV;
 - Snapper/BLS snapshot entries exist;
 - `/EFI/BOOT/BOOTX64.EFI` exists;
 - **`/EFI/BOOT/grub.efi` exists**;
@@ -222,9 +224,8 @@ PASS requires:
 
 - firmware reaches the removable fallback path without an installer medium;
 - shim/second-stage/BLS boot succeeds;
-- exactly one interactive TPM2 PIN entry is sufficient for the whole normal
-  boot path; root unlock establishes the credential cache and encrypted swap
-  must not prompt separately;
+- exactly one interactive TPM2 PIN entry unlocks the outer LUKS2 container;
+- root, home and swap LVs require no additional cryptographic credential;
 - installed root reaches userspace;
 - no persistent named openSUSE NVRAM entry is required;
 - guard remains unchanged.
@@ -250,20 +251,21 @@ environment over serial. Do not infer Btrfs state only from filenames.
 
 Verify directly:
 
+- the target has exactly one non-ESP LUKS2 payload container;
+- `pvs`, `vgs` and `lvs` show VG `system` inside that unlocked container;
+- root, home and swap LVs exist with the expected roles;
 - `findmnt /` reports Btrfs;
-- `btrfs subvolume list` shows the supported Tumbleweed layout;
 - Snapper root configuration and snapshots exist;
-- persistent user/application state is outside normal root rollback;
-- there is no LVM layer.
+- `/home` is on its persistent LV and is outside normal root rollback;
+- swap is the VG swap LV and is not a second LUKS device.
 
 ## Gate 5 — boot trust and portability
 
 Verify separately:
 
 - Secure Boot on;
-- normal TPM2+PIN unlock with exactly one PIN entry across root and swap;
-- owner-passphrase recovery unlock with exactly one passphrase entry across
-  root and swap;
+- normal TPM2+PIN unlock of the single outer LUKS2 container with one PIN;
+- owner-passphrase recovery unlock of the same container with one passphrase;
 - measured-state change prevents the normal TPM unlock path;
 - fallback removable boot works;
 - BootOrder/BootNext are not owned or persistently mutated by provisioning.
@@ -284,7 +286,7 @@ Only after Gates 0–5 pass:
 For each new live result:
 
 1. save transcript/log/hash/read-back evidence;
-2. update `VM_PROOF.md` / provisioning proof documents;
+2. update `VM_PROOF.md` with the accepted live result;
 3. read back against Product First and Economy First;
 4. commit;
 5. synchronize to GitHub;

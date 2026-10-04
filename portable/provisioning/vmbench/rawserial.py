@@ -49,8 +49,9 @@ class RawSerialMonitor:
 
     def snapshot(self, name="serial.log"):
         dst = self.run_dir / name
-        data = self._bytes()
-        dst.write_bytes(data)
+        if dst.resolve() == self.path.resolve():
+            return dst
+        dst.write_bytes(self._bytes())
         return dst
 
     def close(self):

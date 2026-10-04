@@ -4,7 +4,6 @@ import time
 import traceback
 from pathlib import Path
 
-from capture import screenshot
 from config import Config
 from keyboard import Keyboard
 from invariants import validate_runtime_serial, validate_source_tree
@@ -50,18 +49,6 @@ class BenchRun:
     def set_stage(self, stage):
         self.stage = stage
         self.event("stage", stage_name=stage)
-        self.shot(f"stage-{stage}")
-
-    def shot(self, name):
-        try:
-            helper = VBox(self.cfg)
-            try:
-                if helper.state() == "Running":
-                    screenshot(helper, self.dir / f"{name}.png")
-            finally:
-                helper.logoff()
-        except Exception as exc:
-            self.event("screenshot-error", error=repr(exc))
 
     def snapshot_nvram(self, name):
         helper = VBox(self.cfg)
@@ -102,13 +89,14 @@ class BenchRun:
         self.event("invariant-check", check="serial-source-policy")
         validate_source_tree(harness_root)
 
-        expected_serial = unc(self.cfg.bench / "serial.log")
+        expected_serial_path = self.dir / "serial.log"
+        expected_serial = unc(expected_serial_path)
         control = VBox(self.cfg)
         try:
             self.event("invariant-check", check="rawfile-com1-pre-run")
             validate_runtime_serial(
                 control.serial_config(),
-                expected_serial,
+                None,
                 "pre-run",
             )
             state = control.state()
@@ -126,7 +114,11 @@ class BenchRun:
             raise RuntimeError(f"low free space: {free}")
 
         built = build_oemdrv(self.cfg)
-        reset = reset_vm(built["iso"], self.cfg)
+        reset = reset_vm(
+            built["iso"],
+            self.cfg,
+            serial_path=expected_serial_path,
+        )
 
         post_reset = VBox(self.cfg)
         try:
@@ -183,7 +175,7 @@ class BenchRun:
             if needle not in sata.get(port, ""):
                 raise RuntimeError(f"SATA{port} mismatch: {sata.get(port)}")
 
-        serial_path = self.cfg.bench / "serial.log"
+        serial_path = self.dir / "serial.log"
         self.term = RawSerialMonitor(serial_path, self.dir, self.event)
         self.launch_session = self.box.launch()
         self.event(
@@ -227,17 +219,6 @@ class BenchRun:
             keyboard.tab()
             keyboard.text(value)
             keyboard.f10()
-            try:
-                screenshot(
-                    helper,
-                    self.dir / (
-                        "credential-"
-                        + label
-                        + "-submitted.png"
-                    ),
-                )
-            except Exception as exc:
-                self.event("credential-screenshot-error", error=repr(exc))
         finally:
             helper.logoff()
         return self.term.wait_any(
@@ -318,7 +299,6 @@ class BenchRun:
         target = self.cfg.bench / "target.vdi"
         last_alloc = alloc_bytes(target)
         last_progress = time.time()
-        last_shot = 0.0
         deadline = time.time() + 1800
         while time.time() < deadline:
             state = self.box.state()
@@ -336,9 +316,6 @@ class BenchRun:
                 last_alloc = current
                 last_progress = now
                 self.event("target-progress", allocated=current)
-            if now - last_shot > 30:
-                self.shot("latest")
-                last_shot = now
             tail = self.term.tail(60000)
             if "Installation has been aborted" in tail:
                 raise RuntimeError("installer aborted")
@@ -360,28 +337,11 @@ class BenchRun:
         raise TimeoutError("install timeout")
 
     def capture_failure_logs(self):
-        if not self.box or self.box.state() != "Running":
-            return
-        try:
-            helper = VBox(self.cfg)
+        if self.term:
             try:
-                kb = Keyboard(helper)
-                kb.alt_fn(2)
-                commands = (
-                    "cat /var/log/YaST2/y2log >/dev/ttyS0",
-                    "journalctl -b --no-pager >/dev/ttyS0",
-                )
-                for command in commands:
-                    kb.text(command)
-                    kb.enter()
-                    time.sleep(2)
-                kb.alt_fn(7)
-            finally:
-                helper.logoff()
-            time.sleep(8)
-            self.term.snapshot("serial-failure.log")
-        except Exception as exc:
-            self.event("failure-log-capture-error", error=repr(exc))
+                self.term.snapshot("serial-failure.log")
+            except Exception as exc:
+                self.event("failure-log-capture-error", error=repr(exc))
 
     def postcheck(self):
         self.set_stage("postcheck")
@@ -449,7 +409,6 @@ class BenchRun:
                 "events": str(self.dir / "events.jsonl"),
                 "traceback": str(self.dir / "traceback.txt"),
                 "serial_tail": str(self.dir / "serial-tail.txt"),
-                "failure_screen": str(self.dir / "failure.png"),
                 "serial_failure": str(self.dir / "serial-failure.log"),
                 "preflight": str(self.dir / "preflight.json"),
                 "postcheck": str(self.dir / "postcheck.json"),
@@ -501,7 +460,6 @@ def run(cfg=None):
             reason=failure["reason"],
             why=failure["why"],
         )
-        bench.shot("failure")
         bench.capture_failure_logs()
         if bench.term:
             (bench.dir / "serial-tail.txt").write_text(bench.term.tail(120000))

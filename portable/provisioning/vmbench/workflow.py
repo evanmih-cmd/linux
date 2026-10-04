@@ -1,16 +1,18 @@
-import json
-import os
-import time
-from pathlib import Path
-
-from boot import boot_installer
-from capture import screenshot, serial_text
 from config import Config
-from keyboard import Keyboard
-from logstream import enable_y2log
 from machine import reset_vm
 from media import build_oemdrv, sha256
+from rawserial import clean_text
 from vbox import VBox
+
+
+def latest_serial_path(cfg):
+    runs = [p for p in cfg.runs.iterdir() if p.is_dir()] if cfg.runs.exists() else []
+    runs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    for run in runs:
+        path = run / "serial.log"
+        if path.exists():
+            return path
+    return None
 
 
 def prepare(cfg=None):
@@ -32,69 +34,15 @@ def prepare(cfg=None):
     }
 
 
-def start(cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    session = None
-    try:
-        session = boot_installer(box)
-        print("BOOTED_INSTALLER", flush=True)
-        while box.state() == "Running":
-            time.sleep(2)
-        print("VM_STATE", box.state(), flush=True)
-    finally:
-        if session:
-            try:
-                box.unlock(session)
-            except Exception:
-                pass
-        box.logoff()
-
-
-def fill(name, cfg=None):
-    cfg = cfg or Config()
-    if name not in ("recovery", "pin", "root"):
-        raise ValueError(name)
-    box = VBox(cfg)
-    try:
-        Keyboard(box).fill(name, cfg, trace=True)
-        time.sleep(1)
-        path = cfg.bench / f"after-{name}.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
-
-
-def logs(cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        enable_y2log(box)
-        time.sleep(1)
-        path = cfg.bench / "after-y2log.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
-
-
-def shot(name="latest", cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        path = cfg.bench / f"{name}.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
-
-
 def status(cfg=None):
     cfg = cfg or Config()
     box = VBox(cfg)
     try:
         target = cfg.bench / "target.vdi"
+        serial = latest_serial_path(cfg)
+        serial_tail = ""
+        if serial and serial.exists():
+            serial_tail = clean_text(serial.read_bytes())[-40000:]
         result = {
             "vm_state": box.state(),
             "session_state": box.session_state(),
@@ -106,9 +54,8 @@ def status(cfg=None):
             "baseline_sha256": None,
             "vbox_log_folder": box.log_folder(),
             "serial_config": box.serial_config(),
-            "serial_tail": "\n".join(
-                serial_text(cfg).splitlines()[-40:]
-            ),
+            "serial_path": str(serial) if serial else None,
+            "serial_tail": "\n".join(serial_tail.splitlines()[-80:]),
         }
         baseline = cfg.bench / "target.clean.sha256"
         if baseline.exists():

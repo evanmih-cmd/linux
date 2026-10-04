@@ -96,6 +96,13 @@ class Keyboard:
             self._scancode(keyboard, 0x9d)
         self._with_keyboard(action)
 
+    def ctrl_c(self):
+        def action(keyboard):
+            self._scancode(keyboard, 0x1d)
+            self._press(keyboard, 0x2e)
+            self._scancode(keyboard, 0x9d)
+        self._with_keyboard(action)
+
     def alt_fn(self, number):
         codes = {
             1: 0x3b, 2: 0x3c, 3: 0x3d, 4: 0x3e,
@@ -111,30 +118,11 @@ class Keyboard:
         self._with_keyboard(action)
         time.sleep(0.4)
 
-    def fill(self, name, cfg=None, trace=False):
+    def fill(self, name, cfg=None):
         cfg = cfg or Config()
         value = json.loads(cfg.credentials.read_text())[name]
-        if trace:
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-0-before.png")
         self.tab()
-        if trace:
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-1-focus-first.png")
         self.text(value)
-        if trace:
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-2-first.png")
         self.tab()
-        if trace:
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-3-focus-confirm.png")
         self.text(value)
-        if trace:
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-4-confirm.png")
         self.f10()
-        if trace:
-            time.sleep(0.5)
-            from capture import screenshot
-            screenshot(self.box, cfg.bench / f"trace-{name}-4-submit.png")

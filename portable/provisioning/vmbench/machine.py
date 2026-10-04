@@ -14,8 +14,9 @@ def unc(path):
     return "\\\\wsl.localhost\\runner02\\home\\github-runner\\" + suffix
 
 
-def reset_vm(oem_path, cfg=None):
+def reset_vm(oem_path, cfg=None, serial_path=None):
     cfg = cfg or Config()
+    serial_path = Path(serial_path or (cfg.bench / "serial.log"))
     box = VBox(cfg)
     try:
         state = box.state()
@@ -75,7 +76,7 @@ def reset_vm(oem_path, cfg=None):
                 (
                     "ISerialPort_setPath",
                     "path",
-                    unc(cfg.bench / "serial.log"),
+                    unc(serial_path),
                 ),
                 ("ISerialPort_setHostMode", "hostMode", "RawFile"),
             ]
@@ -203,9 +204,9 @@ def reset_vm(oem_path, cfg=None):
         finally:
             box.unlock(session)
 
-        serial = cfg.bench / "serial.log"
-        if serial.exists():
-            serial.unlink()
+        serial_path.parent.mkdir(parents=True, exist_ok=True)
+        if serial_path.exists():
+            serial_path.unlink()
 
         baseline = sha256(target)
         (cfg.bench / "target.clean.sha256").write_text(
