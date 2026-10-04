@@ -61,6 +61,30 @@ class Config:
         return self.repo / "portable/provisioning/autoinst-vm-proof.xml"
 
     @property
+    def software_manifest(self):
+        return self.repo / "portable/provisioning/software-baseline.json"
+
+    @property
+    def software_media_dir(self):
+        return self.cache / "software-media"
+
+    @property
+    def extracted_official_iso(self):
+        return self.cache / "tumbleweed-dvd/extracted-20260930"
+
+    @property
+    def official_iso_sha256(self):
+        return "0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99"
+
+    @property
+    def xorriso(self):
+        return self.cache / "tools/rootless/xorriso/usr/bin/xorriso"
+
+    @property
+    def xorriso_lib(self):
+        return self.cache / "tools/rootless/xorriso/usr/lib/x86_64-linux-gnu"
+
+    @property
     def auth_patch(self):
         return self.repo / (
             "portable/provisioning/"
