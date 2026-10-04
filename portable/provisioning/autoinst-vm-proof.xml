@@ -35,6 +35,11 @@
   <language><language>en_US</language></language>
   <keyboard><keymap>english-us</keymap></keyboard>
   <timezone><hwclock>UTC</hwclock><timezone>Europe/Berlin</timezone></timezone>
+  <networking>
+    <dns>
+      <hostname>portable</hostname>
+    </dns>
+  </networking>
   <partitioning config:type="list">
     <drive>
       <device>__TARGET_DEVICE__</device>
