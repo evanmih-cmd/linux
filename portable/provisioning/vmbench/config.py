@@ -54,7 +54,7 @@ class Config:
         return self.repo / "portable/provisioning/autoinst-vm-proof.xml"
 
     @property
-    def planner_patch(self):
+    def auth_patch(self):
         return self.repo / (
             "portable/provisioning/"
             "systemd-fde-autoyast-authentication.patch"

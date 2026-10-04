@@ -100,13 +100,6 @@ def render_runtime_profile(cfg, destination, credentials):
   while [ ! -r /var/log/YaST2/y2log ]; do sleep 1; done
   exec tail -n +1 -F /var/log/YaST2/y2log > /dev/ttyS0 2>&1
 ) &
-if [ -r /download/vmbench-tpm2-pin ]; then
-  if id="$(/usr/bin/keyctl search @u user sdbootutil-tpm2-pin 2>/dev/null)"; then
-    /usr/bin/keyctl pupdate "$id" < /download/vmbench-tpm2-pin >/dev/null
-  else
-    /usr/bin/keyctl padd user sdbootutil-tpm2-pin @u       < /download/vmbench-tpm2-pin >/dev/null
-  fi
-fi
 ( sleep 2; printf 'VMBENCH_PROFILE_READY\n' > /dev/ttyS0 ) &
 """
 
@@ -125,7 +118,7 @@ def build_oemdrv(cfg=None):
     credentials = load_credentials(cfg)
 
     profile_sha = sha256(cfg.profile)
-    patch_sha = sha256(cfg.planner_patch)
+    patch_sha = sha256(cfg.auth_patch)
     cred_stat = cfg.credentials.stat() if cfg.credentials.exists() else None
     opaque_input = (
         f"{profile_sha}\n{patch_sha}\n"
@@ -158,18 +151,18 @@ def build_oemdrv(cfg=None):
         build_root / "autoinst.xml",
         credentials,
     )
-    if "pin" in credentials:
-        pin_file = build_root / "vmbench-tpm2-pin"
-        pin_file.write_text(credentials["pin"])
-        pin_file.chmod(0o600)
-
     inst = build_root / "linux/suse/x86_64-tw/inst-sys"
+    pin_file = inst / "etc/desktop-linux-tpm2-pin"
+    pin_file.parent.mkdir(parents=True, exist_ok=True)
+    pin_file.write_text(credentials.get("pin", ""))
+    pin_file.chmod(0o600)
+
     planner_dir = inst / "usr/share/YaST2/lib/y2storage/proposal"
     planner_dir.mkdir(parents=True, exist_ok=True)
     planner = planner_dir / "autoinst_drive_planner.rb"
     shutil.copy2(exact, planner)
 
-    with open(cfg.planner_patch, "rb") as patch:
+    with open(cfg.auth_patch, "rb") as patch:
         subprocess.run(
             ["patch", "--batch", "-p1"],
             cwd=inst,
@@ -177,8 +170,7 @@ def build_oemdrv(cfg=None):
             check=True,
             stdout=subprocess.DEVNULL,
         )
-    orig = planner.with_suffix(planner.suffix + ".orig")
-    if orig.exists():
+    for orig in inst.rglob("*.orig"):
         orig.unlink()
 
     for marker in inst.glob(".update.*"):

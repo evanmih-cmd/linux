@@ -4,9 +4,7 @@ import xml.etree.ElementTree as ET
 
 from config import Config
 from invariants import validate_profile_storage, validate_source_tree
-from machine import reset_vm
 from media import (
-    build_oemdrv,
     load_credentials,
     render_runtime_profile,
     sha256,
@@ -67,10 +65,7 @@ def _runtime_credential_state(profile_path):
         "root_placeholder": (
             root_password is None or (root_password.text or "") == "__ASK__"
         ),
-        "pin_file_reference": (
-            pre_source is not None
-            and "/download/vmbench-tpm2-pin" in (pre_source.text or "")
-        ),
+        "pin_file_reference": "/etc/desktop-linux-tpm2-pin" in Path(profile_path).read_text(),
         "profile_ready_marker": (
             pre_source is not None
             and "VMBENCH_PROFILE_READY" in (pre_source.text or "")
@@ -102,8 +97,12 @@ def _check_runtime_profile(cfg, credentials):
         raise RuntimeError("runtime root credential embedding mismatch")
     if not state["profile_ready_marker"]:
         raise RuntimeError("runtime profile-ready marker missing")
-    if not state["pin_file_reference"]:
-        raise RuntimeError("runtime TPM PIN OEMDRV path missing")
+    expected_pin_reference = "pin" not in credentials
+    if state["pin_file_reference"] != expected_pin_reference:
+        raise RuntimeError(
+            "runtime TPM PIN handoff mismatch: interactive ask must write the "
+            "installation-system path, embedded DUD mode must not need a pre-script bridge"
+        )
 
     return mode
 
@@ -152,25 +151,6 @@ def static_check(cfg=None):
     }
 
 
-def prepare(cfg=None):
-    cfg = cfg or Config()
-    built = build_oemdrv(cfg)
-    reset = reset_vm(built["iso"], cfg)
-    return {
-        "build": {
-            "id": built["id"],
-            "iso": str(built["iso"]),
-            "profile_sha": built["profile_sha"],
-            "patch_sha": built["patch_sha"],
-        },
-        "reset": {
-            "target": str(reset["target"]),
-            "baseline_sha256": reset["baseline_sha256"],
-            "oem": str(reset["oem"]),
-        },
-    }
-
-
 def status(cfg=None):
     cfg = cfg or Config()
     box = VBox(cfg)
@@ -198,15 +178,5 @@ def status(cfg=None):
         if baseline.exists():
             result["baseline_sha256"] = baseline.read_text().split()[0]
         return result
-    finally:
-        box.logoff()
-
-
-def stop(cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        box.poweroff()
-        return box.state()
     finally:
         box.logoff()

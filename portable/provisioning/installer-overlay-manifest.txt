@@ -11,17 +11,17 @@ Canonical source-controlled installer inputs:
 
 1. autoinst-vm-proof.xml
    SHA-256:
-   f7fbb88fb886d8f89d23465c84f2d28864e1108f3f36c114f9501f4e9b1fe78d
+   9109a759b15455caa4370350a6c89fc5f90ff341d6ec8bdd368439720b45492a
    Destination: /autoinst.xml
    Storage graph:
    GPT -> ESP + outer LUKS2 -> LVM VG system -> root/home/swap
 
 2. systemd-fde-autoyast-authentication.patch
    SHA-256:
-   e762927faf369aedd97ee44bee3f5bc791de634aa513745d876827d3a1370fff
+   3f19aed110c00333e8120cc57ffdff7525c950e9ea3944c5ce6bf6b905996a91
    Purpose:
-   preserve the selected systemd-FDE authentication mode when planning the
-   explicit encrypted target.
+   set TPM2+PIN authentication for the explicit systemd-FDE target and pass
+   distinct recovery and TPM2 PIN secrets to current sdbootutil key names.
 
 3. systemd-boot-update-nvram.patch
    SHA-256:

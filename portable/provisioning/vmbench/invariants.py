@@ -43,6 +43,19 @@ def validate_source_tree(root):
                     f"{line.strip()}"
                 )
 
+        if "IMachine_setBootOrder" in source:
+            violations.append(
+                f"{path.name}: BIOS-only IMachine_setBootOrder is forbidden on the UEFI bench"
+            )
+        for lineno, line in enumerate(source.splitlines(), 1):
+            if ".poweroff(" not in line:
+                continue
+            if path.name == "runner.py" and "control.poweroff()" in line:
+                continue
+            violations.append(
+                f"{path.name}:{lineno}: VM poweroff is allowed only before a new run launch"
+            )
+
         if path.name in ("runner.py", "keyboard.py"):
             secret_input = re.compile(
                 r"cfg\.credentials|submit_password|def\s+fill\s*\(",
@@ -118,6 +131,11 @@ def validate_profile_storage(profile_path):
         names = [value(lv, "lv_name") for lv in lvs]
         if names != ["root", "home", "swap"]:
             errors.append(f"VG system must contain root/home/swap; got {names}")
+
+    mode = root.find("y:general/y:mode", ns)
+    final_halt = None if mode is None else mode.find("y:final_halt", ns)
+    if final_halt is not None and (final_halt.text or "").strip().lower() == "true":
+        errors.append("AutoYaST final_halt must not be true")
 
     recovery_paths = [
         node.text for node in root.findall(".//y:ask/y:path", ns)

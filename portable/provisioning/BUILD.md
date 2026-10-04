@@ -57,9 +57,19 @@ runtime `autoinst.xml` from the canonical template:
 
 - present recovery and root credentials are inserted into the runtime profile
   and their AutoYaST questions are removed;
-- a present TPM PIN is written only into the generated OEMDRV and loaded by the
-  AutoYaST pre-script into the stock `sdbootutil-tpm2-pin` keyring entry;
-- any missing value keeps its normal AutoYaST question.
+- the generated DUD always carries
+  `linux/suse/x86_64-tw/inst-sys/etc/desktop-linux-tpm2-pin` with mode `0600`;
+  it contains the embedded PIN when present and is an empty placeholder when
+  the PIN must be asked interactively;
+- the documented DUD installation-system overlay exposes that file to YaST as
+  `/etc/desktop-linux-tpm2-pin`, with no pre-script bridge;
+- for the interactive case, the AutoYaST TPM question uses the native `<file>`
+  element to overwrite that existing `0600` file; no `$VAL` secret-handling
+  script is used;
+- immediately before enrollment, the bootloader code exports the file content
+  as the current `sdbootutil-tpm2-pin` key while keeping the recovery secret in
+  `sdbootutil-recovery-pin`;
+- any other missing value keeps its normal AutoYaST question.
 
 The runner and keyboard layers never read or type credential values. The source
 tree contains only the injection mechanism, never the values themselves.

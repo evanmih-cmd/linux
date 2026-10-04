@@ -4,7 +4,6 @@
   <general>
     <mode>
       <confirm config:type="boolean">false</confirm>
-      <final_halt config:type="boolean">true</final_halt>
       <second_stage config:type="boolean">false</second_stage>
     </mode>
     <ask-list config:type="list">
@@ -31,21 +30,13 @@
         <type>string</type>
         <password config:type="boolean">true</password>
         <stage>initial</stage>
+        <file>/etc/desktop-linux-tpm2-pin</file>
         <script>
-          <filename>store-tpm2-pin</filename>
+          <filename>vmbench-root-ready</filename>
           <interpreter>shell</interpreter>
-          <environment config:type="boolean">true</environment>
           <debug config:type="boolean">false</debug>
           <feedback config:type="boolean">false</feedback>
-          <rerun_on_error config:type="boolean">true</rerun_on_error>
           <source><![CDATA[
-set -eu
-if id="$(/usr/bin/keyctl search @u user sdbootutil-tpm2-pin 2>/dev/null)"; then
-  printf '%s' "$VAL" | /usr/bin/keyctl pupdate "$id" >/dev/null
-else
-  printf '%s' "$VAL" | /usr/bin/keyctl padd user sdbootutil-tpm2-pin @u >/dev/null
-fi
-unset VAL
 ( sleep 2; printf 'VMBENCH_ROOT_READY\n' > /dev/ttyS0 ) &
 ]]></source>
         </script>

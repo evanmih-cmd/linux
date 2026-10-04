@@ -175,22 +175,6 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
                     ],
                 )
 
-            box._vals(
-                "IMachine_setBootOrder",
-                [
-                    ("_this", machine),
-                    ("position", "1"),
-                    ("device", "DVD"),
-                ],
-            )
-            box._vals(
-                "IMachine_setBootOrder",
-                [
-                    ("_this", machine),
-                    ("position", "2"),
-                    ("device", "HardDisk"),
-                ],
-            )
             for slot in range(4):
                 adapter = box._vals(
                     "IMachine_getNetworkAdapter",

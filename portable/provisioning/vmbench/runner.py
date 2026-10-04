@@ -83,15 +83,6 @@ class BenchRun:
         finally:
             helper.logoff()
 
-    def poweroff_if_running(self):
-        helper = VBox(self.cfg)
-        try:
-            if helper.state() in ("Running", "Paused"):
-                helper.poweroff()
-                self.event("powered-off-after-evidence")
-        finally:
-            helper.logoff()
-
     def snapshot_nvram(self, name):
         helper = VBox(self.cfg)
         try:
@@ -332,8 +323,7 @@ class BenchRun:
             tail = self.term.tail(60000)
 
             if current > 1024**3 and "reboot: Restarting system" in tail:
-                self.event("installer-reboot-detected", allocated=current)
-                self.poweroff_if_running()
+                self.event("installer-reboot-observed", allocated=current)
                 return
 
             state = self.vm_state()
@@ -566,10 +556,6 @@ def run(cfg=None):
             ),
             flush=True,
         )
-        try:
-            bench.poweroff_if_running()
-        except Exception as power_exc:
-            bench.event("poweroff-error", error=repr(power_exc))
         return result
     finally:
         bench.close()
