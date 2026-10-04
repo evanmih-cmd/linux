@@ -12,7 +12,8 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check")
-    sub.add_parser("build-release")
+    release = sub.add_parser("build-release")
+    release.add_argument("--target-device", required=True)
     sub.add_parser("run")
     sub.add_parser("status")
     args = parser.parse_args()
@@ -20,7 +21,11 @@ def main():
     if args.command == "check":
         print(json.dumps(static_check(), indent=2))
     elif args.command == "build-release":
-        print(json.dumps(build_release_oemdrv(), indent=2, default=str))
+        print(json.dumps(
+            build_release_oemdrv(args.target_device),
+            indent=2,
+            default=str,
+        ))
     elif args.command == "run":
         result = run()
         print(json.dumps(result, indent=2))

@@ -405,7 +405,11 @@ The runtime rendering is intentionally different only for proof plumbing:
   `inst-sys` placeholder, and contain no `VMBENCH_*` or `/dev/ttyS0` logic.
 
 The canonical AutoYaST source profile itself is production-clean; VM-only
-observability is injected only while rendering the VM artifact.
+observability is injected only while rendering the VM artifact. Its destructive
+physical target is stored as `__TARGET_DEVICE__`, not as the VM disk identity.
+The VM renderer substitutes the deterministic proof-disk by-id; the physical
+release renderer requires an explicit persistent `/dev/disk/by-id/...` target
+and refuses both the VM proof identifier and non-persistent `/dev/sdX` paths.
 
 ### Agama status
 

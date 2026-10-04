@@ -95,6 +95,10 @@ def validate_profile_storage(profile_path):
         errors.append(f"expected physical target + one LVM drive, got {len(drives)} drives")
     else:
         physical, vg = drives
+        if value(physical, "device") != "__TARGET_DEVICE__":
+            errors.append(
+                "canonical physical target must be __TARGET_DEVICE__ placeholder"
+            )
         parts_node = physical.find("y:partitions", ns)
         parts = [] if parts_node is None else parts_node.findall("y:partition", ns)
         if len(parts) != 2:

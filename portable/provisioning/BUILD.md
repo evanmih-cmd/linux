@@ -105,10 +105,12 @@ VM and physical-release credential sources are deliberately separated:
 
 - normal VM builds may read the local proof-cache `credentials.json` and embed
   throwaway values to make iterations autonomous;
-- `bench.py build-release` never reads that VM credential file. It forces an
-  empty credential set, writes the artifact under the separate release cache,
-  keeps all three native AutoYaST credential questions, and leaves only the
-  empty `0600` TPM PIN placeholder in DUD `inst-sys`.
+- `bench.py build-release --target-device /dev/disk/by-id/...` never reads that
+  VM credential file. It requires an explicit persistent release target,
+  rejects the VM proof identifier and non-`by-id` paths, forces an empty
+  credential set, writes the artifact under the separate release cache, keeps
+  all three native AutoYaST credential questions, and leaves only the empty
+  `0600` TPM PIN placeholder in DUD `inst-sys`.
 
 Thus a VM test password cannot be inherited by the physical release artifact
 through the builder's default credential path.

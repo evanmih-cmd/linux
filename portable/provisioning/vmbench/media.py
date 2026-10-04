@@ -50,12 +50,17 @@ def _ask_path(ask):
     return None if node is None else node.text
 
 
-def render_runtime_profile(cfg, destination, credentials, *, vm_observability=True):
+def render_runtime_profile(cfg, destination, credentials, *, vm_observability=True, target_device=None):
     tree = ET.parse(cfg.profile)
     root = tree.getroot()
 
     partitioning = _child(root, "partitioning")
     physical = list(partitioning)[0]
+    target_device = target_device or cfg.vm_target_device
+    device = _child(physical, "device")
+    if device is None:
+        raise RuntimeError("canonical profile is missing physical target device")
+    device.text = target_device
     partitions = _child(physical, "partitions")
     outer = list(partitions)[1]
     crypt_key = _child(outer, "crypt_key")
@@ -570,9 +575,20 @@ def build_oemdrv(
     artifact_prefix="oemdrv",
     vm_observability=True,
     build_flavor="vmbench",
+    target_device=None,
 ):
     cfg = cfg or Config()
     ET.parse(cfg.profile)
+    if target_device is None:
+        if build_flavor == "release":
+            raise RuntimeError(
+                "release build requires an explicit persistent target device"
+            )
+        target_device = cfg.vm_target_device
+    if not isinstance(target_device, str) or not target_device.startswith("/dev/disk/by-id/"):
+        raise RuntimeError(
+            "target device must be a persistent /dev/disk/by-id/... path"
+        )
     credentials = (
         load_credentials(cfg)
         if credentials_override is None
@@ -623,6 +639,7 @@ def build_oemdrv(
         build_root / "autoinst.xml",
         credentials,
         vm_observability=vm_observability,
+        target_device=target_device,
     )
 
     inst = build_root / "linux/suse/x86_64-tw/inst-sys"
@@ -662,6 +679,7 @@ def build_oemdrv(
         "source-mode=verified-clean-instsys-files",
         f"build-flavor={build_flavor}",
         f"vm-observability={'yes' if vm_observability else 'no'}",
+        f"target-device={target_device}",
         f"profile-sha256={profile_sha}",
         f"patchset-sha256={patch_sha}",
     ]
@@ -707,6 +725,7 @@ def build_oemdrv(
         + f"ID={ident}\n"
         f"ISO={iso}\n"
         f"ISO_SHA256={iso_sha}\n"
+        f"TARGET_DEVICE={target_device}\n"
         f"EMBEDDED={','.join(credential_mode['embedded'])}\n"
         f"MISSING={','.join(credential_mode['missing'])}\n"
     )
@@ -726,8 +745,10 @@ def build_oemdrv(
     }
 
 
-def build_release_oemdrv(cfg=None):
+def build_release_oemdrv(target_device, cfg=None):
     cfg = cfg or Config()
+    if target_device == cfg.vm_target_device:
+        raise RuntimeError("release target must not use the VM proof device identifier")
     release_dir = cfg.cache / "release"
     result = build_oemdrv(
         cfg,
@@ -736,6 +757,7 @@ def build_release_oemdrv(cfg=None):
         artifact_prefix="desktop-linux-release-oemdrv",
         vm_observability=False,
         build_flavor="release",
+        target_device=target_device,
     )
 
     mode = result["credentials"]

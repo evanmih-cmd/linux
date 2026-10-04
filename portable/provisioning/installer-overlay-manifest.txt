@@ -11,7 +11,7 @@ Canonical source-controlled installer inputs:
 
 1. autoinst-vm-proof.xml
    SHA-256:
-   5a4b3abcc9c720050ae8bfb4b1bae810692fccc76ca45f2611b5aad8ba2fed15
+   df8cdf9efd7306734f76d888408d59f7e9f9d9f12c8fcf0e728f55de587def9c
    Destination: /autoinst.xml
    Storage graph:
    GPT -> ESP + outer LUKS2 -> LVM VG system -> root/home/swap
@@ -65,9 +65,11 @@ package is replaced.
 Release isolation:
 - VM artifacts may embed throwaway local proof credentials and VM COM1
   observability;
-- `bench.py build-release` forces an empty credential set, retains the three
-  native AutoYaST credential asks, contains no VM observability scripts, and
-  writes release metadata/artifacts under a separate cache directory.
+- `bench.py build-release --target-device /dev/disk/by-id/...` requires an
+  explicit persistent release target, rejects the VM proof target and non-by-id
+  device paths, forces an empty credential set, retains the three native
+  AutoYaST credential asks, contains no VM observability scripts, and writes
+  release metadata/artifacts under a separate cache directory.
 
 Artifact verification:
 - SOURCE-IDENTITY.txt records the official ISO identity, pinned RPM paths,

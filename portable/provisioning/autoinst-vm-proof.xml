@@ -37,7 +37,7 @@
   <timezone><hwclock>UTC</hwclock><timezone>Europe/Berlin</timezone></timezone>
   <partitioning config:type="list">
     <drive>
-      <device>/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001</device>
+      <device>__TARGET_DEVICE__</device>
       <initialize config:type="boolean">true</initialize>
       <disklabel>gpt</disklabel>
       <partitions config:type="list">

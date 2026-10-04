@@ -38,6 +38,10 @@ class Config:
         ))
 
     @property
+    def vm_target_device(self):
+        return "/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001"
+
+    @property
     def guard(self):
         return self.cache / "vbox-proof/asus-internal-guard.vdi"
 
