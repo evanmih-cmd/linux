@@ -18,10 +18,11 @@ Canonical source-controlled installer inputs:
 
 2. systemd-fde-autoyast-authentication.patch
    SHA-256:
-   3f19aed110c00333e8120cc57ffdff7525c950e9ea3944c5ce6bf6b905996a91
+   ed0096bd237fa253f6124c8a452a7fec0d28176d61bcafd59041c9e0a582dd3d
    Purpose:
-   set TPM2+PIN authentication for the explicit systemd-FDE target and pass
-   distinct recovery and TPM2 PIN secrets to current sdbootutil key names.
+   set TPM2+PIN authentication for the explicit systemd-FDE target, add
+   tpm2-device=auto to its crypttab options, and pass distinct recovery and
+   TPM2 PIN secrets to current sdbootutil key names.
 
 3. systemd-boot-update-nvram.patch
    SHA-256:
@@ -50,6 +51,7 @@ Builder source model:
   - bls.rb: 8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743
   - systemdboot.rb: 331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58
   - autoinst_drive_planner.rb: fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5
+  - encryption.rb: 32bf1c4f77a1937f20fb72a9895ec90e84839f001657ffeafd86850114bbe036
   - Lan.rb: 21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
 - all four source-controlled patches are applied during every build;
 - no prepatched OEMDRV/cache tree is consumed;

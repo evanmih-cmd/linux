@@ -55,7 +55,7 @@ as historical/live-proof evidence. The clean source cache is
 `tools/snapshot20260930-instsys-source`; the builder verifies every consumed file
 by SHA-256 before applying any patch. If that cache is absent or inconsistent,
 the builder verifies the official Snapshot20260930 ISO SHA-256, extracts the
-three pinned YaST RPMs directly from that ISO, reconstructs the five stock YaST
+three pinned YaST RPMs directly from that ISO, reconstructs the six stock YaST
 files, verifies their pinned SHA-256 identities, and only then applies patches.
 The full ISO hash is therefore paid only on cold/recovery rebuilds, not every
 normal iteration.
@@ -67,7 +67,7 @@ Each built OEMDRV contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
 After ISO creation the builder extracts the ISO again and verifies the complete
 regular-file hash set and symlink inventory before publishing it as the current
 artifact. A strict payload allowlist additionally requires exactly the expected
-profile/metadata files, one DUD update marker, the TPM PIN handoff and the five
+profile/metadata files, one DUD update marker, the TPM PIN handoff and the six
 installer-only YaST files; the generated DUD contains no symlinks. Any
 unexpected payload path fails the build. The external ISO SHA-256 is then recorded in
 `current-build.txt`.
@@ -121,7 +121,7 @@ present/missing credential combinations on temporary runtime profiles, the
 separate release runtime rendering, and the complete installer patchset against
 the pinned clean Snapshot sources. The canonical profile and every rendered
 profile are validated against the exact Snapshot20260930 AutoYaST Relax NG
-schema. All four patches must apply without rejects and the five modified YaST
+schema. All four patches must apply without rejects and the six modified YaST
 files must match pinned post-patch SHA-256 identities exactly.
 
 ## Observability rule

@@ -148,6 +148,7 @@ SNAPSHOT_RPM_INPUTS = {
     ),
     "/x86_64/yast2-storage-ng-5.0.50-1.1.x86_64.rpm": (
         "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb",
+        "usr/share/YaST2/lib/y2storage/encryption.rb",
     ),
     "/noarch/yast2-network-5.0.7-1.2.noarch.rpm": (
         "usr/share/YaST2/modules/Lan.rb",
@@ -163,6 +164,8 @@ SNAPSHOT_SOURCE_HASHES = {
         "331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58",
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
         "fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5",
+    "usr/share/YaST2/lib/y2storage/encryption.rb":
+        "32bf1c4f77a1937f20fb72a9895ec90e84839f001657ffeafd86850114bbe036",
     "usr/share/YaST2/modules/Lan.rb":
         "21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429",
 }
@@ -187,6 +190,7 @@ OEMDRV_STATIC_FILES = {
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/bls.rb",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/systemdboot.rb",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/y2storage/encryption.rb",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/modules/Lan.rb",
 }
 
@@ -202,6 +206,8 @@ POST_PATCH_HASHES = {
         "201c3417bcc02d91804061125dad8dd1092c1be6b747d239dca220f945f3cc97",
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
         "8dbebc3a2b83fcc67780e16e0c40d3e5eff4b80d793403123208cf6b2226baa8",
+    "usr/share/YaST2/lib/y2storage/encryption.rb":
+        "9a26250cb52d53a4ab601bd2ea983b97b6065d7598ab4042cd5b5558659e7412",
     "usr/share/YaST2/modules/Lan.rb":
         "58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0",
 }

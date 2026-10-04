@@ -38,3 +38,16 @@
 
          ask_for_fido2_key(d.blk_device.name) if d.authentication.value == "fido2"
          begin
+--- a/usr/share/YaST2/lib/y2storage/encryption.rb
++++ b/usr/share/YaST2/lib/y2storage/encryption.rb
+@@ -414,6 +414,10 @@
+       OPTIONS_TO_ADD.each_pair do |mountpoint, crypttab_opt|
+         self.crypt_options |= [crypttab_opt] if mount_points.any? { |m| m.path == mountpoint }
+       end
++
++      if method&.is?(:systemd_fde) && authentication&.is?(:tpm2, :tpm2+pin)
++        self.crypt_options |= ["tpm2-device=auto"]
++      end
+     end
+
+     # Sets {#mount_by} to a value that makes sense
