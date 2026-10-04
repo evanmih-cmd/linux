@@ -395,6 +395,17 @@ The release source of truth is the exact upstream ISO identity plus the exact
 Desktop-Linux layer manifest and its source-controlled inputs. This is both the
 VM proof model and the physical-USB model; only physical placement differs.
 
+The runtime rendering is intentionally different only for proof plumbing:
+
+- VM builds may embed throwaway local proof credentials and add the COM1/y2log
+  observability pre-script used by the autonomous harness;
+- physical release builds never read the VM credential file, retain all three
+  native AutoYaST credential questions, carry only an empty `0600` TPM-PIN
+  `inst-sys` placeholder, and contain no `VMBENCH_*` or `/dev/ttyS0` logic.
+
+The canonical AutoYaST source profile itself is production-clean; VM-only
+observability is injected only while rendering the VM artifact.
+
 ### Agama status
 
 Agama remains useful research history, but the public Agama Live ISO previously

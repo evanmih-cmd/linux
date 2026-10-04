@@ -111,10 +111,15 @@ committed to git. Before a run, the OEMDRV builder renders a runtime
   and its AutoYaST question is removed;
 - a present root password is written into the runtime root-user profile and its
   AutoYaST question is removed;
-- a present TPM PIN is carried as a local OEMDRV file and the pre-script loads
-  it into the stock `sdbootutil-tpm2-pin` keyring entry; its question is
-  removed;
-- any missing value keeps its normal AutoYaST password question.
+- a present TPM PIN is carried by the DUD as
+  `inst-sys/etc/desktop-linux-tpm2-pin`; its AutoYaST question is removed;
+- when the PIN is absent, that DUD path is an empty `0600` placeholder and the
+  native AutoYaST `<file>` element writes the entered PIN to the same installer
+  path;
+- the patched BLS enrollment boundary reads that file immediately before stock
+  `sdbootutil enroll` and exports it as `sdbootutil-tpm2-pin`, separately from
+  the recovery credential;
+- any other missing value keeps its normal AutoYaST password question.
 
 The harness never types credential values through VirtualBox keyboard
 injection. Keyboard control is limited to deterministic installer/GRUB

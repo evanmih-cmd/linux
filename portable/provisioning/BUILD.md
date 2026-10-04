@@ -67,7 +67,11 @@ remains disabled during provisioning proof.
 Each built OEMDRV contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
 After ISO creation the builder extracts the ISO again and verifies the complete
 regular-file hash set and symlink inventory before publishing it as the current
-artifact. The external ISO SHA-256 is then recorded in `current-build.txt`.
+artifact. A strict payload allowlist additionally requires exactly the expected
+profile/metadata files, one DUD update marker, the TPM PIN handoff, the seven
+installer-only stock/YaST files and the one libkeyutils symlink; any unexpected
+payload path fails the build. The external ISO SHA-256 is then recorded in
+`current-build.txt`.
 
 This is a reconstructible and self-verifying build, not a promise of
 byte-for-byte identical ISO bytes across runs: build IDs and filesystem/ISO
@@ -97,6 +101,18 @@ runtime `autoinst.xml` from the canonical template:
 
 The runner and keyboard layers never read or type credential values. The source
 tree contains only the injection mechanism, never the values themselves.
+
+VM and physical-release credential sources are deliberately separated:
+
+- normal VM builds may read the local proof-cache `credentials.json` and embed
+  throwaway values to make iterations autonomous;
+- `bench.py build-release` never reads that VM credential file. It forces an
+  empty credential set, writes the artifact under the separate release cache,
+  keeps all three native AutoYaST credential questions, and leaves only the
+  empty `0600` TPM PIN placeholder in DUD `inst-sys`.
+
+Thus a VM test password cannot be inherited by the physical release artifact
+through the builder's default credential path.
 
 `bench.py check` is a static-only validation path. It does not contact or
 start VirtualBox; it checks source/storage invariants, all eight

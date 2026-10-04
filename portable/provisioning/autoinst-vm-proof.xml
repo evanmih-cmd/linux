@@ -1,6 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<profile xmlns="http://www.suse.com/1.0/yast2ns"
-         xmlns:config="http://www.suse.com/1.0/configns">
+<?xml version='1.0' encoding='UTF-8'?>
+<profile xmlns="http://www.suse.com/1.0/yast2ns" xmlns:config="http://www.suse.com/1.0/configns">
   <general>
     <mode>
       <confirm config:type="boolean">false</confirm>
@@ -14,16 +13,7 @@
         <password config:type="boolean">true</password>
         <path>partitioning,0,partitions,1,crypt_key</path>
         <stage>initial</stage>
-        <script>
-          <filename>vmbench-tpm-ready</filename>
-          <interpreter>shell</interpreter>
-          <debug config:type="boolean">false</debug>
-          <feedback config:type="boolean">false</feedback>
-          <source><![CDATA[
-( sleep 2; printf 'VMBENCH_TPM_READY\n' > /dev/ttyS0 ) &
-]]></source>
-        </script>
-      </ask>
+        </ask>
       <ask>
         <title>Portable workstation TPM credential</title>
         <question>Enter the short TPM2 boot PIN</question>
@@ -31,16 +21,7 @@
         <password config:type="boolean">true</password>
         <stage>initial</stage>
         <file>/etc/desktop-linux-tpm2-pin</file>
-        <script>
-          <filename>vmbench-root-ready</filename>
-          <interpreter>shell</interpreter>
-          <debug config:type="boolean">false</debug>
-          <feedback config:type="boolean">false</feedback>
-          <source><![CDATA[
-( sleep 2; printf 'VMBENCH_ROOT_READY\n' > /dev/ttyS0 ) &
-]]></source>
-        </script>
-      </ask>
+        </ask>
       <ask>
         <title>Portable workstation administrator</title>
         <question>Enter the root password</question>
@@ -48,35 +29,9 @@
         <password config:type="boolean">true</password>
         <path>users,0,user_password</path>
         <stage>initial</stage>
-        <script>
-          <filename>vmbench-storage-ready</filename>
-          <interpreter>shell</interpreter>
-          <debug config:type="boolean">false</debug>
-          <feedback config:type="boolean">false</feedback>
-          <source><![CDATA[
-( sleep 2; printf 'VMBENCH_STORAGE_READY\n' > /dev/ttyS0 ) &
-]]></source>
-        </script>
-      </ask>
+        </ask>
     </ask-list>
   </general>
-  <scripts>
-    <pre-scripts config:type="list">
-      <script>
-        <filename>vmbench-recovery-ready</filename>
-        <interpreter>shell</interpreter>
-        <debug config:type="boolean">false</debug>
-        <feedback config:type="boolean">false</feedback>
-        <source><![CDATA[
-(
-  while [ ! -r /var/log/YaST2/y2log ]; do sleep 1; done
-  exec tail -n +1 -F /var/log/YaST2/y2log > /dev/ttyS0 2>&1
-) &
-( sleep 2; printf 'VMBENCH_RECOVERY_READY\n' > /dev/ttyS0 ) &
-]]></source>
-      </script>
-    </pre-scripts>
-  </scripts>
   <language><language>en_US</language></language>
   <keyboard><keymap>english-us</keymap></keyboard>
   <timezone><hwclock>UTC</hwclock><timezone>Europe/Berlin</timezone></timezone>

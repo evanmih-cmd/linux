@@ -50,7 +50,7 @@ def _ask_path(ask):
     return None if node is None else node.text
 
 
-def render_runtime_profile(cfg, destination, credentials):
+def render_runtime_profile(cfg, destination, credentials, *, vm_observability=True):
     tree = ET.parse(cfg.profile)
     root = tree.getroot()
 
@@ -93,10 +93,30 @@ def render_runtime_profile(cfg, destination, credentials):
         general.remove(ask_list)
 
     scripts = _child(root, "scripts")
-    pre_scripts = _child(scripts, "pre-scripts")
-    pre = list(pre_scripts)[0]
-    source = _child(pre, "source")
-    source.text = """
+    if scripts is not None:
+        root.remove(scripts)
+
+    if vm_observability:
+        scripts = ET.SubElement(root, f"{{{YAST_NS}}}scripts")
+        pre_scripts = ET.SubElement(
+            scripts,
+            f"{{{YAST_NS}}}pre-scripts",
+            {"{http://www.suse.com/1.0/configns}type": "list"},
+        )
+        pre = ET.SubElement(pre_scripts, f"{{{YAST_NS}}}script")
+        ET.SubElement(pre, f"{{{YAST_NS}}}filename").text = "vmbench-observability"
+        ET.SubElement(pre, f"{{{YAST_NS}}}interpreter").text = "shell"
+        ET.SubElement(
+            pre,
+            f"{{{YAST_NS}}}debug",
+            {"{http://www.suse.com/1.0/configns}type": "boolean"},
+        ).text = "false"
+        ET.SubElement(
+            pre,
+            f"{{{YAST_NS}}}feedback",
+            {"{http://www.suse.com/1.0/configns}type": "boolean"},
+        ).text = "false"
+        ET.SubElement(pre, f"{{{YAST_NS}}}source").text = """
 (
   while [ ! -r /var/log/YaST2/y2log ]; do sleep 1; done
   exec tail -n +1 -F /var/log/YaST2/y2log > /dev/ttyS0 2>&1
@@ -158,6 +178,29 @@ PATCH_NAMES = (
     "network_patch",
     "portable_layout_patch",
 )
+
+
+OEMDRV_STATIC_FILES = {
+    "BASE-ISO.sha256",
+    "SOURCE-IDENTITY.txt",
+    "SYMLINKS",
+    "SHA256SUMS",
+    "autoinst.xml",
+    "linux/suse/x86_64-tw/dud.config",
+    "linux/suse/x86_64-tw/inst-sys/etc/desktop-linux-tpm2-pin",
+    "linux/suse/x86_64-tw/inst-sys/usr/bin/keyctl",
+    "linux/suse/x86_64-tw/inst-sys/usr/lib64/libkeyutils.so.1.10",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/autoyast_converter.rb",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/bls.rb",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/systemdboot.rb",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb",
+    "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/modules/Lan.rb",
+}
+
+OEMDRV_SYMLINKS = {
+    "linux/suse/x86_64-tw/inst-sys/usr/lib64/libkeyutils.so.1":
+        "libkeyutils.so.1.10",
+}
 
 
 POST_PATCH_HASHES = {
@@ -430,8 +473,50 @@ def _write_layer_manifests(build_root):
     (build_root / "SHA256SUMS").write_text("\n".join(manifest_entries) + "\n")
 
 
+def _verify_layer_policy(root):
+    root = Path(root)
+    actual_files = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    update_files = {
+        name for name in actual_files
+        if name.startswith("linux/suse/x86_64-tw/inst-sys/.update.")
+    }
+    if len(update_files) != 1:
+        raise RuntimeError(
+            "OEMDRV policy requires exactly one DUD update marker, got "
+            + repr(sorted(update_files))
+        )
+    marker = next(iter(update_files))
+    suffix = marker.rsplit(".update.", 1)[1]
+    if len(suffix) != 16 or any(ch not in "0123456789abcdef" for ch in suffix):
+        raise RuntimeError(f"invalid DUD update marker identity: {marker}")
+
+    expected_files = set(OEMDRV_STATIC_FILES) | {marker}
+    if actual_files != expected_files:
+        raise RuntimeError(
+            "OEMDRV file policy mismatch: "
+            f"missing={sorted(expected_files - actual_files)}, "
+            f"extra={sorted(actual_files - expected_files)}"
+        )
+
+    actual_symlinks = {
+        path.relative_to(root).as_posix(): os.readlink(path)
+        for path in root.rglob("*")
+        if path.is_symlink()
+    }
+    if actual_symlinks != OEMDRV_SYMLINKS:
+        raise RuntimeError(
+            "OEMDRV symlink policy mismatch: "
+            f"expected={OEMDRV_SYMLINKS}, actual={actual_symlinks}"
+        )
+
+
 def _verify_layer_tree(root):
     root = Path(root)
+    _verify_layer_policy(root)
     manifest = root / "SHA256SUMS"
     symlink_manifest = root / "SYMLINKS"
     if not manifest.is_file() or not symlink_manifest.is_file():
@@ -500,10 +585,22 @@ def _verify_oemdrv_iso(iso, xorriso, xorriso_lib):
         _verify_layer_tree(root)
 
 
-def build_oemdrv(cfg=None):
+def build_oemdrv(
+    cfg=None,
+    *,
+    credentials_override=None,
+    output_dir=None,
+    artifact_prefix="oemdrv",
+    vm_observability=True,
+    build_flavor="vmbench",
+):
     cfg = cfg or Config()
     ET.parse(cfg.profile)
-    credentials = load_credentials(cfg)
+    credentials = (
+        load_credentials(cfg)
+        if credentials_override is None
+        else dict(credentials_override)
+    )
 
     source = _verified_snapshot_source(cfg)
     patches = _patchset(cfg)
@@ -513,11 +610,19 @@ def build_oemdrv(cfg=None):
     )
     patch_sha = hashlib.sha256(patchset_material.encode()).hexdigest()
 
-    cred_stat = cfg.credentials.stat() if cfg.credentials.exists() else None
+    cred_stat = (
+        cfg.credentials.stat()
+        if credentials_override is None and cfg.credentials.exists()
+        else None
+    )
+    credential_source_stamp = (
+        f"vm-file:{cred_stat.st_mtime_ns}:{cred_stat.st_size}"
+        if cred_stat is not None
+        else "explicit-credential-set"
+    )
     opaque_input = (
         f"{profile_sha}\n{patch_sha}\n"
-        f"{cred_stat.st_mtime_ns if cred_stat else 0}\n"
-        f"{cred_stat.st_size if cred_stat else 0}\n"
+        f"{build_flavor}\n{credential_source_stamp}\n"
         f"{time.time_ns()}\n"
     )
     ident = hashlib.sha256(opaque_input.encode()).hexdigest()[:16]
@@ -527,9 +632,10 @@ def build_oemdrv(cfg=None):
         "tools/rootless/xorriso/usr/lib/x86_64-linux-gnu"
     )
 
-    cfg.bench.mkdir(parents=True, exist_ok=True)
-    build_root = cfg.bench / f"oem-root-{ident}"
-    iso = cfg.bench / f"oemdrv-{ident}.iso"
+    output_dir = Path(output_dir) if output_dir is not None else cfg.bench
+    output_dir.mkdir(parents=True, exist_ok=True)
+    build_root = output_dir / f"{artifact_prefix}-root-{ident}"
+    iso = output_dir / f"{artifact_prefix}-{ident}.iso"
 
     if build_root.exists():
         shutil.rmtree(build_root)
@@ -539,6 +645,7 @@ def build_oemdrv(cfg=None):
         cfg,
         build_root / "autoinst.xml",
         credentials,
+        vm_observability=vm_observability,
     )
 
     inst = build_root / "linux/suse/x86_64-tw/inst-sys"
@@ -565,7 +672,7 @@ def build_oemdrv(cfg=None):
         f"UpdateID:\t{ident}\n"
         "UpdateProduct:\topenSUSE Tumbleweed\n"
         "UpdateInstaller:\tyast\n"
-        f"UpdateName:\tDesktop-Linux vmbench {ident}\n"
+        f"UpdateName:\tDesktop-Linux {build_flavor} {ident}\n"
     )
 
     (build_root / "BASE-ISO.sha256").write_text(
@@ -576,6 +683,8 @@ def build_oemdrv(cfg=None):
         "snapshot=Snapshot20260930",
         f"official-iso-sha256={SNAPSHOT_ISO_SHA256}",
         "source-mode=verified-clean-instsys-files",
+        f"build-flavor={build_flavor}",
+        f"vm-observability={'yes' if vm_observability else 'no'}",
         f"profile-sha256={profile_sha}",
         f"patchset-sha256={patch_sha}",
     ]
@@ -610,8 +719,8 @@ def build_oemdrv(cfg=None):
     iso_sha = sha256(iso)
     shutil.rmtree(build_root)
 
-    (cfg.bench / "current-oem.path").write_text(str(iso) + "\n")
-    (cfg.bench / "current-build.txt").write_text(
+    (output_dir / "current-oem.path").write_text(str(iso) + "\n")
+    (output_dir / "current-build.txt").write_text(
         f"PROFILE_SHA={profile_sha}\n"
         f"PATCHSET_SHA={patch_sha}\n"
         + "".join(
@@ -625,7 +734,7 @@ def build_oemdrv(cfg=None):
         f"MISSING={','.join(credential_mode['missing'])}\n"
     )
 
-    for stale in cfg.bench.glob("oemdrv-*.iso"):
+    for stale in output_dir.glob(f"{artifact_prefix}-*.iso"):
         if stale != iso:
             stale.unlink()
 
@@ -638,3 +747,29 @@ def build_oemdrv(cfg=None):
         "patches": {name: digest for name, _, digest in patches},
         "credentials": credential_mode,
     }
+
+
+def build_release_oemdrv(cfg=None):
+    cfg = cfg or Config()
+    release_dir = cfg.cache / "release"
+    result = build_oemdrv(
+        cfg,
+        credentials_override={},
+        output_dir=release_dir,
+        artifact_prefix="desktop-linux-release-oemdrv",
+        vm_observability=False,
+        build_flavor="release",
+    )
+
+    mode = result["credentials"]
+    if mode["embedded"]:
+        raise RuntimeError(
+            "release OEMDRV must not embed installer credentials: "
+            + repr(mode["embedded"])
+        )
+    if sorted(mode["missing"]) != ["pin", "recovery", "root"]:
+        raise RuntimeError(
+            "release OEMDRV must retain all native credential asks: "
+            + repr(mode["missing"])
+        )
+    return result
