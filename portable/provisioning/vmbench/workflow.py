@@ -8,6 +8,7 @@ from media import (
     load_credentials,
     render_runtime_profile,
     sha256,
+    verify_patchset_against_snapshot,
 )
 from rawserial import clean_text
 from vbox import VBox
@@ -112,6 +113,7 @@ def static_check(cfg=None):
     harness_root = Path(__file__).resolve().parent
     validate_source_tree(harness_root)
     validate_profile_storage(cfg.profile)
+    patch_proof = verify_patchset_against_snapshot(cfg)
 
     actual = load_credentials(cfg)
     actual_mode = _check_runtime_profile(cfg, actual)
@@ -148,6 +150,9 @@ def static_check(cfg=None):
         "credential_matrix_cases": len(matrix),
         "source_invariants": "PASS",
         "storage_profile_invariant": "PASS",
+        "patchset_applicability": "PASS",
+        "patches": patch_proof["patches"],
+        "post_patch_hashes": patch_proof["post_patch_hashes"],
     }
 
 

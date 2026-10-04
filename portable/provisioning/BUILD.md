@@ -99,8 +99,11 @@ The runner and keyboard layers never read or type credential values. The source
 tree contains only the injection mechanism, never the values themselves.
 
 `bench.py check` is a static-only validation path. It does not contact or
-start VirtualBox; it checks source/storage invariants and all eight
-present/missing credential combinations on temporary runtime profiles.
+start VirtualBox; it checks source/storage invariants, all eight
+present/missing credential combinations on temporary runtime profiles, and the
+complete installer patchset against the pinned clean Snapshot sources. All four
+patches must apply without rejects and the five modified YaST files must match
+pinned post-patch SHA-256 identities exactly.
 
 ## Observability rule
 

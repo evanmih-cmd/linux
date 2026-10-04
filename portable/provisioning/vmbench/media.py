@@ -160,6 +160,20 @@ PATCH_NAMES = (
 )
 
 
+POST_PATCH_HASHES = {
+    "usr/share/YaST2/lib/bootloader/autoyast_converter.rb":
+        "7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612",
+    "usr/share/YaST2/lib/bootloader/bls.rb":
+        "2406fa075c7d2a7b0ea94cb6ac938fd38b4762734e190ce99ce0c815642e43ce",
+    "usr/share/YaST2/lib/bootloader/systemdboot.rb":
+        "201c3417bcc02d91804061125dad8dd1092c1be6b747d239dca220f945f3cc97",
+    "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
+        "8dbebc3a2b83fcc67780e16e0c40d3e5eff4b80d793403123208cf6b2226baa8",
+    "usr/share/YaST2/modules/Lan.rb":
+        "58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0",
+}
+
+
 def _snapshot_source_errors(source):
     errors = []
     for relative, expected in SNAPSHOT_SOURCE_HASHES.items():
@@ -339,6 +353,56 @@ def _copy_snapshot_instsys(source, inst):
 
     keyutils_link = inst / "usr/lib64/libkeyutils.so.1"
     keyutils_link.symlink_to("libkeyutils.so.1.10")
+
+
+def verify_patchset_against_snapshot(cfg=None):
+    cfg = cfg or Config()
+    source = _verified_snapshot_source(cfg)
+    patches = _patchset(cfg)
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="patchset-proof-") as td:
+        inst = Path(td)
+        _copy_snapshot_instsys(source, inst)
+
+        for _, patch, _ in patches:
+            _apply_patch(inst, patch)
+
+        rejects = sorted(
+            path.relative_to(inst).as_posix()
+            for path in inst.rglob("*.rej")
+        )
+        if rejects:
+            raise RuntimeError(
+                "patchset left reject files: " + ", ".join(rejects)
+            )
+
+        for original in inst.rglob("*.orig"):
+            original.unlink()
+
+        actual = {
+            relative: sha256(inst / relative)
+            for relative in POST_PATCH_HASHES
+        }
+        mismatches = {
+            relative: {
+                "expected": POST_PATCH_HASHES[relative],
+                "actual": actual[relative],
+            }
+            for relative in POST_PATCH_HASHES
+            if actual[relative] != POST_PATCH_HASHES[relative]
+        }
+        if mismatches:
+            raise RuntimeError(
+                "post-patch Snapshot installer identity mismatch: "
+                + json.dumps(mismatches, sort_keys=True)
+            )
+
+        return {
+            "patches": {name: digest for name, _, digest in patches},
+            "post_patch_hashes": actual,
+        }
 
 
 def _write_layer_manifests(build_root):
