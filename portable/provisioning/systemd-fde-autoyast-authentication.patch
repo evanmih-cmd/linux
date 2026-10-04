@@ -40,13 +40,24 @@
          begin
 --- a/usr/share/YaST2/lib/y2storage/encryption.rb
 +++ b/usr/share/YaST2/lib/y2storage/encryption.rb
-@@ -414,6 +414,10 @@
+@@ -333,6 +333,7 @@
+     # @param value [EncryptionAuthentication]
+     def authentication=(value)
+       save_userdata(:encryption_authentication, value)
++      adjust_crypt_options
+     end
+
+     # Executes the actions that must be performed right before the devicegraph is
+@@ -414,6 +415,13 @@
        OPTIONS_TO_ADD.each_pair do |mountpoint, crypttab_opt|
          self.crypt_options |= [crypttab_opt] if mount_points.any? { |m| m.path == mountpoint }
        end
 +
-+      if method&.is?(:systemd_fde) && authentication&.is?(:tpm2, :tpm2+pin)
++      tpm2 = method&.is?(:systemd_fde) && authentication&.is?(:tpm2, :tpm2+pin)
++      if tpm2
 +        self.crypt_options |= ["tpm2-device=auto"]
++      else
++        self.crypt_options -= ["tpm2-device=auto"]
 +      end
      end
 

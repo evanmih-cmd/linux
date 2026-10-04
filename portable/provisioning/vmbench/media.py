@@ -207,7 +207,7 @@ POST_PATCH_HASHES = {
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
         "8dbebc3a2b83fcc67780e16e0c40d3e5eff4b80d793403123208cf6b2226baa8",
     "usr/share/YaST2/lib/y2storage/encryption.rb":
-        "9a26250cb52d53a4ab601bd2ea983b97b6065d7598ab4042cd5b5558659e7412",
+        "14ef42f2c4d6842d3caf29f80567bb389d15701b7d38d300af3955b391e10b2c",
     "usr/share/YaST2/modules/Lan.rb":
         "58231f7be60bfed86f44b8a5294c0bc405c8293da3939d407658bf76fe2535f0",
 }
@@ -411,6 +411,28 @@ def verify_patchset_against_snapshot(cfg=None):
 
         for original in inst.rglob("*.orig"):
             original.unlink()
+
+        encryption_source = (
+            inst / "usr/share/YaST2/lib/y2storage/encryption.rb"
+        ).read_text()
+        required_tpm_activation = (
+            """def authentication=(value)
+      save_userdata(:encryption_authentication, value)
+      adjust_crypt_options""",
+            'authentication&.is?(:tpm2, :tpm2+pin)',
+            'self.crypt_options |= ["tpm2-device=auto"]',
+            'self.crypt_options -= ["tpm2-device=auto"]',
+        )
+        missing_tpm_activation = [
+            snippet
+            for snippet in required_tpm_activation
+            if snippet not in encryption_source
+        ]
+        if missing_tpm_activation:
+            raise RuntimeError(
+                "systemd-FDE TPM crypttab lifecycle invariant missing: "
+                + repr(missing_tpm_activation)
+            )
 
         actual = {
             relative: sha256(inst / relative)
