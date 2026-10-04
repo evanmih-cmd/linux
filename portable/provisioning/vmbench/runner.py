@@ -240,15 +240,19 @@ class BenchRun:
     def boot_installer(self):
         self.set_stage("grub")
         self.term.wait_any("Please press", timeout=120)
-        keyboard = Keyboard(self.box)
-        keyboard.text("t")
-        time.sleep(0.7)
-        keyboard.edit()
-        time.sleep(0.7)
-        keyboard.down(4)
-        keyboard.end()
-        keyboard.text(BOOT_SUFFIX)
-        keyboard.ctrl_x()
+        helper = VBox(self.cfg)
+        try:
+            keyboard = Keyboard(helper)
+            keyboard.text("t")
+            time.sleep(0.7)
+            keyboard.edit()
+            time.sleep(0.7)
+            keyboard.down(4)
+            keyboard.end()
+            keyboard.text(BOOT_SUFFIX)
+            keyboard.ctrl_x()
+        finally:
+            helper.logoff()
 
         self.set_stage("installer-boot")
         self.term.wait_any(
