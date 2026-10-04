@@ -200,6 +200,16 @@ class VBox:
             "ISession_getConsole", [("_this", session)]
         )[0]
 
+    def guest_additions_run_level(self, session):
+        console = self.session_console(session)
+        guest = self._vals(
+            "IConsole_getGuest", [("_this", console)]
+        )[0]
+        values = self._vals(
+            "IGuest_getAdditionsRunLevel", [("_this", guest)]
+        )
+        return values[0] if values else "None"
+
     def unlock(self, session):
         self._vals("ISession_unlockMachine", [("_this", session)])
 

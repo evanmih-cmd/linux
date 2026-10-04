@@ -184,6 +184,10 @@ class BenchRun:
         self.boot_pin = credentials["pin"]
         if not self.boot_pin:
             raise RuntimeError("VM test TPM PIN is empty")
+        if credentials["pin"] == credentials["recovery"]:
+            raise RuntimeError(
+                "VM test TPM PIN must differ from the recovery secret"
+            )
         self.event(
             "credential-source",
             embedded=self.credential_mode["embedded"],
@@ -418,42 +422,71 @@ class BenchRun:
             raise RuntimeError("no VM test TPM PIN available for boot unlock")
         if self.post_install_boot_mark is None:
             raise RuntimeError("installer reboot serial mark was not recorded")
+        if not self.box or not self.launch_session:
+            raise RuntimeError("VirtualBox launch session is unavailable")
 
+        prompt_observed = False
+        system_since = None
         deadline = time.time() + 180
         while time.time() < deadline:
             data = self.term._bytes()[self.post_install_boot_mark:]
-            # Restrict classification to post-install boot bytes only.
             clean_boot_text = clean_text(data)
             state = classify_boot_unlock(clean_boot_text, pin_submitted=False)
             if state == "fallback":
                 raise RuntimeError(
                     "installed boot fell back to the traditional LUKS passphrase "
-                    "before presenting the TPM2 PIN prompt"
+                    "before the TPM2 PIN was submitted"
                 )
             if state == "unlocked":
                 raise RuntimeError(
                     "installed boot reached switch-root without requiring the TPM2 PIN"
                 )
-            if state == "pin-prompt":
+            if state == "pin-prompt" and not prompt_observed:
+                prompt_observed = True
                 self.event("tpm-pin-prompt-observed")
-                break
+
+            level = self.box.guest_additions_run_level(self.launch_session)
+            if level in ("Userland", "Desktop"):
+                raise RuntimeError(
+                    "installed system reached userspace before the TPM2 PIN "
+                    "was submitted"
+                )
+            if level == "System":
+                if system_since is None:
+                    system_since = time.time()
+                    self.event(
+                        "guest-additions-system-observed",
+                        additions_run_level=level,
+                    )
+                elif time.time() - system_since >= 8:
+                    break
+            else:
+                system_since = None
             time.sleep(0.25)
         else:
-            raise TimeoutError("installed boot did not present the TPM2 PIN prompt")
+            raise TimeoutError(
+                "installed kernel did not reach the pre-userspace "
+                "Guest Additions system run level"
+            )
 
         helper = VBox(self.cfg)
         try:
             keyboard = Keyboard(helper)
-            after_prompt = self.term.mark()
+            after_pin = self.term.mark()
             keyboard.text(self.boot_pin)
             keyboard.enter()
         finally:
             helper.logoff()
 
-        self.event("tpm-pin-submitted")
+        self.event(
+            "tpm-pin-submitted",
+            prompt_observed=prompt_observed,
+            pre_pin_additions_run_level="System",
+        )
+
         deadline = time.time() + 120
         while time.time() < deadline:
-            text = clean_text(self.term._bytes()[after_prompt:])
+            text = clean_text(self.term._bytes()[after_pin:])
             state = classify_boot_unlock(text, pin_submitted=True)
             if state == "fallback":
                 raise RuntimeError(
@@ -464,17 +497,22 @@ class BenchRun:
                 raise RuntimeError(
                     "TPM2 PIN was rejected and the boot prompt was repeated"
                 )
-            if state == "unlocked":
+
+            level = self.box.guest_additions_run_level(self.launch_session)
+            if level in ("Userland", "Desktop"):
                 self.event(
                     "tpm-pin-unlock-pass",
-                    marker=BOOT_UNLOCK_SUCCESS,
+                    marker=f"Guest Additions {level}",
+                    additions_run_level=level,
+                    prompt_observed=prompt_observed,
                     fallback_observed=False,
                 )
                 return
             time.sleep(0.25)
 
         raise TimeoutError(
-            "TPM2 PIN was submitted but installed boot never reached switch-root"
+            "TPM2 PIN was submitted but installed system never reached "
+            "Guest Additions userland"
         )
 
     def capture_failure_logs(self):
