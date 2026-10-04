@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from config import Config
+from invariants import validate_proven_profile_except_software
 
 
 YAST_NS = "http://www.suse.com/1.0/yast2ns"
@@ -641,6 +642,7 @@ def build_oemdrv(
     target_device=None,
 ):
     cfg = cfg or Config()
+    validate_proven_profile_except_software(cfg.profile)
     ET.parse(cfg.profile)
     if target_device is None:
         if build_flavor == "release":
