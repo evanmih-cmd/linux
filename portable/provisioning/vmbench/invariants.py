@@ -1,6 +1,7 @@
 import ast
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -42,14 +43,97 @@ def validate_source_tree(root):
                     f"{line.strip()}"
                 )
 
+        if path.name in ("runner.py", "keyboard.py"):
+            secret_input = re.compile(
+                r"cfg\.credentials|submit_password|def\s+fill\s*\(",
+                re.IGNORECASE,
+            )
+            for lineno, line in enumerate(source.splitlines(), 1):
+                if secret_input.search(line):
+                    violations.append(
+                        f"{path.name}:{lineno}: forbidden credential-typing path: "
+                        f"{line.strip()}"
+                    )
+
     if violations:
         detail = "\n  - ".join(violations)
         raise BenchInvariantError(
             "VM bench invariant violation detected before reset/build/launch.\n"
             f"  - {detail}\n"
-            f"Reason: {WHY_TCP_IS_FORBIDDEN}\n"
-            "Required fix: remove the TCP serial path and keep COM1 on RawFile "
-            "to the bench serial.log, then rerun bench.py run."
+            "Required policies: COM1 is RawFile-only; installer secrets are "
+            "embedded only by media.py into the generated local OEMDRV or are "
+            "entered manually by AutoYaST when absent. runner.py/keyboard.py "
+            "must never type credentials."
+        )
+
+
+def validate_profile_storage(profile_path):
+    ns = {"y": "http://www.suse.com/1.0/yast2ns"}
+    root = ET.parse(profile_path).getroot()
+    partitioning = root.find("y:partitioning", ns)
+    drives = [] if partitioning is None else partitioning.findall("y:drive", ns)
+    errors = []
+
+    def value(node, name):
+        child = node.find(f"y:{name}", ns)
+        return None if child is None else child.text
+
+    if len(drives) != 2:
+        errors.append(f"expected physical target + one LVM drive, got {len(drives)} drives")
+    else:
+        physical, vg = drives
+        parts_node = physical.find("y:partitions", ns)
+        parts = [] if parts_node is None else parts_node.findall("y:partition", ns)
+        if len(parts) != 2:
+            errors.append(f"physical target must contain ESP + outer LUKS2, got {len(parts)} partitions")
+        else:
+            esp, outer = parts
+            for key, expected in {
+                "mount": "/boot/efi",
+                "filesystem": "vfat",
+                "format": "true",
+                "size": "1GiB",
+                "partition_id": "259",
+            }.items():
+                actual = value(esp, key)
+                if actual != expected:
+                    errors.append(f"ESP {key}: expected {expected!r}, got {actual!r}")
+            for key, expected in {
+                "size": "max",
+                "lvm_group": "system",
+                "crypt_method": "systemd_fde",
+                "crypt_pbkdf": "argon2id",
+                "crypt_label": "portable-system",
+            }.items():
+                actual = value(outer, key)
+                if actual != expected:
+                    errors.append(f"outer LUKS2 {key}: expected {expected!r}, got {actual!r}")
+
+        if value(vg, "device") != "/dev/system":
+            errors.append("LVM drive must be /dev/system")
+        if value(vg, "type") != "CT_LVM":
+            errors.append("LVM drive type must be CT_LVM")
+        lvs_node = vg.find("y:partitions", ns)
+        lvs = [] if lvs_node is None else lvs_node.findall("y:partition", ns)
+        names = [value(lv, "lv_name") for lv in lvs]
+        if names != ["root", "home", "swap"]:
+            errors.append(f"VG system must contain root/home/swap; got {names}")
+
+    recovery_paths = [
+        node.text for node in root.findall(".//y:ask/y:path", ns)
+        if node.text and node.text.startswith("partitioning,")
+    ]
+    expected_path = "partitioning,0,partitions,1,crypt_key"
+    if recovery_paths != [expected_path]:
+        errors.append(f"recovery ask path must be {expected_path!r}; got {recovery_paths}")
+
+    if errors:
+        detail = "\n  - ".join(errors)
+        raise BenchInvariantError(
+            "VM bench storage-profile invariant violation before build/reset/launch.\n"
+            f"  - {detail}\n"
+            "Required topology: GPT -> 1GiB vfat ESP mounted at /boot/efi + "
+            "outer systemd_fde LUKS2 -> LVM VG system -> root/home/swap."
         )
 
 
