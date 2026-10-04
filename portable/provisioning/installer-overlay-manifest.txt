@@ -11,7 +11,7 @@ Canonical source-controlled installer inputs:
 
 1. autoinst-vm-proof.xml
    SHA-256:
-   f72fe7e4cdbb9affb3881a979cec651817b224f0bfeea0418a69d8eb91de8a2b
+   ef156a574627a17d45145a55e726cbb43d6358b1d341beb6e18ad08bacd1496f
    Destination: /autoinst.xml
    Storage graph:
    GPT -> ESP + outer LUKS2 -> LVM VG system -> root/home/swap

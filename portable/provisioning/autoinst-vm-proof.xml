@@ -13,7 +13,7 @@
         <question>Enter the strong LUKS recovery passphrase</question>
         <type>string</type>
         <password config:type="boolean">true</password>
-        <path>partitioning,0,partitions,0,crypt_key</path>
+        <path>partitioning,0,partitions,1,crypt_key</path>
         <stage>initial</stage>
         <script>
           <filename>vmbench-tpm-ready</filename>
@@ -95,6 +95,13 @@ unset VAL
       <initialize config:type="boolean">true</initialize>
       <disklabel>gpt</disklabel>
       <partitions config:type="list">
+        <partition>
+          <mount>/boot</mount>
+          <filesystem config:type="symbol">vfat</filesystem>
+          <format config:type="boolean">true</format>
+          <size>1GiB</size>
+          <partition_id config:type="integer">259</partition_id>
+        </partition>
         <partition>
           <size>max</size>
           <lvm_group>system</lvm_group>

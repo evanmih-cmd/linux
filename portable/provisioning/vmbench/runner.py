@@ -6,7 +6,11 @@ from pathlib import Path
 
 from config import Config
 from keyboard import Keyboard
-from invariants import validate_runtime_serial, validate_source_tree
+from invariants import (
+    validate_profile_storage,
+    validate_runtime_serial,
+    validate_source_tree,
+)
 from machine import reset_vm, unc
 from media import build_oemdrv, sha256
 from rawserial import RawSerialMonitor
@@ -17,6 +21,19 @@ BOOT_SUFFIX = " console=ttyS0,115200 console=tty0 textmode=1"
 
 def alloc_bytes(path):
     return path.stat().st_blocks * 512
+
+
+def persistent_boot_state(data):
+    out = {}
+    for name, value in data.items():
+        if name == "BootOrder":
+            out[name] = value
+            continue
+        if len(name) == 8 and name.startswith("Boot"):
+            suffix = name[4:]
+            if all(ch in "0123456789abcdefABCDEF" for ch in suffix):
+                out[name] = value
+    return out
 
 
 class BenchRun:
@@ -36,6 +53,7 @@ class BenchRun:
         self.launch_session = None
         self.term = None
         self.pre = {}
+        self.nvram_before = None
         self.last_event = None
         self.credentials = json.loads(self.cfg.credentials.read_text())
         self.event("run-created", run=str(self.dir))
@@ -88,6 +106,9 @@ class BenchRun:
         harness_root = Path(__file__).resolve().parent
         self.event("invariant-check", check="serial-source-policy")
         validate_source_tree(harness_root)
+
+        self.event("invariant-check", check="canonical-storage-profile")
+        validate_profile_storage(self.cfg.profile)
 
         expected_serial_path = self.dir / "serial.log"
         expected_serial = unc(expected_serial_path)
@@ -148,7 +169,7 @@ class BenchRun:
         (self.dir / "preflight.json").write_text(
             json.dumps(self.pre, indent=2, sort_keys=True) + "\n"
         )
-        self.snapshot_nvram("nvram.before.json")
+        self.nvram_before = self.snapshot_nvram("nvram.before.json")
         self.event("prepared", **self.pre)
 
     def configure_and_launch(self):
@@ -368,6 +389,11 @@ class BenchRun:
             post["target_sha256"] != self.pre["target_sha256"]
         )
         post["nvram_after"] = self.snapshot_nvram("nvram.after.json")
+        before_boot = persistent_boot_state(self.nvram_before or {})
+        after_boot = persistent_boot_state(post["nvram_after"])
+        post["persistent_nvram_before"] = before_boot
+        post["persistent_nvram_after"] = after_boot
+        post["persistent_nvram_unchanged"] = before_boot == after_boot
         (self.dir / "postcheck.json").write_text(
             json.dumps(post, indent=2, sort_keys=True) + "\n"
         )
@@ -375,7 +401,21 @@ class BenchRun:
             raise RuntimeError("guard disk changed")
         if not post["target_changed"] or post["target_allocated"] < 1024**3:
             raise RuntimeError("target does not contain substantial install")
-        self.event("postcheck-pass", **{k: v for k, v in post.items() if k != "nvram_after"})
+        if not post["persistent_nvram_unchanged"]:
+            raise RuntimeError(
+                "persistent UEFI boot state changed: BootOrder/Boot#### must remain unchanged"
+            )
+        self.event(
+            "postcheck-pass",
+            **{
+                k: v for k, v in post.items()
+                if k not in (
+                    "nvram_after",
+                    "persistent_nvram_before",
+                    "persistent_nvram_after",
+                )
+            },
+        )
         return post
 
     def failure_summary(self, exc, stage):
