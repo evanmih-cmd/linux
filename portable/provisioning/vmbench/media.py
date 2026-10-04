@@ -341,6 +341,101 @@ def _copy_snapshot_instsys(source, inst):
     keyutils_link.symlink_to("libkeyutils.so.1.10")
 
 
+def _write_layer_manifests(build_root):
+    symlinks = []
+    files = []
+
+    for path in sorted(build_root.rglob("*")):
+        relative = path.relative_to(build_root).as_posix()
+        if path.is_symlink():
+            symlinks.append(f"./{relative} -> {os.readlink(path)}")
+        elif path.is_file() and relative != "SHA256SUMS":
+            files.append(f"{sha256(path)}  ./{relative}")
+
+    (build_root / "SYMLINKS").write_text(
+        ("\n".join(symlinks) + "\n") if symlinks else ""
+    )
+
+    # Include the symlink inventory itself in the exhaustive regular-file hash list.
+    manifest_entries = []
+    for path in sorted(build_root.rglob("*")):
+        relative = path.relative_to(build_root).as_posix()
+        if path.is_symlink() or not path.is_file() or relative == "SHA256SUMS":
+            continue
+        manifest_entries.append(f"{sha256(path)}  ./{relative}")
+    (build_root / "SHA256SUMS").write_text("\n".join(manifest_entries) + "\n")
+
+
+def _verify_layer_tree(root):
+    root = Path(root)
+    manifest = root / "SHA256SUMS"
+    symlink_manifest = root / "SYMLINKS"
+    if not manifest.is_file() or not symlink_manifest.is_file():
+        raise RuntimeError("OEMDRV verification manifests are missing")
+
+    expected_files = {}
+    for line in manifest.read_text().splitlines():
+        if not line:
+            continue
+        digest, relative = line.split("  ./", 1)
+        expected_files[relative] = digest
+
+    actual_files = {}
+    actual_symlinks = {}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            actual_symlinks[relative] = os.readlink(path)
+        elif path.is_file() and relative != "SHA256SUMS":
+            actual_files[relative] = sha256(path)
+
+    if actual_files != expected_files:
+        missing = sorted(set(expected_files) - set(actual_files))
+        extra = sorted(set(actual_files) - set(expected_files))
+        changed = sorted(
+            name for name in set(actual_files) & set(expected_files)
+            if actual_files[name] != expected_files[name]
+        )
+        raise RuntimeError(
+            "OEMDRV regular-file manifest verification failed: "
+            f"missing={missing}, extra={extra}, changed={changed}"
+        )
+
+    expected_symlinks = {}
+    for line in symlink_manifest.read_text().splitlines():
+        if not line:
+            continue
+        left, target = line.split(" -> ", 1)
+        expected_symlinks[left.removeprefix("./")] = target
+
+    if actual_symlinks != expected_symlinks:
+        raise RuntimeError(
+            "OEMDRV symlink manifest verification failed: "
+            f"expected={expected_symlinks}, actual={actual_symlinks}"
+        )
+
+
+def _verify_oemdrv_iso(iso, xorriso, xorriso_lib):
+    import tempfile
+
+    env = os.environ.copy()
+    env["LD_LIBRARY_PATH"] = str(xorriso_lib)
+    with tempfile.TemporaryDirectory(prefix="oemdrv-readback-") as td:
+        root = Path(td)
+        subprocess.run(
+            [
+                str(xorriso), "-osirrox", "on",
+                "-indev", str(iso),
+                "-extract", "/", str(root),
+            ],
+            env=env,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _verify_layer_tree(root)
+
+
 def build_oemdrv(cfg=None):
     cfg = cfg or Config()
     ET.parse(cfg.profile)
@@ -413,13 +508,26 @@ def build_oemdrv(cfg=None):
         "0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99  "
         "openSUSE-Tumbleweed-DVD-x86_64-Snapshot20260930-Media.iso\n"
     )
-    (build_root / "SOURCE-IDENTITY.txt").write_text(
-        "snapshot=Snapshot20260930\n"
-        "source-mode=verified-clean-instsys-files\n"
-        f"profile-sha256={profile_sha}\n"
-        f"patchset-sha256={patch_sha}\n"
-        + patchset_material + "\n"
+    source_identity = [
+        "snapshot=Snapshot20260930",
+        f"official-iso-sha256={SNAPSHOT_ISO_SHA256}",
+        "source-mode=verified-clean-instsys-files",
+        f"profile-sha256={profile_sha}",
+        f"patchset-sha256={patch_sha}",
+    ]
+    source_identity.extend(
+        f"rpm={rpm_path}" for rpm_path in SNAPSHOT_RPM_INPUTS
     )
+    source_identity.extend(
+        f"stock:{relative}={digest}"
+        for relative, digest in SNAPSHOT_SOURCE_HASHES.items()
+    )
+    source_identity.extend(patchset_material.splitlines())
+    (build_root / "SOURCE-IDENTITY.txt").write_text(
+        "\n".join(source_identity) + "\n"
+    )
+
+    _write_layer_manifests(build_root)
 
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = str(xorriso_lib)
@@ -434,6 +542,8 @@ def build_oemdrv(cfg=None):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    _verify_oemdrv_iso(iso, xorriso, xorriso_lib)
+    iso_sha = sha256(iso)
     shutil.rmtree(build_root)
 
     (cfg.bench / "current-oem.path").write_text(str(iso) + "\n")
@@ -446,6 +556,7 @@ def build_oemdrv(cfg=None):
         )
         + f"ID={ident}\n"
         f"ISO={iso}\n"
+        f"ISO_SHA256={iso_sha}\n"
         f"EMBEDDED={','.join(credential_mode['embedded'])}\n"
         f"MISSING={','.join(credential_mode['missing'])}\n"
     )
@@ -457,6 +568,7 @@ def build_oemdrv(cfg=None):
     return {
         "id": ident,
         "iso": iso,
+        "iso_sha": iso_sha,
         "profile_sha": profile_sha,
         "patch_sha": patch_sha,
         "patches": {name: digest for name, _, digest in patches},

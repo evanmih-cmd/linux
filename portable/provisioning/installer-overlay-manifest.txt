@@ -62,6 +62,15 @@ Builder source model:
 Installer runtime also carries stock keyctl/libkeyutils from the same verified
 Snapshot20260930 DVD. No target-system package is replaced.
 
+Artifact verification:
+- SOURCE-IDENTITY.txt records the official ISO identity, pinned RPM paths,
+  pinned stock source hashes and all patch hashes;
+- SHA256SUMS covers every regular file in the generated layer except itself;
+- SYMLINKS records the complete symlink inventory;
+- after ISO creation the builder extracts the ISO again and verifies both
+  manifests before publishing the artifact;
+- current-build.txt records the external ISO SHA-256.
+
 Observability:
 - VirtualBox COM1 host mode is RawFile only.
 - Each autonomous VM run writes COM1 directly to runs/<run-id>/serial.log.

@@ -64,6 +64,15 @@ normal iteration.
 The VM harness rebuilds only this small layer during iteration. Networking
 remains disabled during provisioning proof.
 
+Each built OEMDRV contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
+After ISO creation the builder extracts the ISO again and verifies the complete
+regular-file hash set and symlink inventory before publishing it as the current
+artifact. The external ISO SHA-256 is then recorded in `current-build.txt`.
+
+This is a reconstructible and self-verifying build, not a promise of
+byte-for-byte identical ISO bytes across runs: build IDs and filesystem/ISO
+metadata may differ between otherwise equivalent builds.
+
 ## Local credential rule
 
 Credential values are not source-controlled inputs. The VM proof keeps them
