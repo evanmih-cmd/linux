@@ -12,6 +12,7 @@ from media import (
     verify_patchset_against_snapshot,
 )
 from rawserial import clean_text
+from runner import classify_boot_unlock
 from vbox import VBox
 
 
@@ -134,11 +135,43 @@ def _check_runtime_profile(cfg, credentials):
     return mode
 
 
+def _check_boot_unlock_classifier():
+    cases = [
+        ("Please enter TPM2 PIN:", False, "pin-prompt"),
+        ("Switching root.", True, "unlocked"),
+        (
+            "TPM2 PIN unlock failed, falling back to traditional unlocking.",
+            True,
+            "fallback",
+        ),
+        (
+            "Please enter passphrase for disk PORTABLE_WORKSTATION_SSD",
+            False,
+            "fallback",
+        ),
+        ("Please enter TPM2 PIN:", True, "pin-reprompt"),
+        ("Please enter TPM2 PIN:\nSwitching root.", True, "unlocked"),
+        (
+            "Switching root.\nPlease enter passphrase for disk unexpected",
+            True,
+            "fallback",
+        ),
+    ]
+    for text, submitted, expected in cases:
+        actual = classify_boot_unlock(text, pin_submitted=submitted)
+        if actual != expected:
+            raise RuntimeError(
+                "boot unlock classifier mismatch: "
+                f"{actual!r} != {expected!r} for {text!r}"
+            )
+
+
 def static_check(cfg=None):
     cfg = cfg or Config()
     harness_root = Path(__file__).resolve().parent
     validate_source_tree(harness_root)
     validate_profile_storage(cfg.profile)
+    _check_boot_unlock_classifier()
     _validate_relaxng(cfg, cfg.profile)
     patch_proof = verify_patchset_against_snapshot(cfg)
 
@@ -190,6 +223,7 @@ def static_check(cfg=None):
         "storage_profile_invariant": "PASS",
         "patchset_applicability": "PASS",
         "relaxng_validation": "PASS",
+        "boot_unlock_classifier": "PASS",
         "patches": patch_proof["patches"],
         "post_patch_hashes": patch_proof["post_patch_hashes"],
     }

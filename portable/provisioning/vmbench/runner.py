@@ -12,11 +12,32 @@ from invariants import (
     validate_source_tree,
 )
 from machine import reset_vm, unc
-from media import build_oemdrv, sha256
-from rawserial import RawSerialMonitor
+from media import build_oemdrv, load_credentials, sha256
+from rawserial import RawSerialMonitor, clean_text
 from vbox import VBox
 
 BOOT_SUFFIX = " console=ttyS0,115200 console=tty0 textmode=1"
+
+
+TPM_PIN_PROMPT = "Please enter TPM2 PIN:"
+BOOT_UNLOCK_SUCCESS = "Switching root."
+BOOT_UNLOCK_FALLBACK_MARKERS = (
+    "falling back to traditional unlocking.",
+    "Please enter passphrase for disk ",
+)
+
+
+def classify_boot_unlock(text, *, pin_submitted=False):
+    if any(marker in text for marker in BOOT_UNLOCK_FALLBACK_MARKERS):
+        return "fallback"
+    if BOOT_UNLOCK_SUCCESS in text:
+        return "unlocked"
+    if pin_submitted and TPM_PIN_PROMPT in text:
+        return "pin-reprompt"
+    if TPM_PIN_PROMPT in text:
+        return "pin-prompt"
+    return None
+
 
 
 def alloc_bytes(path):
@@ -59,6 +80,8 @@ class BenchRun:
             "embedded": [],
             "missing": ["recovery", "pin", "root"],
         }
+        self.boot_pin = None
+        self.post_install_boot_mark = None
         self.event("run-created", run=str(self.dir))
 
     def event(self, name, **data):
@@ -151,6 +174,16 @@ class BenchRun:
 
         built = build_oemdrv(self.cfg)
         self.credential_mode = built["credentials"]
+        credentials = load_credentials(self.cfg)
+        required = {"recovery", "pin", "root"}
+        if set(credentials) != required:
+            raise RuntimeError(
+                "final autonomous E2E requires all three VM test credentials "
+                "in the local credential file"
+            )
+        self.boot_pin = credentials["pin"]
+        if not self.boot_pin:
+            raise RuntimeError("VM test TPM PIN is empty")
         self.event(
             "credential-source",
             embedded=self.credential_mode["embedded"],
@@ -323,7 +356,12 @@ class BenchRun:
             tail = self.term.tail(60000)
 
             if current > 1024**3 and "reboot: Restarting system" in tail:
-                self.event("installer-reboot-observed", allocated=current)
+                self.post_install_boot_mark = self.term.mark()
+                self.event(
+                    "installer-reboot-observed",
+                    allocated=current,
+                    serial_mark=self.post_install_boot_mark,
+                )
                 return
 
             state = self.vm_state()
@@ -349,7 +387,9 @@ class BenchRun:
                     state=state,
                     target_allocated=current,
                 )
-                return
+                raise RuntimeError(
+                    "VM stopped before the required normal post-install reboot"
+                )
 
             time.sleep(0.25)
             now = time.time()
@@ -363,20 +403,79 @@ class BenchRun:
                 raise RuntimeError("installer aborted")
             if (
                 current > 1024**3
-                and any(
-                    marker in tail
-                    for marker in (
-                        "System halted",
-                        "Power down",
-                        "Installation has finished",
-                    )
-                )
+                and any(marker in tail for marker in ("System halted", "Power down"))
             ):
-                self.event("installer-finished-marker", allocated=current)
-                return
+                raise RuntimeError(
+                    "installer halted instead of performing the required normal reboot"
+                )
             if current > 1024**3 and now - last_progress > 300:
                 raise TimeoutError("install stalled after storage progress")
         raise TimeoutError("install timeout")
+
+    def verify_tpm_pin_unlock(self):
+        self.set_stage("boot-unlock")
+        if not self.boot_pin:
+            raise RuntimeError("no VM test TPM PIN available for boot unlock")
+        if self.post_install_boot_mark is None:
+            raise RuntimeError("installer reboot serial mark was not recorded")
+
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            data = self.term._bytes()[self.post_install_boot_mark:]
+            # Restrict classification to post-install boot bytes only.
+            clean_boot_text = clean_text(data)
+            state = classify_boot_unlock(clean_boot_text, pin_submitted=False)
+            if state == "fallback":
+                raise RuntimeError(
+                    "installed boot fell back to the traditional LUKS passphrase "
+                    "before presenting the TPM2 PIN prompt"
+                )
+            if state == "unlocked":
+                raise RuntimeError(
+                    "installed boot reached switch-root without requiring the TPM2 PIN"
+                )
+            if state == "pin-prompt":
+                self.event("tpm-pin-prompt-observed")
+                break
+            time.sleep(0.25)
+        else:
+            raise TimeoutError("installed boot did not present the TPM2 PIN prompt")
+
+        helper = VBox(self.cfg)
+        try:
+            keyboard = Keyboard(helper)
+            after_prompt = self.term.mark()
+            keyboard.text(self.boot_pin)
+            keyboard.enter()
+        finally:
+            helper.logoff()
+
+        self.event("tpm-pin-submitted")
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            text = clean_text(self.term._bytes()[after_prompt:])
+            state = classify_boot_unlock(text, pin_submitted=True)
+            if state == "fallback":
+                raise RuntimeError(
+                    "TPM2 PIN did not unlock the installed system; "
+                    "traditional LUKS fallback was requested"
+                )
+            if state == "pin-reprompt":
+                raise RuntimeError(
+                    "TPM2 PIN was rejected and the boot prompt was repeated"
+                )
+            if state == "unlocked":
+                self.event(
+                    "tpm-pin-unlock-pass",
+                    marker=BOOT_UNLOCK_SUCCESS,
+                    fallback_observed=False,
+                )
+                return
+            time.sleep(0.25)
+
+        raise TimeoutError(
+            "TPM2 PIN was submitted but installed boot never reached switch-root"
+        )
 
     def capture_failure_logs(self):
         if self.term:
@@ -449,6 +548,7 @@ class BenchRun:
             "credentials": "An AutoYaST credential dialog did not advance to the next expected marker after input.",
             "storage": "All credentials were accepted, but the target VDI did not begin substantial allocation growth; storage planning/commit did not start.",
             "installing": "Destructive storage had started, but installation did not finish or stopped making progress.",
+            "boot-unlock": "Installed boot did not prove one-shot TPM2+PIN unlock without traditional LUKS fallback.",
             "postcheck": "Installation reached postcheck, but an invariant such as guard-disk safety or substantial target content failed.",
         }.get(stage, "Harness failed during the recorded stage.")
         return {
@@ -510,6 +610,7 @@ def run(cfg=None):
         bench.answer_credentials()
         bench.wait_for_storage()
         bench.wait_install()
+        bench.verify_tpm_pin_unlock()
         post = bench.postcheck()
         bench.stage = "complete"
         bench.event("RUN_PASS")
