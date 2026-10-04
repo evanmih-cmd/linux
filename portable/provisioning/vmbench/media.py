@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from config import Config
 
@@ -112,6 +113,28 @@ def render_runtime_profile(cfg, destination, credentials):
     }
 
 
+SNAPSHOT_ISO_SHA256 = "0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99"
+
+SNAPSHOT_RPM_INPUTS = {
+    "/x86_64/yast2-bootloader-5.0.42-1.1.x86_64.rpm": (
+        "usr/share/YaST2/lib/bootloader/autoyast_converter.rb",
+        "usr/share/YaST2/lib/bootloader/bls.rb",
+        "usr/share/YaST2/lib/bootloader/systemdboot.rb",
+    ),
+    "/x86_64/yast2-storage-ng-5.0.50-1.1.x86_64.rpm": (
+        "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb",
+    ),
+    "/noarch/yast2-network-5.0.7-1.2.noarch.rpm": (
+        "usr/share/YaST2/modules/Lan.rb",
+    ),
+    "/x86_64/keyutils-1.6.3-7.9.x86_64.rpm": (
+        "usr/bin/keyctl",
+    ),
+    "/x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm": (
+        "usr/lib64/libkeyutils.so.1.10",
+    ),
+}
+
 SNAPSHOT_SOURCE_HASHES = {
     "usr/share/YaST2/lib/bootloader/autoyast_converter.rb":
         "32e1f4c5138b849333788019444b097c72fe75b5fb15d5d1fe26e31ced8d86c3",
@@ -137,11 +160,7 @@ PATCH_NAMES = (
 )
 
 
-def _verified_snapshot_source(cfg):
-    source = cfg.snapshot_instsys_source
-    if not source.is_dir():
-        raise RuntimeError(f"exact Snapshot installer source is missing: {source}")
-
+def _snapshot_source_errors(source):
     errors = []
     for relative, expected in SNAPSHOT_SOURCE_HASHES.items():
         path = source / relative
@@ -153,7 +172,132 @@ def _verified_snapshot_source(cfg):
             errors.append(
                 f"{relative}: expected {expected}, got {actual}"
             )
+    return errors
 
+
+def _rebuild_snapshot_source(cfg, source):
+    if not cfg.official_iso.is_file():
+        raise RuntimeError(f"official Snapshot ISO is missing: {cfg.official_iso}")
+
+    actual_iso = sha256(cfg.official_iso)
+    if actual_iso != SNAPSHOT_ISO_SHA256:
+        raise RuntimeError(
+            "official Snapshot ISO verification failed: "
+            f"expected {SNAPSHOT_ISO_SHA256}, got {actual_iso}"
+        )
+
+    xorriso = cfg.cache / "tools/rootless/xorriso/usr/bin/xorriso"
+    xorriso_lib = cfg.cache / "tools/rootless/xorriso/usr/lib/x86_64-linux-gnu"
+    rpm2cpio = cfg.cache / "tools/rpm-extract/root/usr/lib/rpm/rpm2cpio.sh"
+    zstd_bin = cfg.cache / "tools/rootless/zstd/root/usr/bin"
+    cpio = cfg.cache / "tools/rootless/cpio/usr/bin/cpio"
+
+    required_tools = (xorriso, rpm2cpio, zstd_bin / "unzstd", cpio)
+    missing_tools = [str(path) for path in required_tools if not path.exists()]
+    if missing_tools:
+        raise RuntimeError(
+            "Snapshot source extraction tools are missing: "
+            + ", ".join(missing_tools)
+        )
+
+    import tempfile
+
+    source.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="snapshot20260930-source-", dir=source.parent
+    ) as td:
+        work = Path(td)
+        clean = work / "clean"
+        clean.mkdir()
+        env = os.environ.copy()
+        env["LD_LIBRARY_PATH"] = str(xorriso_lib)
+        extract_env = os.environ.copy()
+        extract_env["PATH"] = (
+            f"{zstd_bin}:{cpio.parent}:" + extract_env.get("PATH", "")
+        )
+
+        for rpm_path, relative_paths in SNAPSHOT_RPM_INPUTS.items():
+            rpm_file = work / Path(rpm_path).name
+            subprocess.run(
+                [
+                    str(xorriso), "-osirrox", "on",
+                    "-indev", str(cfg.official_iso),
+                    "-extract", rpm_path, str(rpm_file),
+                ],
+                env=env,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            payload = work / (rpm_file.name + ".root")
+            payload.mkdir()
+            producer = subprocess.Popen(
+                ["/bin/sh", str(rpm2cpio), str(rpm_file)],
+                stdout=subprocess.PIPE,
+                env=extract_env,
+            )
+            try:
+                consumer = subprocess.run(
+                    [str(cpio), "-idmu", "--quiet"],
+                    cwd=payload,
+                    stdin=producer.stdout,
+                    env=extract_env,
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+            finally:
+                if producer.stdout is not None:
+                    producer.stdout.close()
+            producer_rc = producer.wait()
+            if producer_rc != 0 or consumer.returncode != 0:
+                raise RuntimeError(
+                    f"cannot extract {rpm_path}: "
+                    f"rpm2cpio={producer_rc}, cpio={consumer.returncode}, "
+                    f"stderr={consumer.stderr.decode(errors='replace')}"
+                )
+
+            for relative in relative_paths:
+                src = payload / relative
+                if not src.is_file():
+                    raise RuntimeError(
+                        f"{rpm_path} does not contain required {relative}"
+                    )
+                dst = clean / relative
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
+        (clean / "usr/lib64/libkeyutils.so.1").symlink_to(
+            "libkeyutils.so.1.10"
+        )
+
+        errors = _snapshot_source_errors(clean)
+        if errors:
+            raise RuntimeError(
+                "Snapshot20260930 source reconstructed from verified ISO "
+                "but pinned file verification failed:\n  - "
+                + "\n  - ".join(errors)
+            )
+
+        (clean / "PROVENANCE.txt").write_text(
+            "Snapshot: openSUSE Tumbleweed Snapshot20260930\n"
+            f"Official ISO SHA-256: {SNAPSHOT_ISO_SHA256}\n"
+            "Source mode: extracted directly from pinned RPM paths on the "
+            "verified official ISO.\n"
+        )
+
+        if source.exists():
+            shutil.rmtree(source)
+        shutil.copytree(clean, source, symlinks=True)
+
+
+def _verified_snapshot_source(cfg):
+    source = cfg.snapshot_instsys_source
+    errors = _snapshot_source_errors(source) if source.is_dir() else ["missing source cache"]
+    if errors:
+        _rebuild_snapshot_source(cfg, source)
+        errors = _snapshot_source_errors(source)
     if errors:
         raise RuntimeError(
             "Snapshot20260930 installer source verification failed:\n  - "

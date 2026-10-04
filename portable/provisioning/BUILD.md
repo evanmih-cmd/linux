@@ -54,7 +54,12 @@ A layer build must:
 The old `layer/oemdrv-portable-root` is not a builder input. It may remain only
 as historical/live-proof evidence. The clean source cache is
 `tools/snapshot20260930-instsys-source`; the builder verifies every consumed file
-by SHA-256 before applying any patch.
+by SHA-256 before applying any patch. If that cache is absent or inconsistent,
+the builder verifies the official Snapshot20260930 ISO SHA-256, extracts the
+five pinned RPMs directly from that ISO, reconstructs the seven stock installer
+files, verifies their pinned SHA-256 identities, and only then applies patches.
+The full ISO hash is therefore paid only on cold/recovery rebuilds, not every
+normal iteration.
 
 The VM harness rebuilds only this small layer during iteration. Networking
 remains disabled during provisioning proof.

@@ -54,7 +54,10 @@ Builder source model:
   - keyctl: a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c
   - libkeyutils.so.1.10: a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
 - all four source-controlled patches are applied during every build;
-- no prepatched OEMDRV/cache tree is consumed.
+- no prepatched OEMDRV/cache tree is consumed;
+- if the clean source cache is missing or inconsistent, the builder verifies the
+  official Snapshot20260930 ISO hash and reconstructs these stock inputs from
+  five pinned RPM paths on that ISO before patching.
 
 Installer runtime also carries stock keyctl/libkeyutils from the same verified
 Snapshot20260930 DVD. No target-system package is replaced.
