@@ -200,7 +200,7 @@ POST_PATCH_HASHES = {
     "usr/share/YaST2/lib/bootloader/autoyast_converter.rb":
         "7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612",
     "usr/share/YaST2/lib/bootloader/bls.rb":
-        "ad87d36d2e07a1ab5831f5fc0634836ffe57e3435202fe44305404435433401a",
+        "2551dac04b782921aa325f429e211b8adbbae1d36159cf101f7d781610b2d4e5",
     "usr/share/YaST2/lib/bootloader/systemdboot.rb":
         "331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58",
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
@@ -441,6 +441,21 @@ def verify_patchset_against_snapshot(cfg=None):
         bls_source = (
             inst / "usr/share/YaST2/lib/bootloader/bls.rb"
         ).read_text()
+        required_initial_tpm_prediction = (
+            'enroll_env["SDB_ADD_INITIAL_COMPONENT"] = "1"',
+            '"--devices=#{d.blk_device.name}", env: enroll_env)',
+        )
+        missing_initial_tpm_prediction = [
+            snippet
+            for snippet in required_initial_tpm_prediction
+            if snippet not in bls_source
+        ]
+        if missing_initial_tpm_prediction:
+            raise RuntimeError(
+                "installer TPM2 enrollment initial prediction invariant missing: "
+                + repr(missing_initial_tpm_prediction)
+            )
+
         systemdboot_source = (
             inst / "usr/share/YaST2/lib/bootloader/systemdboot.rb"
         ).read_text()

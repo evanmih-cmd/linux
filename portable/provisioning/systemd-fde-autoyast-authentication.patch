@@ -12,11 +12,12 @@
            device.encryption_pervasive_key_type = partition_section.crypt_pervasive_key_type
 --- a/usr/share/YaST2/lib/bootloader/bls.rb
 +++ b/usr/share/YaST2/lib/bootloader/bls.rb
-@@ -139,12 +139,20 @@
+@@ -139,18 +139,28 @@
 
          # Password used by systemd-cryptenroll to unlock the device (LUKS2)
          export_password(d.password, "cryptenroll")
 -        # Password used by sdbootutil as a recovery PIN
++        enroll_env = {}
 +        # Recovery secret used by current sdbootutil.
          if d.authentication.value == "tpm2" || d.authentication.value == "tpm2+pin"
 -          export_password(d.password, "sdbootutil")
@@ -24,6 +25,7 @@
 -        # Password used by sdbootutil as a TPM2 PIN
 -        export_password(d.password, "sdbootutil-pin") if d.authentication.value == "tpm2+pin"
 +          export_password(d.password, "sdbootutil-recovery-pin")
++          enroll_env["SDB_ADD_INITIAL_COMPONENT"] = "1"
 +        end
 +        # The short TPM2 boot PIN is a distinct secret supplied by AutoYaST/OEMDRV.
 +        if d.authentication.value == "tpm2+pin"
@@ -38,6 +40,13 @@
 
          ask_for_fido2_key(d.blk_device.name) if d.authentication.value == "fido2"
          begin
+           Yast::Execute.on_target!(SDBOOTUTIL,
+             "enroll", "--method=#{d.authentication.value}",
+-            "--devices=#{d.blk_device.name}")
++            "--devices=#{d.blk_device.name}", env: enroll_env)
+         rescue Cheetah::ExecutionFailed => e
+           Yast::Report.Error(
+             format(_(
 --- a/usr/share/YaST2/lib/y2storage/encryption.rb
 +++ b/usr/share/YaST2/lib/y2storage/encryption.rb
 @@ -333,6 +333,7 @@
