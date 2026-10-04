@@ -4,7 +4,11 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 from config import Config
-from invariants import validate_profile_storage, validate_source_tree
+from invariants import (
+    validate_profile_storage,
+    validate_proven_profile_except_software,
+    validate_source_tree,
+)
 from media import (
     load_credentials,
     render_runtime_profile,
@@ -170,6 +174,7 @@ def static_check(cfg=None):
     cfg = cfg or Config()
     harness_root = Path(__file__).resolve().parent
     validate_source_tree(harness_root)
+    validate_proven_profile_except_software(cfg.profile)
     validate_profile_storage(cfg.profile)
     _check_boot_unlock_classifier()
     _validate_relaxng(cfg, cfg.profile)
@@ -220,6 +225,7 @@ def static_check(cfg=None):
         },
         "credential_matrix_cases": len(matrix),
         "source_invariants": "PASS",
+        "proven_profile_except_software": "PASS",
         "storage_profile_invariant": "PASS",
         "patchset_applicability": "PASS",
         "relaxng_validation": "PASS",
