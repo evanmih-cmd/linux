@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import subprocess
 import xml.etree.ElementTree as ET
 
 from config import Config
@@ -25,6 +26,30 @@ def latest_serial_path(cfg):
         if path.exists():
             return path
     return None
+
+
+def _validate_relaxng(cfg, profile_path):
+    if not cfg.xmllint.is_file():
+        raise RuntimeError(f"xmllint is missing: {cfg.xmllint}")
+    if not cfg.autoyast_schema.is_file():
+        raise RuntimeError(f"AutoYaST Relax NG schema is missing: {cfg.autoyast_schema}")
+
+    proc = subprocess.run(
+        [
+            str(cfg.xmllint),
+            "--noout",
+            "--relaxng", str(cfg.autoyast_schema),
+            str(profile_path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"AutoYaST Relax NG validation failed for {profile_path}:\n"
+            + proc.stdout
+        )
 
 
 def _runtime_credential_state(profile_path):
@@ -81,6 +106,7 @@ def _check_runtime_profile(cfg, credentials):
     with TemporaryDirectory() as td:
         runtime = Path(td) / "autoinst.xml"
         mode = render_runtime_profile(cfg, runtime, credentials)
+        _validate_relaxng(cfg, runtime)
         state = _runtime_credential_state(runtime)
 
     if sorted(mode["missing"]) != sorted(expected_missing):
@@ -113,6 +139,7 @@ def static_check(cfg=None):
     harness_root = Path(__file__).resolve().parent
     validate_source_tree(harness_root)
     validate_profile_storage(cfg.profile)
+    _validate_relaxng(cfg, cfg.profile)
     patch_proof = verify_patchset_against_snapshot(cfg)
 
     actual = load_credentials(cfg)
@@ -123,6 +150,17 @@ def static_check(cfg=None):
         "pin": "123456",
         "root": "vmbench-root-test-only",
     }
+    with TemporaryDirectory() as td:
+        release_runtime = Path(td) / "release-autoinst.xml"
+        render_runtime_profile(
+            cfg,
+            release_runtime,
+            {},
+            vm_observability=False,
+            target_device="/dev/disk/by-id/usb-DESKTOP_LINUX_RELEASE_SCHEMA_PROOF",
+        )
+        _validate_relaxng(cfg, release_runtime)
+
     keys = ("recovery", "pin", "root")
     matrix = []
     for mask in range(8):
@@ -151,6 +189,7 @@ def static_check(cfg=None):
         "source_invariants": "PASS",
         "storage_profile_invariant": "PASS",
         "patchset_applicability": "PASS",
+        "relaxng_validation": "PASS",
         "patches": patch_proof["patches"],
         "post_patch_hashes": patch_proof["post_patch_hashes"],
     }

@@ -117,10 +117,12 @@ through the builder's default credential path.
 
 `bench.py check` is a static-only validation path. It does not contact or
 start VirtualBox; it checks source/storage invariants, all eight
-present/missing credential combinations on temporary runtime profiles, and the
-complete installer patchset against the pinned clean Snapshot sources. All four
-patches must apply without rejects and the five modified YaST files must match
-pinned post-patch SHA-256 identities exactly.
+present/missing credential combinations on temporary runtime profiles, the
+separate release runtime rendering, and the complete installer patchset against
+the pinned clean Snapshot sources. The canonical profile and every rendered
+profile are validated against the exact Snapshot20260930 AutoYaST Relax NG
+schema. All four patches must apply without rejects and the five modified YaST
+files must match pinned post-patch SHA-256 identities exactly.
 
 ## Observability rule
 

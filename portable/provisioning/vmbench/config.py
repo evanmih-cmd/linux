@@ -86,5 +86,16 @@ class Config:
         )
 
     @property
+    def autoyast_schema(self):
+        return self.cache / (
+            "tools/rootless/yast2-schema/usr/share/YaST2/"
+            "schema/autoyast/rng/profile.rng"
+        )
+
+    @property
+    def xmllint(self):
+        return self.cache / "tools/rootless/xmllint/root/usr/bin/xmllint"
+
+    @property
     def snapshot_instsys_source(self):
         return self.cache / "tools/snapshot20260930-instsys-source"
