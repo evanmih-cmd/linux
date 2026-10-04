@@ -17,7 +17,6 @@ Canonical source-controlled layer inputs:
   writes without requiring a live NetworkManager connection;
 - `systemd-boot-portable-layout.patch` — requests stock sdbootutil
   portable/removable layout when NVRAM updates are disabled;
-- stock `keyctl` and libkeyutils from the same verified DVD;
 - `installer-overlay-manifest.txt`.
 
 The canonical AutoYaST storage graph is explicit:
@@ -56,7 +55,7 @@ as historical/live-proof evidence. The clean source cache is
 `tools/snapshot20260930-instsys-source`; the builder verifies every consumed file
 by SHA-256 before applying any patch. If that cache is absent or inconsistent,
 the builder verifies the official Snapshot20260930 ISO SHA-256, extracts the
-five pinned RPMs directly from that ISO, reconstructs the seven stock installer
+three pinned YaST RPMs directly from that ISO, reconstructs the five stock YaST
 files, verifies their pinned SHA-256 identities, and only then applies patches.
 The full ISO hash is therefore paid only on cold/recovery rebuilds, not every
 normal iteration.
@@ -68,9 +67,9 @@ Each built OEMDRV contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
 After ISO creation the builder extracts the ISO again and verifies the complete
 regular-file hash set and symlink inventory before publishing it as the current
 artifact. A strict payload allowlist additionally requires exactly the expected
-profile/metadata files, one DUD update marker, the TPM PIN handoff, the seven
-installer-only stock/YaST files and the one libkeyutils symlink; any unexpected
-payload path fails the build. The external ISO SHA-256 is then recorded in
+profile/metadata files, one DUD update marker, the TPM PIN handoff and the five
+installer-only YaST files; the generated DUD contains no symlinks. Any
+unexpected payload path fails the build. The external ISO SHA-256 is then recorded in
 `current-build.txt`.
 
 This is a reconstructible and self-verifying build, not a promise of

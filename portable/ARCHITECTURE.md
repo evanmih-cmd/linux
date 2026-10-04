@@ -356,8 +356,6 @@ Snapshot20260930 product components remain the implementation basis:
 LUKS2/systemd-FDE, LVM, Btrfs, Snapper, systemd-boot/BLS and sdbootutil.
 Custom installer changes are limited to concrete composition gaps:
 
-- stock `keyctl`/libkeyutils from the same verified DVD are added to the
-  installer runtime for the separately entered TPM2 PIN;
 - the AutoYaST bootloader importer is corrected to retain
   `global/update_nvram=false`;
 - the explicit-drive planner is corrected to propagate the selected
@@ -367,9 +365,12 @@ Custom installer changes are limited to concrete composition gaps:
 - the bootloader path requests stock sdbootutil portable/removable mode when
   `update_nvram=false`.
 
-No target-system package is forked or replaced. Every installer-only correction
-is version-bound and should be deleted when the supported upstream product can
-express the required behavior directly.
+No target-system package is forked or replaced. The target receives stock
+`keyutils`/libkeyutils through normal product package resolution; YaST BLS uses
+that target-side `keyctl` through `Yast::Execute.on_target!`, so no keyutils
+binary or library is carried in the DUD installation-system overlay. Every
+installer-only correction is version-bound and should be deleted when the
+supported upstream product can express the required behavior directly.
 
 ### Development and release workflow
 

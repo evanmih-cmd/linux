@@ -147,12 +147,6 @@ SNAPSHOT_RPM_INPUTS = {
     "/noarch/yast2-network-5.0.7-1.2.noarch.rpm": (
         "usr/share/YaST2/modules/Lan.rb",
     ),
-    "/x86_64/keyutils-1.6.3-7.9.x86_64.rpm": (
-        "usr/bin/keyctl",
-    ),
-    "/x86_64/libkeyutils1-1.6.3-7.9.x86_64.rpm": (
-        "usr/lib64/libkeyutils.so.1.10",
-    ),
 }
 
 SNAPSHOT_SOURCE_HASHES = {
@@ -166,10 +160,6 @@ SNAPSHOT_SOURCE_HASHES = {
         "fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5",
     "usr/share/YaST2/modules/Lan.rb":
         "21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429",
-    "usr/bin/keyctl":
-        "a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c",
-    "usr/lib64/libkeyutils.so.1.10":
-        "a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e",
 }
 
 PATCH_NAMES = (
@@ -188,8 +178,6 @@ OEMDRV_STATIC_FILES = {
     "autoinst.xml",
     "linux/suse/x86_64-tw/dud.config",
     "linux/suse/x86_64-tw/inst-sys/etc/desktop-linux-tpm2-pin",
-    "linux/suse/x86_64-tw/inst-sys/usr/bin/keyctl",
-    "linux/suse/x86_64-tw/inst-sys/usr/lib64/libkeyutils.so.1.10",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/autoyast_converter.rb",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/bls.rb",
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/lib/bootloader/systemdboot.rb",
@@ -197,10 +185,7 @@ OEMDRV_STATIC_FILES = {
     "linux/suse/x86_64-tw/inst-sys/usr/share/YaST2/modules/Lan.rb",
 }
 
-OEMDRV_SYMLINKS = {
-    "linux/suse/x86_64-tw/inst-sys/usr/lib64/libkeyutils.so.1":
-        "libkeyutils.so.1.10",
-}
+OEMDRV_SYMLINKS = {}
 
 
 POST_PATCH_HASHES = {
@@ -325,10 +310,6 @@ def _rebuild_snapshot_source(cfg, source):
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
 
-        (clean / "usr/lib64/libkeyutils.so.1").symlink_to(
-            "libkeyutils.so.1.10"
-        )
-
         errors = _snapshot_source_errors(clean)
         if errors:
             raise RuntimeError(
@@ -393,10 +374,6 @@ def _copy_snapshot_instsys(source, inst):
         dst = inst / relative
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-
-    keyutils_link = inst / "usr/lib64/libkeyutils.so.1"
-    keyutils_link.symlink_to("libkeyutils.so.1.10")
-
 
 def verify_patchset_against_snapshot(cfg=None):
     cfg = cfg or Config()

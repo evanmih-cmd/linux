@@ -51,16 +51,16 @@ Builder source model:
   - systemdboot.rb: 331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58
   - autoinst_drive_planner.rb: fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5
   - Lan.rb: 21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
-  - keyctl: a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c
-  - libkeyutils.so.1.10: a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
 - all four source-controlled patches are applied during every build;
 - no prepatched OEMDRV/cache tree is consumed;
 - if the clean source cache is missing or inconsistent, the builder verifies the
   official Snapshot20260930 ISO hash and reconstructs these stock inputs from
-  five pinned RPM paths on that ISO before patching.
+  three pinned YaST RPM paths on that ISO before patching.
 
-Installer runtime also carries stock keyctl/libkeyutils from the same verified
-Snapshot20260930 DVD. No target-system package is replaced.
+The DUD carries no keyctl/libkeyutils payload. The target system receives stock
+`keyutils`/libkeyutils through normal product package resolution, and YaST BLS
+uses target-side `keyctl` via `Yast::Execute.on_target!`. No target-system
+package is replaced.
 
 Release isolation:
 - VM artifacts may embed throwaway local proof credentials and VM COM1
