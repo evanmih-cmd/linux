@@ -18,6 +18,9 @@ class Config:
     target_size_gib: int = int(
         os.environ.get("DESKTOP_LINUX_TARGET_GIB", "48")
     )
+    vm_vcpus: int = int(
+        os.environ.get("DESKTOP_LINUX_VM_VCPUS", "1")
+    )
     keep_runs: int = int(
         os.environ.get("DESKTOP_LINUX_KEEP_RUNS", "8")
     )

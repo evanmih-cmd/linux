@@ -130,6 +130,11 @@ class VBox:
         finally:
             self.unlock(session)
 
+    def cpu_count(self):
+        return int(self._vals(
+            "IMachine_getCPUCount", [("_this", self.machine)]
+        )[0])
+
     def attachments(self):
         out = []
         root = self._raw(

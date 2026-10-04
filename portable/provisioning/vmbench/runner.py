@@ -207,6 +207,17 @@ class BenchRun:
                 expected_serial,
                 "post-reset",
             )
+            actual_vcpus = post_reset.cpu_count()
+            if actual_vcpus != self.cfg.vm_vcpus:
+                raise RuntimeError(
+                    f"post-reset VM vCPU mismatch: "
+                    f"{actual_vcpus} != {self.cfg.vm_vcpus}"
+                )
+            self.event(
+                "invariant-check",
+                check="vm-vcpu-count",
+                vcpus=actual_vcpus,
+            )
         finally:
             post_reset.logoff()
         target = Path(reset["target"])

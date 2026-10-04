@@ -85,6 +85,12 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
                     operation,
                     [("_this", serial), (key, value)],
                 )
+            if cfg.vm_vcpus < 1:
+                raise RuntimeError(f"invalid VM vCPU count: {cfg.vm_vcpus}")
+            box._vals(
+                "IMachine_setCPUCount",
+                [("_this", machine), ("CPUCount", str(cfg.vm_vcpus))],
+            )
             box.save_settings(machine)
         finally:
             box.unlock(session)
