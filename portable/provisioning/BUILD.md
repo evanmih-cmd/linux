@@ -49,6 +49,25 @@ A layer build must:
 The VM harness rebuilds only this small layer during iteration. Networking
 remains disabled during provisioning proof.
 
+## Local credential rule
+
+Credential values are not source-controlled inputs. The VM proof keeps them
+only in the local proof cache. When the OEMDRV is built, the builder renders a
+runtime `autoinst.xml` from the canonical template:
+
+- present recovery and root credentials are inserted into the runtime profile
+  and their AutoYaST questions are removed;
+- a present TPM PIN is written only into the generated OEMDRV and loaded by the
+  AutoYaST pre-script into the stock `sdbootutil-tpm2-pin` keyring entry;
+- any missing value keeps its normal AutoYaST question.
+
+The runner and keyboard layers never read or type credential values. The source
+tree contains only the injection mechanism, never the values themselves.
+
+`bench.py check` is a static-only validation path. It does not contact or
+start VirtualBox; it checks source/storage invariants and all eight
+present/missing credential combinations on temporary runtime profiles.
+
 ## Observability rule
 
 Every autonomous run owns a directory under `vmbench/runs` in the proof

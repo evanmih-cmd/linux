@@ -42,6 +42,11 @@ Each run also records host-side events, preflight identities, attachments,
 guard/target hashes and NVRAM state. Screenshots are not part of correctness or
 diagnosis.
 
+Proof credentials are local inputs, not repository content. Present values are
+embedded only into the generated OEMDRV/runtime AutoYaST profile; absent values
+remain ordinary AutoYaST prompts. The harness itself never types credential
+values.
+
 ## Provisioning gates
 
 1. The verified official ISO plus OEMDRV installs with guest networking

@@ -42,7 +42,7 @@ I/O base 0x3f8
 IRQ 4
 UART 16550A
 host mode RawFile
-host path \\wsl.localhost\runner02\home\github-runner\.cache\desktop-linux\vbox-proof\<run>-serial.log
+host path \\wsl.localhost\runner02\home\github-runner\.cache\desktop-linux\vbox-proof\bench\runs\<run-id>\serial.log
 ```
 
 VirtualBox writes the raw UART byte stream directly into the WSL proof cache.
@@ -60,11 +60,12 @@ Please press 't' to show the boot menu on this console
 and defines a hidden `t` hotkey that switches GRUB output to the serial
 console. Installer boots therefore use this deterministic sequence:
 
-1. press `t` and require the complete GRUB menu to appear in the UART log;
-2. press `e` and require the edit buffer to appear in the UART log;
-3. append `console=ttyS0,115200 textmode=1` to the exact kernel line;
-4. reconstruct the ANSI terminal screen and verify the edited kernel line;
-5. only then press Ctrl+X.
+1. wait for the GRUB serial hotkey prompt;
+2. press `t`, enter the selected boot entry editor and append
+   `console=ttyS0,115200 textmode=1`;
+3. press Ctrl+X;
+4. require the installer kernel/Hardware-detection serial milestone or fail the
+   run.
 
 SUSE documents `console=ttyS0` as the headless AutoYaST serial-console path
 and `textmode=1` as the text YaST path.
@@ -83,8 +84,7 @@ For every gate collect, as applicable:
 - VBox log;
 - guard VDI SHA-256 before and after;
 - target VDI SHA-256 before and after;
-- powered-off GPT/LUKS/ESP read-back;
-- screenshot only at named milestones or errors.
+- powered-off GPT/LUKS/ESP read-back.
 
 ## Stall rule
 
@@ -103,10 +103,22 @@ Early boot has a stricter harness timeout: serial output must appear within
 
 VM proof uses throwaway credentials that are not production credentials.
 
-They are stored only in the local proof cache with mode 0600 and are not
-committed to git. The same credentials are reused across a single proof cycle
-so recovery-passphrase, TPM-PIN and root-login behavior can be tested
-deterministically.
+Credential values are stored only in the local proof cache and are never
+committed to git. Before a run, the OEMDRV builder renders a runtime
+`autoinst.xml` from the source-controlled template:
+
+- a present recovery passphrase is written into the runtime LUKS `crypt_key`
+  and its AutoYaST question is removed;
+- a present root password is written into the runtime root-user profile and its
+  AutoYaST question is removed;
+- a present TPM PIN is carried as a local OEMDRV file and the pre-script loads
+  it into the stock `sdbootutil-tpm2-pin` keyring entry; its question is
+  removed;
+- any missing value keeps its normal AutoYaST password question.
+
+The harness never types credential values through VirtualBox keyboard
+injection. Keyboard control is limited to deterministic installer/GRUB
+navigation.
 
 ## Gate 0 — harness sanity
 
@@ -132,25 +144,18 @@ Procedure:
 PASS:
 
 - serial transcript shows kernel output, linuxrc, installation-system loading,
-  YaST startup and the source-controlled AutoYaST recovery-credential ask within
-  the timeout.
+  YaST startup and `VMBENCH_PROFILE_READY` within the timeout;
+- when all three local proof credentials exist, no credential prompt is
+  expected;
+- when one or more values are absent, only those missing values remain as
+  ordinary AutoYaST password prompts.
 
 FAIL:
 
-- any required serial milestone is absent within its timeout.
-
-Gate 0 passed live on 2026-10-02. The proof transcript reached:
-
-```text
-openSUSE Tumbleweed installation program v9.6
-Loading Installation System (1/6) ... (6/6)
-starting yast...
-*** Starting YaST ***
-Portable workstation recovery credential
-Enter the LUKS recovery passphrase
-```
-
-No provisioning credential was entered during Gate 0.
+- any required serial milestone is absent within its timeout;
+- the runtime profile exposes a prompt for a credential that was present in the
+  local credential source;
+- the harness attempts to type a credential value itself.
 
 No provisioning gate is run until Gate 0 passes.
 
@@ -186,12 +191,15 @@ Inputs:
 Procedure:
 
 1. capture guard/target/NVRAM baselines;
-2. boot via Gate-0 serial method;
-3. answer the three AutoYaST questions over the serial console;
-4. require visible serial milestones through storage proposal, package install,
+2. build the local OEMDRV, embedding every credential present in the host-side
+   credential file and retaining AutoYaST prompts only for missing values;
+3. boot via Gate-0 serial method;
+4. if any credential is missing, enter only that missing value through the
+   normal AutoYaST UI; the harness remains passive;
+5. require visible serial milestones through storage proposal, package install,
    target configuration and bootloader installation;
-5. expect the AutoYaST final-halt outcome;
-6. power off only after a final-halt/error milestone or a defined stall.
+6. stop the first installer reboot before the attached installer media can
+   start AutoYaST a second time.
 
 PASS requires all of:
 
