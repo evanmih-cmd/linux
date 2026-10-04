@@ -50,16 +50,18 @@ In particular, the frozen critical-path choices are:
 - boot: Secure Boot through the supported shim + systemd-boot/BLS/sdbootutil
   path, with removable fallback boot artifacts and no persistent host boot-order
   dependency;
-- root encryption: LUKS2 using the supported systemd-FDE path;
-- root filesystem and snapshot layer: **Btrfs + Snapper**;
+- storage: GPT with an unencrypted EFI System Partition plus one outer LUKS2
+  container;
+- encrypted payload: **LUKS2 -> LVM VG `system`**;
+- root LV: **Btrfs + Snapper**; Btrfs remains the snapshot/rollback layer;
+- home LV: persistent `/home` state, currently XFS in the proof profile;
+- swap LV: disk-backed swap inside the same outer encrypted container;
 - system-update transaction layer: **transactional-update on Btrfs snapshots**;
-- persistent user/application state: Btrfs-backed state excluded from normal
-  root rollback according to the supported Tumbleweed layout;
 - provisioning: verified official Offline ISO plus a separately verifiable
   Desktop-Linux OEMDRV/AutoYaST layer;
 - target selection: exact persistent target identity and fail-closed behavior;
-- **no LVM, LVM-thin, ZFS, mdraid, or second snapshot/storage abstraction in
-  the portable root stack.**
+- no nested per-LV LUKS containers, LVM-thin snapshot layer, ZFS, mdraid, or
+  second rollback abstraction.
 
 A frozen choice may be changed only when:
 
@@ -155,28 +157,21 @@ host is not part of the trusted normal workflow.
 
 ### Single-credential unlock invariant
 
-Encrypted secondary volumes must not create additional interactive
-authentication steps. The owner authenticates the workstation **once per boot
-path**, regardless of how many LUKS2 volumes the supported storage layout
-contains.
+The workstation has one encrypted payload boundary: the outer LUKS2 container.
+The owner authenticates that container once per boot path.
 
 Required behavior:
 
-- normal primary-host boot asks for the TPM2 PIN at most once; after that
-  `cr_root` and encrypted swap must unlock without another PIN or passphrase
-  prompt;
-- emergency/recovery boot asks for the owner LUKS passphrase at most once;
-  the same cached passphrase must unlock `cr_root` and encrypted swap;
-- root unlock is the credential-establishing operation and must precede
-  secondary encrypted-volume unlocks;
-- separate LUKS2 containers do not imply separate owner credentials;
-- a second interactive prompt for encrypted swap is a boot failure, not an
-  accepted user workflow.
+- normal primary-host boot asks for the TPM2 PIN once and unlocks the outer
+  LUKS2 container;
+- emergency/recovery boot asks for the owner recovery passphrase once and
+  unlocks the same outer LUKS2 container;
+- after that unlock, the LVM PV/VG and root, home and swap LVs require no
+  additional cryptographic credential;
+- an additional passphrase/PIN prompt for root, home or swap is a boot failure.
 
-This relies on the supported systemd cryptsetup credential cache. The storage
-graph remains unchanged: the fix for an unlock-ordering defect must not
-introduce LVM, merge state boundaries, or replace the stock encrypted-swap
-layout merely to avoid a second prompt.
+Credential handling follows the single outer encryption boundary; individual
+LVs do not create independent unlock paths.
 
 ### Emergency portability path
 
@@ -233,67 +228,44 @@ The selected storage model is:
 ```text
 removable SSD
 └── GPT
-    ├── EFI System Partition (unencrypted boot partition)
-    │   └── shim / systemd-boot / BLS boot artifacts
-    ├── LUKS2 root container
-    │   └── Btrfs
-    │       ├── root/system state
-    │       │   └── Snapper + transactional-update snapshots
-    │       └── persistent user/application state
-    │           └── excluded from normal root rollback by the supported layout
-    └── encrypted swap when created by the supported Tumbleweed guided layout
+    ├── EFI System Partition
+    │   └── shim / systemd-boot / BLS removable boot artifacts
+    └── outer LUKS2 container
+        └── LVM VG system
+            ├── root LV
+            │   └── Btrfs
+            │       └── Snapper + transactional-update snapshots
+            ├── home LV
+            │   └── persistent /home state
+            └── swap LV
+                └── disk-backed swap
 ```
 
-**There is no LVM layer in this graph.** Btrfs is both the root filesystem and
-the snapshot substrate. Snapper and `transactional-update` operate on Btrfs
-snapshots; LVM snapshots are neither required nor permitted by the frozen
-architecture.
+LVM is an intentional part of the architecture. Its job is volume separation
+and sizing **inside one encrypted container**. It is not the snapshot layer.
+Root recovery and transactional updates remain Btrfs/Snapper operations.
 
-### LVM decision record
+The outer LUKS2 container carries both supported unlock paths: TPM2+PIN for the
+normal enrolled host and the owner recovery passphrase for emergency
+portability. Root, home and swap therefore share one encryption boundary and do
+not create independent credential prompts.
 
-LVM has been considered twice and rejected twice:
-
-1. In the earlier Ubuntu/Subiquity prototype it was introduced because Curtin
-   could express LVM/ext4 preserve/reformat boundaries declaratively while it
-   could not express the desired Btrfs-subvolume lifecycle. That changed the
-   architecture to fit the installer and was reverted as an implementation
-   error.
-2. During the later openSUSE/Agama design work LVM was reconsidered in
-   discussion as a convenient declarative state/snapshot separation mechanism.
-   The committed Agama VM profile itself did not encode LVM: it delegated to
-   Tumbleweed `partitions: default` under LUKS2. The LVM idea was nevertheless
-   another installer-driven design detour and was not accepted. Tumbleweed
-   already provides Btrfs/Snapper as its native snapshot/recovery layer, and
-   `transactional-update` is built around Btrfs snapshots. Adding LVM would
-   duplicate the storage/snapshot abstraction without satisfying a requirement
-   that Btrfs cannot satisfy.
-
-Neither episode establishes an LVM requirement. Reintroducing LVM requires the
-architecture-unfreeze process above and concrete evidence that the frozen
-Btrfs/Snapper design cannot satisfy an authoritative requirement.
-
-The installer may choose partition sizes appropriate to the physical target and
-may create encrypted swap according to the supported Tumbleweed guided layout.
-Those sizing details do not change the storage architecture. The VM proof's
-observed ESP + LUKS2/Btrfs root + encrypted-swap layout is therefore an
-implementation of this graph, not a new architecture.
+The current AutoYaST profile uses a Btrfs root LV, an XFS home LV and a swap LV.
+Those roles are explicit provisioning inputs; the installer must not silently
+substitute a different storage topology.
 
 Required invariants:
 
 - only the removable SSD contains required workstation state;
-- user/browser state must not roll back automatically with a system rollback;
+- the ESP is outside encryption so firmware can reach the removable Secure Boot
+  path;
+- all non-ESP workstation state is inside one outer LUKS2 container;
+- LVM is inside LUKS2, never outside it;
 - root/system state uses Btrfs snapshots for recovery;
-- Snapper rollback and transactional updates share the Btrfs snapshot layer;
-- snapshots are rollback points, not backups;
-- no LVM, LVM-thin, ZFS, mdraid, or additional snapshot/storage abstraction is
-  introduced without first unfreezing the architecture through the process
-  defined above;
-- do not recreate the earlier owner-designed Ubuntu subvolume topology merely
-  for aesthetic symmetry; use the supported Tumbleweed Btrfs/Snapper layout.
-
-Normal browser profile and user state should live in the distribution-supported
-persistent user-state area (normally `/home`) rather than in a custom
-persistence framework.
+- persistent `/home` state does not roll back with normal root rollback;
+- swap is an LV inside the same encrypted container, not a second LUKS device;
+- LVM snapshots/LVM-thin, nested LUKS, ZFS and mdraid are not part of the
+  architecture unless explicitly approved later.
 
 ## Provisioning
 
@@ -373,43 +345,31 @@ path.
 ### Tumbleweed Offline Image + AutoYaST
 
 The official Tumbleweed Offline Image is the immutable upstream base. YaST /
-AutoYaST remains the provisioning mechanism.
+AutoYaST is the provisioning mechanism.
 
-The Desktop-Linux profile owns the persistent target identity and policy
-inputs, while storage topology remains delegated to the normal Tumbleweed
-guided proposal for that one selected drive. Snapshot20260930 product defaults
-provide `systemd_fde`, `argon2id`, `tpm2+pin`, Btrfs and Snapper.
+The canonical Desktop-Linux profile owns the complete storage topology for the
+exact removable target: GPT, ESP, one outer `systemd_fde` LUKS2 container,
+LVM VG `system`, Btrfs root LV, persistent home LV and swap LV. The profile
+owns this topology explicitly and the installer must reproduce it exactly.
 
-Three small installer-time gaps remain in Snapshot20260930:
+Snapshot20260930 product components remain the implementation basis:
+LUKS2/systemd-FDE, LVM, Btrfs, Snapper, systemd-boot/BLS and sdbootutil.
+Custom installer changes are limited to concrete composition gaps:
 
-- the installer runtime lacks `keyctl`, required to place the separately
-  entered TPM2 PIN into the sdbootutil-specific kernel keyring entry;
-- the systemd-boot AutoYaST importer omits `global/update_nvram`, although the
-  runtime bootloader object supports the setting;
-- when AutoYaST writes a NetworkManager target configuration with
-  `apply_config=false`, `Lan.Write` still waits for a running network and raises
-  a modal `No network running` error. That is inappropriate for the offline
-  target-chroot write path and breaks unattended installation.
+- stock `keyctl`/libkeyutils from the same verified DVD are added to the
+  installer runtime for the separately entered TPM2 PIN;
+- the AutoYaST bootloader importer is corrected to retain
+  `global/update_nvram=false`;
+- the explicit-drive planner is corrected to propagate the selected
+  `systemd_fde` authentication mode into the planned encrypted device;
+- the offline NetworkManager target-write path is corrected so it does not
+  require a live network when only writing target configuration;
+- the bootloader path requests stock sdbootutil portable/removable mode when
+  `update_nvram=false`.
 
-The Desktop-Linux layer therefore currently owns:
-
-```text
-autoinst.xml
-stock keyctl + libkeyutils from the same verified Snapshot20260930 DVD
-minimal installer-only AutoYaST importer correction for update_nvram=false
-minimal installer-only NetworkManager target-write correction
-manifest of all layer files and hashes
-```
-
-No installed Tumbleweed package is forked or replaced. Both YaST corrections
-are installer-only, version-specific, and must be deleted when upstream supplies
-the required behavior. The network correction preserves the product-selected
-NetworkManager backend; it only suppresses the running-network check when YaST
-was explicitly asked to write target configuration without applying it.
-
-The exact supported installer-side transport for the separate local layer is a
-live proof item. The architectural requirement is the two-layer trust model;
-it does not require repacking the upstream ISO.
+No target-system package is forked or replaced. Every installer-only correction
+is version-bound and should be deleted when the supported upstream product can
+express the required behavior directly.
 
 ### Development and release workflow
 

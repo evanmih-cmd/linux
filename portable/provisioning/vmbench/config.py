@@ -51,7 +51,7 @@ class Config:
 
     @property
     def profile(self):
-        return self.repo / "portable/provisioning/autoinst-vm-proof-lvm.xml"
+        return self.repo / "portable/provisioning/autoinst-vm-proof.xml"
 
     @property
     def planner_patch(self):
