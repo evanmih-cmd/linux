@@ -43,14 +43,27 @@ def validate_source_tree(root):
                     f"{line.strip()}"
                 )
 
+        if path.name in ("runner.py", "keyboard.py"):
+            secret_input = re.compile(
+                r"cfg\.credentials|submit_password|def\s+fill\s*\(",
+                re.IGNORECASE,
+            )
+            for lineno, line in enumerate(source.splitlines(), 1):
+                if secret_input.search(line):
+                    violations.append(
+                        f"{path.name}:{lineno}: forbidden credential-typing path: "
+                        f"{line.strip()}"
+                    )
+
     if violations:
         detail = "\n  - ".join(violations)
         raise BenchInvariantError(
             "VM bench invariant violation detected before reset/build/launch.\n"
             f"  - {detail}\n"
-            f"Reason: {WHY_TCP_IS_FORBIDDEN}\n"
-            "Required fix: remove the TCP serial path and keep COM1 on RawFile "
-            "to the bench serial.log, then rerun bench.py run."
+            "Required policies: COM1 is RawFile-only; installer secrets are "
+            "embedded only by media.py into the generated local OEMDRV or are "
+            "entered manually by AutoYaST when absent. runner.py/keyboard.py "
+            "must never type credentials."
         )
 
 
@@ -76,7 +89,7 @@ def validate_profile_storage(profile_path):
         else:
             esp, outer = parts
             for key, expected in {
-                "mount": "/boot",
+                "mount": "/boot/efi",
                 "filesystem": "vfat",
                 "format": "true",
                 "size": "1GiB",
@@ -119,7 +132,7 @@ def validate_profile_storage(profile_path):
         raise BenchInvariantError(
             "VM bench storage-profile invariant violation before build/reset/launch.\n"
             f"  - {detail}\n"
-            "Required topology: GPT -> 1GiB vfat ESP mounted at /boot + "
+            "Required topology: GPT -> 1GiB vfat ESP mounted at /boot/efi + "
             "outer systemd_fde LUKS2 -> LVM VG system -> root/home/swap."
         )
 

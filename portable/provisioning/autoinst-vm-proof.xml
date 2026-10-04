@@ -96,7 +96,7 @@ unset VAL
       <disklabel>gpt</disklabel>
       <partitions config:type="list">
         <partition>
-          <mount>/boot</mount>
+          <mount>/boot/efi</mount>
           <filesystem config:type="symbol">vfat</filesystem>
           <format config:type="boolean">true</format>
           <size>1GiB</size>

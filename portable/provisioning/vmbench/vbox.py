@@ -291,7 +291,7 @@ class VBox:
         return f"resultCode={code} text={text}"
 
     def poweroff(self):
-        if self.state() != "Running":
+        if self.state() not in ("Running", "Paused"):
             return
         session = self.lock("Shared")
         try:

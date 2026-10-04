@@ -55,7 +55,10 @@ class BenchRun:
         self.pre = {}
         self.nvram_before = None
         self.last_event = None
-        self.credentials = json.loads(self.cfg.credentials.read_text())
+        self.credential_mode = {
+            "embedded": [],
+            "missing": ["recovery", "pin", "root"],
+        }
         self.event("run-created", run=str(self.dir))
 
     def event(self, name, **data):
@@ -67,6 +70,27 @@ class BenchRun:
     def set_stage(self, stage):
         self.stage = stage
         self.event("stage", stage_name=stage)
+
+    def vm_state(self):
+        if self.box:
+            try:
+                return self.box.state()
+            except Exception as exc:
+                self.event("vbox-state-refresh", error=repr(exc))
+        helper = VBox(self.cfg)
+        try:
+            return helper.state()
+        finally:
+            helper.logoff()
+
+    def poweroff_if_running(self):
+        helper = VBox(self.cfg)
+        try:
+            if helper.state() in ("Running", "Paused"):
+                helper.poweroff()
+                self.event("powered-off-after-evidence")
+        finally:
+            helper.logoff()
 
     def snapshot_nvram(self, name):
         helper = VBox(self.cfg)
@@ -121,7 +145,7 @@ class BenchRun:
                 "pre-run",
             )
             state = control.state()
-            if state == "Running":
+            if state in ("Running", "Paused"):
                 self.event("teardown-stale-vm", state=state)
                 control.poweroff()
                 state = control.state()
@@ -135,6 +159,12 @@ class BenchRun:
             raise RuntimeError(f"low free space: {free}")
 
         built = build_oemdrv(self.cfg)
+        self.credential_mode = built["credentials"]
+        self.event(
+            "credential-source",
+            embedded=self.credential_mode["embedded"],
+            missing=self.credential_mode["missing"],
+        )
         reset = reset_vm(
             built["iso"],
             self.cfg,
@@ -165,6 +195,8 @@ class BenchRun:
             "target_allocated": alloc_bytes(target),
             "guard_sha256": sha256(guard),
             "free_bytes": free,
+            "credentials_embedded": self.credential_mode["embedded"],
+            "credentials_missing": self.credential_mode["missing"],
         }
         (self.dir / "preflight.json").write_text(
             json.dumps(self.pre, indent=2, sort_keys=True) + "\n"
@@ -224,82 +256,50 @@ class BenchRun:
             timeout=240,
         )
         self.term.wait_any(
-            "VMBENCH_RECOVERY_READY",
+            "VMBENCH_PROFILE_READY",
             timeout=480,
         )
-        self.event("installer-ready", marker="VMBENCH_RECOVERY_READY")
-
-    def submit_password(self, marker, label, value, next_markers, timeout):
-        self.term.wait_any(marker, timeout=240)
-        mark = self.term.mark()
-        helper = VBox(self.cfg)
-        try:
-            keyboard = Keyboard(helper)
-            keyboard.tab()
-            keyboard.text(value)
-            keyboard.tab()
-            keyboard.text(value)
-            keyboard.f10()
-        finally:
-            helper.logoff()
-        return self.term.wait_any(
-            next_markers, timeout=timeout, new_since=mark
-        )
+        self.event("installer-ready", marker="VMBENCH_PROFILE_READY")
 
     def answer_credentials(self):
         self.set_stage("credentials")
-        got = self.submit_password(
-            "VMBENCH_RECOVERY_READY",
-            "recovery",
-            self.credentials["recovery"],
-            [
-                "VMBENCH_TPM_READY",
-                "the passwords do not match",
-                "Error",
-            ],
-            timeout=120,
-        )
-        if got != "VMBENCH_TPM_READY":
-            raise RuntimeError(f"recovery credential failed: {got}")
-
-        got = self.submit_password(
-            "VMBENCH_TPM_READY",
-            "pin",
-            self.credentials["pin"],
-            [
-                "VMBENCH_ROOT_READY",
-                "User script store-tpm2-pin failed",
-                "the passwords do not match",
-                "Error",
-            ],
-            timeout=120,
-        )
-        if got != "VMBENCH_ROOT_READY":
-            raise RuntimeError(f"TPM PIN credential failed: {got}")
-
-        got = self.submit_password(
-            "VMBENCH_ROOT_READY",
-            "root",
-            self.credentials["root"],
-            [
-                "VMBENCH_STORAGE_READY",
-                "Installation has been aborted",
-                "No proposal",
-                "Error",
-            ],
-            timeout=240,
-        )
-        if got != "VMBENCH_STORAGE_READY":
-            raise RuntimeError(f"root/storage transition failed: {got}")
-        self.event("credentials-accepted", next_marker=got)
+        missing = list(self.credential_mode["missing"])
+        embedded = list(self.credential_mode["embedded"])
+        if missing:
+            self.event(
+                "manual-credential-required",
+                missing=missing,
+                embedded=embedded,
+                why=(
+                    "Only credentials absent from the host-side credentials file "
+                    "remain as normal AutoYaST prompts. The harness does not type secrets."
+                ),
+            )
+        else:
+            self.event(
+                "credentials-embedded",
+                embedded=embedded,
+                why="All installer credentials are carried by the generated OEMDRV.",
+            )
 
     def wait_for_storage(self):
         self.set_stage("storage")
         target = self.cfg.bench / "target.vdi"
         baseline = alloc_bytes(target)
-        deadline = time.time() + 300
+        deadline = time.time() + (1800 if self.credential_mode["missing"] else 300)
+        paused_since = None
         while time.time() < deadline:
-            if self.box.state() != "Running":
+            state = self.vm_state()
+            if state == "Paused":
+                if paused_since is None:
+                    paused_since = time.time()
+                    self.event("vm-transient-paused", phase="storage")
+                elif time.time() - paused_since > 30:
+                    raise TimeoutError("VM remained paused for more than 30 seconds during storage")
+                time.sleep(0.5)
+                continue
+            paused_since = None
+            if state != "Running":
                 break
             time.sleep(0.25)
             current = alloc_bytes(target)
@@ -320,16 +320,43 @@ class BenchRun:
         target = self.cfg.bench / "target.vdi"
         last_alloc = alloc_bytes(target)
         last_progress = time.time()
+        paused_since = None
         deadline = time.time() + 1800
         while time.time() < deadline:
-            state = self.box.state()
+            now = time.time()
+            current = alloc_bytes(target)
+            tail = self.term.tail(60000)
+
+            if current > 1024**3 and "reboot: Restarting system" in tail:
+                self.event("installer-reboot-detected", allocated=current)
+                self.poweroff_if_running()
+                return
+
+            state = self.vm_state()
+            if state == "Paused":
+                if paused_since is None:
+                    paused_since = now
+                    self.event(
+                        "vm-transient-paused",
+                        phase="installing",
+                        target_allocated=current,
+                    )
+                elif now - paused_since > 30:
+                    raise TimeoutError(
+                        "VM remained paused for more than 30 seconds during installation"
+                    )
+                time.sleep(0.5)
+                continue
+            paused_since = None
+
             if state != "Running":
                 self.event(
                     "vm-stopped",
                     state=state,
-                    target_allocated=alloc_bytes(target),
+                    target_allocated=current,
                 )
                 return
+
             time.sleep(0.25)
             now = time.time()
             current = alloc_bytes(target)
@@ -368,7 +395,7 @@ class BenchRun:
         self.set_stage("postcheck")
         target = self.cfg.bench / "target.vdi"
         post = {
-            "vm_state": self.box.state() if self.box else None,
+            "vm_state": self.vm_state(),
             "target_sha256": sha256(target),
             "target_allocated": alloc_bytes(target),
             "guard_sha256": sha256(self.cfg.guard),
@@ -473,7 +500,10 @@ class BenchRun:
                     self.box.unlock(self.launch_session)
             except Exception:
                 pass
-            self.box.logoff()
+            try:
+                self.box.logoff()
+            except Exception:
+                pass
         self.events.close()
 
 
@@ -509,7 +539,7 @@ def run(cfg=None):
         except Exception as post_exc:
             post = {
                 "postcheck_error": repr(post_exc),
-                "vm_state": bench.box.state() if bench.box else None,
+                "vm_state": bench.vm_state(),
             }
         bench.stage = failure_stage
         result = bench.result(
@@ -532,12 +562,10 @@ def run(cfg=None):
             ),
             flush=True,
         )
-        if bench.box and bench.box.state() == "Running":
-            try:
-                bench.box.poweroff()
-                bench.event("powered-off-after-evidence")
-            except Exception as power_exc:
-                bench.event("poweroff-error", error=repr(power_exc))
+        try:
+            bench.poweroff_if_running()
+        except Exception as power_exc:
+            bench.event("poweroff-error", error=repr(power_exc))
         return result
     finally:
         bench.close()

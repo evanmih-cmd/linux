@@ -1,7 +1,4 @@
-import json
 import time
-
-from config import Config
 
 
 KEY = {
@@ -117,12 +114,3 @@ class Keyboard:
 
         self._with_keyboard(action)
         time.sleep(0.4)
-
-    def fill(self, name, cfg=None):
-        cfg = cfg or Config()
-        value = json.loads(cfg.credentials.read_text())[name]
-        self.tab()
-        self.text(value)
-        self.tab()
-        self.text(value)
-        self.f10()
