@@ -13,7 +13,7 @@ KEY = {
     "4": 0x05, "5": 0x06, "6": 0x07, "7": 0x08,
     "8": 0x09, "9": 0x0a,
     " ": 0x39, "/": 0x35, ".": 0x34, "-": 0x0c,
-    ",": 0x33, "=": 0x0d,
+    ",": 0x33, ";": 0x27, "=": 0x0d,
 }
 SHIFTED = {">": 0x34, "|": 0x2b, ":": 0x27}
 
@@ -44,6 +44,20 @@ class Keyboard:
         self._scancode(keyboard, code | 0x80)
         time.sleep(0.035)
 
+    def _text_scancodes(self, text):
+        codes = []
+        for char in text:
+            if char.isupper():
+                code = KEY[char.lower()]
+                codes.extend((0x2a, code, code | 0x80, 0xaa))
+            elif char in SHIFTED:
+                code = SHIFTED[char]
+                codes.extend((0x2a, code, code | 0x80, 0xaa))
+            else:
+                code = KEY[char]
+                codes.extend((code, code | 0x80))
+        return codes
+
     def text(self, text):
         def action(keyboard):
             for char in text:
@@ -57,6 +71,24 @@ class Keyboard:
                     self._scancode(keyboard, 0xaa)
                 else:
                     self._press(keyboard, KEY[char])
+        self._with_keyboard(action)
+
+    def text_fast(self, text, chunk_size=12):
+        codes = self._text_scancodes(text)
+
+        def action(keyboard):
+            for start in range(0, len(codes), chunk_size):
+                chunk = codes[start:start + chunk_size]
+                pairs = [("_this", keyboard)]
+                pairs.extend(("scancodes", code) for code in chunk)
+                result = self.box._vals("IKeyboard_putScancodes", pairs)
+                accepted = int(result[0]) if result else 0
+                if accepted != len(chunk):
+                    raise RuntimeError(
+                        f"VirtualBox accepted {accepted} of {len(chunk)} scancodes"
+                    )
+                time.sleep(0.03)
+
         self._with_keyboard(action)
 
     def enter(self):
