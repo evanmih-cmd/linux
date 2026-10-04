@@ -31,20 +31,33 @@ Canonical source-controlled installer inputs:
 
 4. networkmanager-offline-write.patch
    SHA-256:
-   bdaf13fca7f7a27cf15f9232fe28cd41d6e657a6ca3f69c94e15e67b4934a073
+   590c9e0bb9672e973416b2aed5ecafd3ff65822fd9cd012645d4c1db147f53b2
    Purpose:
    write NetworkManager target configuration offline without requiring a live
    installer network connection.
 
 5. systemd-boot-portable-layout.patch
    SHA-256:
-   056bfbc22722150dad8e1c09dfb668ad1c7afd10f5a9540bc5f2e108bb9440e9
+   6ed90bd9aa446f73ea7d121d19bc4145a953d415c2ffcd58b32b8afdde825852
    Purpose:
    request stock sdbootutil portable/removable layout when NVRAM updates are
    disabled.
 
-Installer runtime also carries stock keyctl/libkeyutils extracted from the same
-verified Snapshot20260930 DVD. No target-system package is replaced.
+Builder source model:
+- clean exact Snapshot20260930 installer files are verified before use;
+- pinned stock source SHA-256 identities:
+  - autoyast_converter.rb: 32e1f4c5138b849333788019444b097c72fe75b5fb15d5d1fe26e31ced8d86c3
+  - bls.rb: 8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743
+  - systemdboot.rb: 331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58
+  - autoinst_drive_planner.rb: fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5
+  - Lan.rb: 21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
+  - keyctl: a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c
+  - libkeyutils.so.1.10: a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e
+- all four source-controlled patches are applied during every build;
+- no prepatched OEMDRV/cache tree is consumed.
+
+Installer runtime also carries stock keyctl/libkeyutils from the same verified
+Snapshot20260930 DVD. No target-system package is replaced.
 
 Observability:
 - VirtualBox COM1 host mode is RawFile only.

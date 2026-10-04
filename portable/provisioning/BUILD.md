@@ -39,12 +39,22 @@ No second AutoYaST storage architecture is retained in the working tree.
 A layer build must:
 
 1. parse and validate the canonical AutoYaST profile;
-2. use only the verified Snapshot20260930 installer/runtime inputs;
-3. apply only the source-controlled, version-bound installer corrections;
-4. place `autoinst.xml` at OEMDRV root and installer updates under the
+2. start from clean Snapshot20260930 installer/runtime files whose SHA-256
+   identities are pinned by the builder;
+3. fail closed if any stock source file is missing or differs from the pinned
+   Snapshot identity;
+4. apply all four source-controlled installer patches from scratch, with no
+   prepatched OEMDRV/cache tree as an input;
+5. place `autoinst.xml` at OEMDRV root and installer updates under the
    standard YaST DUD tree;
-5. build the small OEMDRV artifact;
-6. record the profile/patch hashes and built artifact identity before VM boot.
+6. build the small OEMDRV artifact;
+7. record the profile hash, aggregate patchset hash, each patch hash and built
+   artifact identity before VM boot.
+
+The old `layer/oemdrv-portable-root` is not a builder input. It may remain only
+as historical/live-proof evidence. The clean source cache is
+`tools/snapshot20260930-instsys-source`; the builder verifies every consumed file
+by SHA-256 before applying any patch.
 
 The VM harness rebuilds only this small layer during iteration. Networking
 remains disabled during provisioning proof.

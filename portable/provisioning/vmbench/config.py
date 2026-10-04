@@ -59,3 +59,28 @@ class Config:
             "portable/provisioning/"
             "systemd-fde-autoyast-authentication.patch"
         )
+
+    @property
+    def update_nvram_patch(self):
+        return self.repo / (
+            "portable/provisioning/"
+            "systemd-boot-update-nvram.patch"
+        )
+
+    @property
+    def network_patch(self):
+        return self.repo / (
+            "portable/provisioning/"
+            "networkmanager-offline-write.patch"
+        )
+
+    @property
+    def portable_layout_patch(self):
+        return self.repo / (
+            "portable/provisioning/"
+            "systemd-boot-portable-layout.patch"
+        )
+
+    @property
+    def snapshot_instsys_source(self):
+        return self.cache / "tools/snapshot20260930-instsys-source"

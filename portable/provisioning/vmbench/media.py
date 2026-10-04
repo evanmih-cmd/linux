@@ -112,13 +112,104 @@ def render_runtime_profile(cfg, destination, credentials):
     }
 
 
+SNAPSHOT_SOURCE_HASHES = {
+    "usr/share/YaST2/lib/bootloader/autoyast_converter.rb":
+        "32e1f4c5138b849333788019444b097c72fe75b5fb15d5d1fe26e31ced8d86c3",
+    "usr/share/YaST2/lib/bootloader/bls.rb":
+        "8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743",
+    "usr/share/YaST2/lib/bootloader/systemdboot.rb":
+        "331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58",
+    "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
+        "fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5",
+    "usr/share/YaST2/modules/Lan.rb":
+        "21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429",
+    "usr/bin/keyctl":
+        "a09d1ab9ecb5270d571ac92a703e7b10f976e5e42300a9a1e0a71386fb17429c",
+    "usr/lib64/libkeyutils.so.1.10":
+        "a16faea6d85e33aa6c3f10f293ed4b4b2d30faa1cee3be25ab9710fca510281e",
+}
+
+PATCH_NAMES = (
+    "auth_patch",
+    "update_nvram_patch",
+    "network_patch",
+    "portable_layout_patch",
+)
+
+
+def _verified_snapshot_source(cfg):
+    source = cfg.snapshot_instsys_source
+    if not source.is_dir():
+        raise RuntimeError(f"exact Snapshot installer source is missing: {source}")
+
+    errors = []
+    for relative, expected in SNAPSHOT_SOURCE_HASHES.items():
+        path = source / relative
+        if not path.is_file():
+            errors.append(f"missing {relative}")
+            continue
+        actual = sha256(path)
+        if actual != expected:
+            errors.append(
+                f"{relative}: expected {expected}, got {actual}"
+            )
+
+    if errors:
+        raise RuntimeError(
+            "Snapshot20260930 installer source verification failed:\n  - "
+            + "\n  - ".join(errors)
+        )
+    return source
+
+
+def _patchset(cfg):
+    result = []
+    for name in PATCH_NAMES:
+        path = getattr(cfg, name)
+        if not path.is_file():
+            raise RuntimeError(f"source-controlled installer patch missing: {path}")
+        result.append((name, path, sha256(path)))
+    return result
+
+
+def _apply_patch(inst, patch):
+    proc = subprocess.run(
+        ["patch", "--batch", "--forward", "--fuzz=0", "-p1"],
+        cwd=inst,
+        stdin=open(patch, "rb"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=False,
+    )
+    if proc.returncode != 0:
+        output = proc.stdout.decode(errors="replace")
+        raise RuntimeError(f"cannot apply {patch.name}:\n{output}")
+
+
+def _copy_snapshot_instsys(source, inst):
+    for relative in SNAPSHOT_SOURCE_HASHES:
+        src = source / relative
+        dst = inst / relative
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    keyutils_link = inst / "usr/lib64/libkeyutils.so.1"
+    keyutils_link.symlink_to("libkeyutils.so.1.10")
+
+
 def build_oemdrv(cfg=None):
     cfg = cfg or Config()
     ET.parse(cfg.profile)
     credentials = load_credentials(cfg)
 
+    source = _verified_snapshot_source(cfg)
+    patches = _patchset(cfg)
     profile_sha = sha256(cfg.profile)
-    patch_sha = sha256(cfg.auth_patch)
+    patchset_material = "\n".join(
+        f"{name}={digest}" for name, _, digest in patches
+    )
+    patch_sha = hashlib.sha256(patchset_material.encode()).hexdigest()
+
     cred_stat = cfg.credentials.stat() if cfg.credentials.exists() else None
     opaque_input = (
         f"{profile_sha}\n{patch_sha}\n"
@@ -128,11 +219,6 @@ def build_oemdrv(cfg=None):
     )
     ident = hashlib.sha256(opaque_input.encode()).hexdigest()[:16]
 
-    base = cfg.cache / "layer/oemdrv-portable-root"
-    exact = cfg.cache / (
-        "tools/yast2-storage-ng-5.0.50-1.1/root/usr/share/"
-        "YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb"
-    )
     xorriso = cfg.cache / "tools/rootless/xorriso/usr/bin/xorriso"
     xorriso_lib = cfg.cache / (
         "tools/rootless/xorriso/usr/lib/x86_64-linux-gnu"
@@ -144,37 +230,31 @@ def build_oemdrv(cfg=None):
 
     if build_root.exists():
         shutil.rmtree(build_root)
-    shutil.copytree(base, build_root, symlinks=True)
+    build_root.mkdir(parents=True)
 
     credential_mode = render_runtime_profile(
         cfg,
         build_root / "autoinst.xml",
         credentials,
     )
+
     inst = build_root / "linux/suse/x86_64-tw/inst-sys"
+    inst.mkdir(parents=True)
+    _copy_snapshot_instsys(source, inst)
+
+    # All installer behavior deltas are applied here from repository sources.
+    # No prepatched OEMDRV/cache tree is an input to this build.
+    for _, patch, _ in patches:
+        _apply_patch(inst, patch)
+
+    for orig in inst.rglob("*.orig"):
+        orig.unlink()
+
     pin_file = inst / "etc/desktop-linux-tpm2-pin"
     pin_file.parent.mkdir(parents=True, exist_ok=True)
     pin_file.write_text(credentials.get("pin", ""))
     pin_file.chmod(0o600)
 
-    planner_dir = inst / "usr/share/YaST2/lib/y2storage/proposal"
-    planner_dir.mkdir(parents=True, exist_ok=True)
-    planner = planner_dir / "autoinst_drive_planner.rb"
-    shutil.copy2(exact, planner)
-
-    with open(cfg.auth_patch, "rb") as patch:
-        subprocess.run(
-            ["patch", "--batch", "-p1"],
-            cwd=inst,
-            stdin=patch,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
-    for orig in inst.rglob("*.orig"):
-        orig.unlink()
-
-    for marker in inst.glob(".update.*"):
-        marker.unlink()
     (inst / f".update.{ident}").touch()
 
     dud = build_root / "linux/suse/x86_64-tw/dud.config"
@@ -183,6 +263,18 @@ def build_oemdrv(cfg=None):
         "UpdateProduct:\topenSUSE Tumbleweed\n"
         "UpdateInstaller:\tyast\n"
         f"UpdateName:\tDesktop-Linux vmbench {ident}\n"
+    )
+
+    (build_root / "BASE-ISO.sha256").write_text(
+        "0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99  "
+        "openSUSE-Tumbleweed-DVD-x86_64-Snapshot20260930-Media.iso\n"
+    )
+    (build_root / "SOURCE-IDENTITY.txt").write_text(
+        "snapshot=Snapshot20260930\n"
+        "source-mode=verified-clean-instsys-files\n"
+        f"profile-sha256={profile_sha}\n"
+        f"patchset-sha256={patch_sha}\n"
+        + patchset_material + "\n"
     )
 
     env = os.environ.copy()
@@ -203,8 +295,12 @@ def build_oemdrv(cfg=None):
     (cfg.bench / "current-oem.path").write_text(str(iso) + "\n")
     (cfg.bench / "current-build.txt").write_text(
         f"PROFILE_SHA={profile_sha}\n"
-        f"PATCH_SHA={patch_sha}\n"
-        f"ID={ident}\n"
+        f"PATCHSET_SHA={patch_sha}\n"
+        + "".join(
+            f"{name.upper()}_SHA={digest}\n"
+            for name, _, digest in patches
+        )
+        + f"ID={ident}\n"
         f"ISO={iso}\n"
         f"EMBEDDED={','.join(credential_mode['embedded'])}\n"
         f"MISSING={','.join(credential_mode['missing'])}\n"
@@ -219,5 +315,6 @@ def build_oemdrv(cfg=None):
         "iso": iso,
         "profile_sha": profile_sha,
         "patch_sha": patch_sha,
+        "patches": {name: digest for name, _, digest in patches},
         "credentials": credential_mode,
     }
