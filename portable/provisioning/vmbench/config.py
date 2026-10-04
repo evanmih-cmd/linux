@@ -79,13 +79,6 @@ class Config:
         )
 
     @property
-    def portable_layout_patch(self):
-        return self.repo / (
-            "portable/provisioning/"
-            "systemd-boot-portable-layout.patch"
-        )
-
-    @property
     def autoyast_schema(self):
         return self.cache / (
             "tools/rootless/yast2-schema/usr/share/YaST2/"

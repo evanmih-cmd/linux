@@ -15,9 +15,14 @@ Canonical source-controlled layer inputs:
   `update_nvram=false`;
 - `networkmanager-offline-write.patch` — permits offline target config
   writes without requiring a live NetworkManager connection;
-- `systemd-boot-portable-layout.patch` — requests stock sdbootutil
-  portable/removable layout when NVRAM updates are disabled;
 - `installer-overlay-manifest.txt`.
+
+Do not use `sdbootutil --portable` for this design. Stock `sdbootutil install`
+already writes the removable fallback `/EFI/BOOT/BOOTX64.EFI`. Keeping the
+normal systemd-boot destination `/EFI/systemd` is required because
+`dracut-pcr-signature` imports `pcrlock.json` from there during initrd boot.
+`update_nvram=false` is the independent control that prevents firmware
+Boot####/BootOrder updates.
 
 The canonical AutoYaST storage graph is explicit:
 
@@ -42,7 +47,7 @@ A layer build must:
    identities are pinned by the builder;
 3. fail closed if any stock source file is missing or differs from the pinned
    Snapshot identity;
-4. apply all four source-controlled installer patches from scratch, with no
+4. apply all three source-controlled installer patches from scratch, with no
    prepatched OEMDRV/cache tree as an input;
 5. place `autoinst.xml` at OEMDRV root and installer updates under the
    standard YaST DUD tree;
@@ -121,7 +126,7 @@ present/missing credential combinations on temporary runtime profiles, the
 separate release runtime rendering, and the complete installer patchset against
 the pinned clean Snapshot sources. The canonical profile and every rendered
 profile are validated against the exact Snapshot20260930 AutoYaST Relax NG
-schema. All four patches must apply without rejects and the six modified YaST
+schema. All three patches must apply without rejects and the six consumed YaST
 files must match pinned post-patch SHA-256 identities exactly.
 
 ## Observability rule
@@ -134,5 +139,8 @@ diagnosable from host files without screenshots or later guest access.
 ## Promotion gate
 
 The layer is not promoted until the autonomous VM run proves exact-target
-safety, the accepted LUKS2->LVM storage graph, boot artifacts, unchanged guard
-disk and no persistent owned NVRAM dependency.
+safety, the accepted LUKS2->LVM storage graph, unchanged guard disk and no
+persistent owned NVRAM dependency. Boot artifact proof must include both the
+removable fallback `/EFI/BOOT/BOOTX64.EFI` and the normal systemd-boot policy
+location `/EFI/systemd/pcrlock.json`; TPM2+PIN unlock must then succeed without
+falling back to the ordinary LUKS passphrase.

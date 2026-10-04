@@ -174,7 +174,6 @@ PATCH_NAMES = (
     "auth_patch",
     "update_nvram_patch",
     "network_patch",
-    "portable_layout_patch",
 )
 
 
@@ -201,9 +200,9 @@ POST_PATCH_HASHES = {
     "usr/share/YaST2/lib/bootloader/autoyast_converter.rb":
         "7ac0c97c6d3156f5093c85dce1a906c56c64e128fed2d9281ce4d5b9d7d02612",
     "usr/share/YaST2/lib/bootloader/bls.rb":
-        "2406fa075c7d2a7b0ea94cb6ac938fd38b4762734e190ce99ce0c815642e43ce",
+        "ad87d36d2e07a1ab5831f5fc0634836ffe57e3435202fe44305404435433401a",
     "usr/share/YaST2/lib/bootloader/systemdboot.rb":
-        "201c3417bcc02d91804061125dad8dd1092c1be6b747d239dca220f945f3cc97",
+        "331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58",
     "usr/share/YaST2/lib/y2storage/proposal/autoinst_drive_planner.rb":
         "8dbebc3a2b83fcc67780e16e0c40d3e5eff4b80d793403123208cf6b2226baa8",
     "usr/share/YaST2/lib/y2storage/encryption.rb":
@@ -437,6 +436,22 @@ def verify_patchset_against_snapshot(cfg=None):
         if ":tpm2+pin" in encryption_source:
             raise RuntimeError(
                 "invalid Ruby TPM2+PIN symbol form present; use :\"tpm2+pin\""
+            )
+
+        bls_source = (
+            inst / "usr/share/YaST2/lib/bootloader/bls.rb"
+        ).read_text()
+        systemdboot_source = (
+            inst / "usr/share/YaST2/lib/bootloader/systemdboot.rb"
+        ).read_text()
+        if "--portable" in bls_source or "portable:" in systemdboot_source:
+            raise RuntimeError(
+                "sdbootutil portable layout is forbidden: keep stock /EFI/systemd "
+                "assets and rely on update_nvram=false to suppress firmware writes"
+            )
+        if 'Yast::Execute.on_target!(SDBOOTUTIL, "install")' not in bls_source:
+            raise RuntimeError(
+                "stock sdbootutil install path missing from BLS installer"
             )
 
         actual = {

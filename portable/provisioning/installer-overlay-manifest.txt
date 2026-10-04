@@ -37,12 +37,6 @@ Canonical source-controlled installer inputs:
    write NetworkManager target configuration offline without requiring a live
    installer network connection.
 
-5. systemd-boot-portable-layout.patch
-   SHA-256:
-   6ed90bd9aa446f73ea7d121d19bc4145a953d415c2ffcd58b32b8afdde825852
-   Purpose:
-   request stock sdbootutil portable/removable layout when NVRAM updates are
-   disabled.
 
 Builder source model:
 - clean exact Snapshot20260930 installer files are verified before use;
@@ -53,7 +47,7 @@ Builder source model:
   - autoinst_drive_planner.rb: fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5
   - encryption.rb: 32bf1c4f77a1937f20fb72a9895ec90e84839f001657ffeafd86850114bbe036
   - Lan.rb: 21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
-- all four source-controlled patches are applied during every build;
+- all three source-controlled patches are applied during every build;
 - no prepatched OEMDRV/cache tree is consumed;
 - if the clean source cache is missing or inconsistent, the builder verifies the
   official Snapshot20260930 ISO hash and reconstructs these stock inputs from
