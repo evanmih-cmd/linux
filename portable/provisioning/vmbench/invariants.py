@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -15,6 +16,56 @@ WHY_TCP_IS_FORBIDDEN = (
     "for a client, and client mode has failed with VERR_TIMEOUT. The supported "
     "COM1 transport is RawFile only."
 )
+
+# Hash of the semantically normalized AutoYaST profile after removing only the
+# top-level <software> section. This freezes the already-proven provisioning
+# contract while allowing issue #3 to change software selection.
+PROVEN_PROFILE_EXCEPT_SOFTWARE_SHA256 = (
+    "5242d2230c572ba89192b92a01e491fbe9b85852d9f869e6ae433b6dfc11f3b4"
+)
+
+
+def _local_name(name):
+    return name.rsplit("}", 1)[-1]
+
+
+def _normalized_xml_element(element, *, root=False):
+    children = []
+    for child in list(element):
+        if root and _local_name(child.tag) == "software":
+            continue
+        children.append(_normalized_xml_element(child))
+    return {
+        "tag": _local_name(element.tag),
+        "attrs": sorted(
+            (_local_name(key), value) for key, value in element.attrib.items()
+        ),
+        "text": (element.text or "").strip(),
+        "children": children,
+    }
+
+
+def profile_except_software_sha256(profile_path):
+    root = ET.parse(profile_path).getroot()
+    normalized = _normalized_xml_element(root, root=True)
+    encoded = json.dumps(
+        normalized, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_proven_profile_except_software(profile_path):
+    actual = profile_except_software_sha256(profile_path)
+    if actual == PROVEN_PROFILE_EXCEPT_SOFTWARE_SHA256:
+        return
+    raise BenchInvariantError(
+        "proven AutoYaST contract changed outside the top-level <software> "
+        "section. Hard fail before build/reset/launch. "
+        f"expected={PROVEN_PROFILE_EXCEPT_SOFTWARE_SHA256} actual={actual}. "
+        "If a non-software provisioning change is intentionally required, it "
+        "must be reviewed as a separate proof change and the golden contract "
+        "must be advanced explicitly after that proof."
+    )
 
 
 def validate_source_tree(root):
