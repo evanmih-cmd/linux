@@ -121,6 +121,32 @@ def probe_commands():
         ("system_state", "systemctl is-system-running"),
         ("desktop_user", "id portable"),
         (
+            "root_account",
+            "getent passwd root; passwd -S root 2>&1 || true",
+        ),
+        (
+            "sddm_pam",
+            "for f in /etc/pam.d/sddm /usr/lib/pam.d/sddm "
+            "/etc/pam.d/common-auth /etc/pam.d/common-account "
+            "/usr/lib/pam.d/common-auth /usr/lib/pam.d/common-account; do "
+            "test -e $f || continue; echo ===$f===; cat $f; done",
+        ),
+        (
+            "sddm_config",
+            "for d in /etc/sddm.conf /etc/sddm.conf.d "
+            "/usr/lib/sddm/sddm.conf.d; do "
+            "if test -f $d; then echo ===$d===; cat $d; "
+            "elif test -d $d; then for f in $d/*.conf; do "
+            "test -e $f || continue; echo ===$f===; cat $f; done; fi; done",
+        ),
+        (
+            "sddm_journal",
+            "journalctl -b --no-pager -n 300 "
+            "-u display-manager.service "
+            "-u display-manager-legacy.service "
+            "-u sddm.service 2>&1 || true",
+        ),
+        (
             "login_sessions",
             "loginctl list-sessions --no-legend; "
             "for s in $(loginctl list-sessions --no-legend | awk '{print $1}'); do "

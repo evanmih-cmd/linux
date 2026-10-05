@@ -400,7 +400,7 @@ The runtime rendering is intentionally different only for proof plumbing:
 
 - VM builds may embed throwaway local proof credentials and add the COM1/y2log
   observability pre-script used by the autonomous harness;
-- physical release builds never read the VM credential file, retain all three
+- physical release builds never read the VM credential file, retain all four
   native AutoYaST credential questions, carry only an empty `0600` TPM-PIN
   `inst-sys` placeholder, and contain no `VMBENCH_*` or `/dev/ttyS0` logic.
 
@@ -484,26 +484,26 @@ the product-supported continuation semantics are explicitly used.
 
 ## Restart policy
 
-### Userspace-only changes
+### Initial production activation path
 
-Allow systemd soft reboot when the package manager reports that it is
-sufficient.
+Use a normal `systemd` reboot after a successful transactional update.
 
-The updated snapshot is prepared as the next root and the userspace is rebuilt
-without firmware re-entry:
+This is intentionally conservative for the initial production implementation:
+the new root snapshot is activated only after a fresh kernel/userspace boot
+through the normal removable Secure Boot path. It also guarantees that stale
+executables and mappings from the previous root are gone before sensitive work
+is released.
 
-```text
-updated snapshot
-        ↓
-/run/nextroot
-        ↓
-systemd soft-reboot
-        ↓
-fresh userspace on updated root
-```
+`REBOOT_METHOD=systemd` is the selected initial `transactional-update`/tukit
+policy.
 
-This removes stale processes/inodes before sensitive work begins while avoiding
-an unnecessary trip through host firmware.
+### Soft reboot
+
+Systemd soft reboot is a possible later optimization for updates that provably
+do not require a new kernel/platform boot. It is **not** part of the initial
+production gate. Do not enable it until its interaction with the selected
+snapshot activation, security state and sensitive-workload gate has been
+separately demonstrated.
 
 ### kexec
 
@@ -516,10 +516,7 @@ not treated as equivalent to a fresh platform boot for this workstation.
 Configure transactional-update/tukit so that kexec is not an allowed restart
 method.
 
-### Full reboot
-
-A kernel-level transition that cannot be satisfied by soft reboot requires a
-full reboot through firmware.
+### Full reboot and removable re-entry
 
 Do not use `BootNext`, `BootOrder` or another persistent host-firmware
 mutation to force re-entry into the removable workstation.
@@ -547,15 +544,19 @@ framework is part of the baseline architecture.
 
 ## Browser and external authorization device
 
-Use a native Tumbleweed browser package so browser binaries participate in the
-same managed RPM/update domain as the operating system.
+Browser roles are deliberately separated:
 
-Firefox vs Chromium is not an architectural preference. The final browser is
-selected by the actual required web/API/device compatibility of the
-owner-controlled USB/HID authorization device and target browser workload.
+- Firefox is the normal/general-purpose browser;
+- vendor Google Chrome is reserved for the sensitive crypto/wallet workload and
+  the Ledger WebHID path.
 
-Do not introduce Flatpak, VM device forwarding, or custom udev/device middleware
-unless the real device requires it.
+Both are managed as RPM packages. Chrome is supplied offline from the pinned
+vendor package/repository input and then maintained through its normal vendor
+RPM repository as part of the startup maintenance policy. Ledger uses the
+vendor-published udev rule and native WebHID path.
+
+Do not introduce Flatpak, VM device forwarding, or custom USB middleware unless
+the real device proves it necessary.
 
 ## Maintenance policy state
 

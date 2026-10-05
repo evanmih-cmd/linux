@@ -27,20 +27,21 @@ The implementation direction is:
 
 ```text
 openSUSE Tumbleweed
-→ declarative provisioning (Agama for VM proof; production media still gated)
+→ official Offline ISO + declarative AutoYaST provisioning
 → removable SSD only
 → Secure Boot + systemd-boot/BLS
 → TPM2+PIN primary unlock + owner LUKS passphrase for emergency portability
-→ LUKS2 + Btrfs/Snapper
+→ one outer LUKS2 + LVM + Btrfs/Snapper root + persistent home
+→ KDE Plasma Wayland under an ordinary desktop user
 → mandatory transactional-update startup maintenance
-→ soft reboot when sufficient; kexec disabled
+→ full systemd reboot for activation initially; kexec disabled
 → sensitive workload released only after successful maintenance
 ```
 
-The next proof stage is Oracle VirtualBox using the Agama test medium. Passing
-that proof validates the architecture mechanics, not the testing ISO as a
-production installer. Physical-host and production-provisioning gates are
-listed in the architecture document.
+The VM provisioning, TPM2+PIN boot and KDE Plasma baseline are exercised
+against the verified official Snapshot20260930 Offline ISO plus the small
+Desktop-Linux AutoYaST/OEMDRV layer. Remaining acceptance work is the
+maintenance/rollback lifecycle and the physical ASUS/Ledger path.
 
 ## Repository principles
 
