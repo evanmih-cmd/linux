@@ -2,6 +2,7 @@ import gzip
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +50,17 @@ def load_software_manifest(cfg=None):
         raise SoftwareBaselineError(
             f"unsupported software manifest schema: {data.get('schema')!r}"
         )
+    history = data.get("opensuse_history", {})
+    if "rpms" in history:
+        raise SoftwareBaselineError(
+            "opensuse_history.rpms is forbidden: the openSUSE overlay must "
+            "be derived from the libzypp transaction, never hand-maintained"
+        )
+    for key in ("base_url", "repomd_sha256"):
+        if not history.get(key):
+            raise SoftwareBaselineError(
+                f"opensuse_history.{key} is required"
+            )
     return data
 
 
@@ -308,6 +320,8 @@ def _download_repo_metadata(base_url, destination, repomd_sha):
 
 def _verify_opensuse_rpm_signatures(target, cfg, manifest):
     target = Path(target)
+    if not any(target.rglob("*.rpm")):
+        return
     dvd = _ensure_dvd_extracted(cfg)
     command = """
 set -e
@@ -345,20 +359,225 @@ done
         )
 
 
-def _mirror_opensuse(root, manifest, cfg=None):
+def _verify_history_snapshot_identity(manifest):
+    source = manifest["opensuse_history"]
+    url = source["base_url"] + "repodata/repomd.xml"
+    with urllib.request.urlopen(url, timeout=120) as response:
+        data = response.read()
+    actual = sha256_bytes(data)
+    expected = source["repomd_sha256"]
+    if actual != expected:
+        raise SoftwareBaselineError(
+            "pinned openSUSE history repomd mismatch: "
+            f"{actual} != {expected}"
+        )
+    return actual
+
+
+def _contract_specs(manifest):
+    return [
+        *[f"pattern:{name}" for name in manifest["patterns"]],
+        *manifest["packages"],
+    ]
+
+
+def _selected_packages(transaction_xml):
+    root = ET.parse(transaction_xml).getroot()
+    selected = set()
+    for solvable in root.findall(".//solvable"):
+        if solvable.get("type") != "package":
+            continue
+        item = (
+            solvable.get("name"),
+            solvable.get("edition"),
+            solvable.get("arch"),
+            solvable.get("repository"),
+        )
+        if not all(item):
+            raise SoftwareBaselineError(
+                "solver transaction contains incomplete package identity"
+            )
+        selected.add(item)
+    return sorted(selected)
+
+
+def _selected_history_packages(transaction_xml):
+    return [
+        (name, edition, arch)
+        for name, edition, arch, repository
+        in _selected_packages(transaction_xml)
+        if repository == "history"
+    ]
+
+
+def _resolve_opensuse_delta(root, manifest, cfg=None):
+    """Derive the openSUSE overlay from one libzypp product transaction."""
     cfg_obj = cfg or Config()
     source = manifest["opensuse_history"]
-    target = Path(root) / "opensuse"
+    payload_root = Path(root)
+    target = payload_root / "opensuse"
     target.mkdir(parents=True, exist_ok=True)
-    for relative, digest in sorted(source["rpms"].items()):
-        _download(source["base_url"] + relative, target / relative, digest)
+    google = payload_root / "google"
+    if not (google / "repodata/repomd.xml").is_file():
+        raise SoftwareBaselineError(
+            "Google repository must be materialized before openSUSE resolution"
+        )
 
-    # Intentionally no repodata. libzypp auto-detects a directory of signed
-    # RPMs as a plaindir repository. This keeps the add-on self-consistent:
-    # it can never advertise a package that is not physically present.
+    _verify_history_snapshot_identity(manifest)
+    dvd = _ensure_dvd_extracted(cfg_obj)
+    contract = " ".join(
+        shlex.quote(value) for value in _contract_specs(manifest)
+    )
+
+    with tempfile.TemporaryDirectory(
+        prefix="software-delta-resolve-", dir=cfg_obj.software_media_dir
+    ) as td:
+        work = Path(td)
+        rootfs = work / "rootfs"
+        rootfs.mkdir()
+        transaction = rootfs / "tmp/transaction.xml"
+        transaction.parent.mkdir(parents=True)
+
+        solve_command = f"""
+set -e
+rpm --root /rootfs --initdb
+zypper --root /rootfs -n ar -p 10 dir:/dvd dvd
+zypper --root /rootfs -n ar -p 20 dir:/google google
+zypper --root /rootfs -n ar -p 30 {shlex.quote(source["base_url"])} history
+zypper --root /rootfs --gpg-auto-import-keys -n refresh
+zypper --root /rootfs --xmlout -n install --dry-run --recommends {contract}     > /rootfs/tmp/transaction.xml
+"""
+        proc = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{rootfs}:/rootfs",
+                "-v",
+                f"{dvd}:/dvd:ro",
+                "-v",
+                f"{google}:/google:ro",
+                manifest["build_tool"]["docker_image"],
+                "bash",
+                "-lc",
+                solve_command,
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if proc.returncode != 0 or not transaction.is_file():
+            raise SoftwareBaselineError(
+                "online solver failed while computing DVD delta:\n"
+                + proc.stdout[-30000:]
+            )
+
+        full_transaction = _selected_packages(transaction)
+        selected = [
+            (name, edition, arch)
+            for name, edition, arch, repository in full_transaction
+            if repository == "history"
+        ]
+        transaction_proof = {
+            "snapshot": manifest["snapshot"],
+            "history_repomd_sha256": source["repomd_sha256"],
+            "contract": _contract_specs(manifest),
+            "package_count": len(full_transaction),
+            "packages": [
+                {
+                    "name": name,
+                    "edition": edition,
+                    "arch": arch,
+                    "repository": repository,
+                }
+                for name, edition, arch, repository in full_transaction
+            ],
+        }
+        (payload_root / "RESOLVED-SOFTWARE-TRANSACTION.json").write_text(
+            json.dumps(transaction_proof, indent=2, sort_keys=True) + "\n"
+        )
+
+        if selected:
+            specs = [
+                f"{name}.{arch}={edition}"
+                for name, edition, arch in selected
+            ]
+            download_command = (
+                "set -e\n"
+                "zypper --root /rootfs --pkg-cache-dir /out "
+                "--xmlout -n download --repo history "
+                + " ".join(shlex.quote(spec) for spec in specs)
+            )
+            proc = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{rootfs}:/rootfs",
+                    "-v",
+                    f"{target}:/out",
+                    manifest["build_tool"]["docker_image"],
+                    "bash",
+                    "-lc",
+                    download_command,
+                ],
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            if proc.returncode != 0:
+                raise SoftwareBaselineError(
+                    "failed to materialize solver-selected history RPMs:\n"
+                    + proc.stdout[-30000:]
+                )
+
+    history_cache = target / "history"
+    downloaded = (
+        sorted(history_cache.rglob("*.rpm"))
+        if history_cache.exists()
+        else []
+    )
+    if len(downloaded) != len(selected):
+        raise SoftwareBaselineError(
+            "history download count does not match solver transaction: "
+            f"{len(downloaded)} != {len(selected)}"
+        )
+
+    # Flatten zypper's cache layout to the plaindir root consumed by YaST.
+    resolved = []
+    for rpm in downloaded:
+        relative = rpm.relative_to(target / "history")
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(rpm, destination)
+        resolved.append(
+            {
+                "name": relative.name,
+                "path": relative.as_posix(),
+                "sha256": sha256_file(destination),
+            }
+        )
+    shutil.rmtree(target / "history")
+
     if (target / "repodata").exists():
         raise SoftwareBaselineError("openSUSE plaindir must not contain repodata")
     _verify_opensuse_rpm_signatures(target, cfg_obj, manifest)
+
+    proof = {
+        "snapshot": manifest["snapshot"],
+        "history_repomd_sha256": source["repomd_sha256"],
+        "contract": _contract_specs(manifest),
+        "package_count": len(resolved),
+        "packages": sorted(resolved, key=lambda item: item["path"]),
+    }
+    (payload_root / "RESOLVED-OPENSUSE-DELTA.json").write_text(
+        json.dumps(proof, indent=2, sort_keys=True) + "\n"
+    )
+    return proof
 
 
 def _mirror_google(root, manifest):
@@ -517,8 +736,9 @@ def _ensure_dvd_extracted(cfg):
 
 
 def _solver_command(manifest):
-    patterns = " ".join(manifest["patterns"])
-    packages = " ".join(manifest["packages"])
+    contract = " ".join(
+        shlex.quote(value) for value in _contract_specs(manifest)
+    )
     return f"""
 set -e
 rpm --root /rootfs --initdb
@@ -526,8 +746,9 @@ zypper --root /rootfs -n ar -p 10 dir:/dvd dvd
 zypper --root /rootfs -n ar -p 20 dir:/media/google google
 zypper --root /rootfs -n ar -p 30 dir:/media/opensuse opensuse
 zypper --root /rootfs --gpg-auto-import-keys -n refresh
-zypper --root /rootfs -n install --download-only --recommends -t pattern {patterns}
-zypper --root /rootfs -n install --download-only --recommends {packages}
+mkdir -p /rootfs/tmp
+zypper --root /rootfs --xmlout -n install --dry-run --recommends {contract} \
+    > /rootfs/tmp/offline-transaction.xml
 echo OFFLINE_SOFTWARE_RESOLVE_PASS
 """
 
@@ -569,15 +790,74 @@ def verify_offline_software_tree(root, cfg=None, manifest=None):
             raise SoftwareBaselineError(
                 "offline software solver proof failed:\n" + proc.stdout[-20000:]
             )
+
+        offline_xml = rootfs / "tmp/offline-transaction.xml"
+        if not offline_xml.is_file():
+            raise SoftwareBaselineError(
+                "offline solver did not produce transaction XML"
+            )
+        offline = set(_selected_packages(offline_xml))
+
+        online_path = Path(root) / "RESOLVED-SOFTWARE-TRANSACTION.json"
+        if not online_path.is_file():
+            raise SoftwareBaselineError(
+                "missing online software transaction proof"
+            )
+        online_proof = json.loads(online_path.read_text())
+        if online_proof.get("contract") != _contract_specs(manifest):
+            raise SoftwareBaselineError(
+                "online transaction proof contract mismatch"
+            )
+        if online_proof.get("snapshot") != manifest["snapshot"]:
+            raise SoftwareBaselineError(
+                "online transaction proof snapshot mismatch"
+            )
+
+        source_map = {
+            "dvd": "dvd",
+            "google": "google",
+            "history": "opensuse",
+        }
+        online = set()
+        for item in online_proof.get("packages", []):
+            repository = item.get("repository")
+            if repository not in source_map:
+                raise SoftwareBaselineError(
+                    f"unexpected online transaction repository: {repository!r}"
+                )
+            online.add(
+                (
+                    item.get("name"),
+                    item.get("edition"),
+                    item.get("arch"),
+                    source_map[repository],
+                )
+            )
+
+        if online != offline:
+            missing = sorted(online - offline)
+            extra = sorted(offline - online)
+            raise SoftwareBaselineError(
+                "offline transaction differs from pinned online transaction: "
+                f"missing={missing[:20]}, extra={extra[:20]}"
+            )
+        if online_proof.get("package_count") != len(online):
+            raise SoftwareBaselineError(
+                "online transaction proof package_count mismatch"
+            )
+
         return {
             "status": "PASS",
             "marker": "OFFLINE_SOFTWARE_RESOLVE_PASS",
+            "package_count": len(online),
+            "exact_transaction_match": True,
         }
 
 
 
 def _verify_local_repo_locations(repo_root, manifest=None):
     repo_root = Path(repo_root)
+    payload_root = repo_root.parent
     manifest = manifest or load_software_manifest(Config())
 
     if (repo_root / "repodata").exists():
@@ -585,28 +865,74 @@ def _verify_local_repo_locations(repo_root, manifest=None):
             "openSUSE software overlay must be plaindir: repodata is forbidden"
         )
 
-    rpm_files = {
-        path.relative_to(repo_root).as_posix()
+    transaction_path = payload_root / "RESOLVED-SOFTWARE-TRANSACTION.json"
+    if not transaction_path.is_file():
+        raise SoftwareBaselineError(
+            "missing generated full software transaction proof"
+        )
+    transaction = json.loads(transaction_path.read_text())
+    if transaction.get("snapshot") != manifest["snapshot"]:
+        raise SoftwareBaselineError(
+            "software transaction proof snapshot mismatch"
+        )
+    if transaction.get("contract") != _contract_specs(manifest):
+        raise SoftwareBaselineError(
+            "software transaction proof contract mismatch"
+        )
+    if transaction.get("package_count") != len(
+        transaction.get("packages", [])
+    ):
+        raise SoftwareBaselineError(
+            "software transaction proof package_count mismatch"
+        )
+
+    proof_path = payload_root / "RESOLVED-OPENSUSE-DELTA.json"
+    if not proof_path.is_file():
+        raise SoftwareBaselineError(
+            "missing generated openSUSE delta proof"
+        )
+    proof = json.loads(proof_path.read_text())
+    if proof.get("snapshot") != manifest["snapshot"]:
+        raise SoftwareBaselineError("openSUSE delta proof snapshot mismatch")
+    if (
+        proof.get("history_repomd_sha256")
+        != manifest["opensuse_history"]["repomd_sha256"]
+    ):
+        raise SoftwareBaselineError("openSUSE delta proof repomd mismatch")
+    if proof.get("contract") != _contract_specs(manifest):
+        raise SoftwareBaselineError("openSUSE delta proof contract mismatch")
+    expected = {
+        item["path"]: item["sha256"]
+        for item in proof.get("packages", [])
+    }
+    actual = {
+        path.relative_to(repo_root).as_posix(): sha256_file(path)
         for path in repo_root.rglob("*.rpm")
     }
-    expected = set(manifest["opensuse_history"]["rpms"])
-    if rpm_files != expected:
+    if actual != expected:
         raise SoftwareBaselineError(
-            "openSUSE plaindir file mismatch: "
-            f"missing={sorted(expected - rpm_files)}, "
-            f"extra={sorted(rpm_files - expected)}"
+            "openSUSE plaindir/proof mismatch: "
+            f"missing={sorted(set(expected) - set(actual))}, "
+            f"extra={sorted(set(actual) - set(expected))}, "
+            f"changed={sorted(k for k in set(actual) & set(expected) if actual[k] != expected[k])}"
+        )
+    if proof.get("package_count") != len(actual):
+        raise SoftwareBaselineError(
+            "openSUSE delta proof package_count mismatch"
         )
 
     return {
-        "packages": len(rpm_files),
-        "locations": sorted(rpm_files),
+        "packages": len(actual),
+        "locations": sorted(actual),
     }
 
 
-def verify_software_payload_tree(root):
+def verify_software_payload_tree(root, cfg=None, manifest=None):
     root = Path(root)
+    cfg = cfg or Config()
+    manifest = manifest or load_software_manifest(cfg)
     _verify_tree_manifest(root)
-    return _verify_local_repo_locations(root / "opensuse")
+    return _verify_local_repo_locations(root / "opensuse", manifest)
 
 
 def prepare_software_payload(cfg=None, *, force=False):
@@ -637,8 +963,8 @@ def prepare_software_payload(cfg=None, *, force=False):
     ) as td:
         root = Path(td) / "root"
         root.mkdir()
-        _mirror_opensuse(root, manifest)
         _mirror_google(root, manifest)
+        _resolve_opensuse_delta(root, manifest, cfg)
         _copy_assets(root, cfg, manifest)
 
         source_identity = {

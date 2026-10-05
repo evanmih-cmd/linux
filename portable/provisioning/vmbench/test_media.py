@@ -30,7 +30,7 @@ class RuntimeProfileMediaTests(unittest.TestCase):
             render_runtime_profile(
                 cfg,
                 out,
-                {"recovery": "r", "pin": "p", "root": "x"},
+                {"recovery": "r", "pin": "p", "root": "x", "desktop": "d"},
                 vm_observability=True,
             )
             self.assertEqual(
@@ -45,6 +45,25 @@ class RuntimeProfileMediaTests(unittest.TestCase):
                         "product_dir": "/portable/opensuse",
                     },
                 ],
+            )
+            root = ET.parse(out).getroot()
+            scripts = root.find(f"{{{YAST_NS}}}scripts")
+            chroot_scripts = scripts.find(
+                f"{{{YAST_NS}}}chroot-scripts"
+            )
+            source = chroot_scripts.find(
+                f"{{{YAST_NS}}}script/{{{YAST_NS}}}source"
+            ).text
+            self.assertIn("VMBENCH_CAPABILITY_BEGIN", source)
+            self.assertIn("vmbench-capability.service", source)
+            self.assertNotIn("systemd-run", source)
+            login_settings = root.find(f"{{{YAST_NS}}}login_settings")
+            self.assertIsNotNone(login_settings)
+            self.assertEqual(
+                login_settings.find(
+                    f"{{{YAST_NS}}}autologin_user"
+                ).text,
+                "portable",
             )
 
     def test_release_runtime_keeps_rufus_repo_relative_layout(self):
@@ -71,6 +90,15 @@ class RuntimeProfileMediaTests(unittest.TestCase):
                     },
                 ],
             )
+            root = ET.parse(out).getroot()
+            self.assertIsNone(root.find(f"{{{YAST_NS}}}scripts"))
+            login_settings = root.find(f"{{{YAST_NS}}}login_settings")
+            if login_settings is not None:
+                self.assertIsNone(
+                    login_settings.find(
+                        f"{{{YAST_NS}}}autologin_user"
+                    )
+                )
 
 
 if __name__ == "__main__":

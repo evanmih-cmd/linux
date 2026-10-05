@@ -74,6 +74,8 @@ def _runtime_credential_state(profile_path):
                 remaining.append("recovery")
             elif path_text == "users,0,user_password":
                 remaining.append("root")
+            elif path_text == "users,1,user_password":
+                remaining.append("desktop")
             elif title_text == "Portable workstation TPM credential":
                 remaining.append("pin")
             else:
@@ -86,7 +88,9 @@ def _runtime_credential_state(profile_path):
         "y:partitioning/y:drive/y:partitions/y:partition[2]/y:crypt_key",
         ns,
     )
-    root_password = root.find("y:users/y:user/y:user_password", ns)
+    user_nodes = root.findall("y:users/y:user", ns)
+    root_password = user_nodes[0].find("y:user_password", ns)
+    desktop_password = user_nodes[1].find("y:user_password", ns)
     pre_source = root.find("y:scripts/y:pre-scripts/y:script/y:source", ns)
 
     return {
@@ -96,6 +100,9 @@ def _runtime_credential_state(profile_path):
         ),
         "root_placeholder": (
             root_password is None or (root_password.text or "") == "__ASK__"
+        ),
+        "desktop_placeholder": (
+            desktop_password is None or (desktop_password.text or "") == "__ASK__"
         ),
         "pin_file_reference": "/etc/desktop-linux-tpm2-pin" in Path(profile_path).read_text(),
         "profile_ready_marker": (
@@ -107,7 +114,7 @@ def _runtime_credential_state(profile_path):
 
 def _check_runtime_profile(cfg, credentials):
     expected_missing = [
-        key for key in ("recovery", "pin", "root") if key not in credentials
+        key for key in ("recovery", "pin", "root", "desktop") if key not in credentials
     ]
     with TemporaryDirectory() as td:
         runtime = Path(td) / "autoinst.xml"
@@ -128,6 +135,8 @@ def _check_runtime_profile(cfg, credentials):
         raise RuntimeError("runtime recovery credential embedding mismatch")
     if ("root" in credentials) == state["root_placeholder"]:
         raise RuntimeError("runtime root credential embedding mismatch")
+    if ("desktop" in credentials) == state["desktop_placeholder"]:
+        raise RuntimeError("runtime desktop credential embedding mismatch")
     if not state["profile_ready_marker"]:
         raise RuntimeError("runtime profile-ready marker missing")
     expected_pin_reference = "pin" not in credentials
@@ -171,6 +180,23 @@ def _check_boot_unlock_classifier():
             )
 
 
+def _validate_vm_graphics_contract(cfg):
+    if cfg.vm_graphics_controller != "VMSVGA":
+        raise RuntimeError(
+            "Linux VM graphics controller must be VMSVGA, got "
+            f"{cfg.vm_graphics_controller!r}"
+        )
+    if cfg.vm_vram_mib < 64:
+        raise RuntimeError(
+            f"Linux VM VRAM must be at least 64 MiB, got {cfg.vm_vram_mib}"
+        )
+    return {
+        "controller": cfg.vm_graphics_controller,
+        "vram_mib": cfg.vm_vram_mib,
+        "accel3d": cfg.vm_accel3d,
+    }
+
+
 def static_check(cfg=None):
     cfg = cfg or Config()
     harness_root = Path(__file__).resolve().parent
@@ -178,6 +204,7 @@ def static_check(cfg=None):
     validate_proven_profile_except_software(cfg.profile)
     validate_profile_storage(cfg.profile)
     validate_software_profile(cfg.profile, cfg)
+    graphics_contract = _validate_vm_graphics_contract(cfg)
     _check_boot_unlock_classifier()
     _validate_relaxng(cfg, cfg.profile)
     patch_proof = verify_patchset_against_snapshot(cfg)
@@ -189,6 +216,7 @@ def static_check(cfg=None):
         "recovery": "vmbench-recovery-test-only",
         "pin": "123456",
         "root": "vmbench-root-test-only",
+        "desktop": "vmbench-desktop-test-only",
     }
     with TemporaryDirectory() as td:
         release_runtime = Path(td) / "release-autoinst.xml"
@@ -201,9 +229,9 @@ def static_check(cfg=None):
         )
         _validate_relaxng(cfg, release_runtime)
 
-    keys = ("recovery", "pin", "root")
+    keys = ("recovery", "pin", "root", "desktop")
     matrix = []
-    for mask in range(8):
+    for mask in range(1 << len(keys)):
         creds = {
             key: dummy[key]
             for bit, key in enumerate(keys)
@@ -233,6 +261,7 @@ def static_check(cfg=None):
         "patchset_applicability": "PASS",
         "relaxng_validation": "PASS",
         "boot_unlock_classifier": "PASS",
+        "vm_graphics_contract": graphics_contract,
         "patches": patch_proof["patches"],
         "post_patch_hashes": patch_proof["post_patch_hashes"],
     }
@@ -257,6 +286,7 @@ def status(cfg=None):
             "target_sha256": sha256(target) if target.exists() else None,
             "baseline_sha256": None,
             "vbox_log_folder": box.log_folder(),
+            "graphics_config": box.graphics_config(),
             "serial_config": box.serial_config(),
             "serial_path": str(serial) if serial else None,
             "serial_tail": "\n".join(serial_tail.splitlines()[-80:]),

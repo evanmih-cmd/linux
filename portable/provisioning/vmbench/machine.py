@@ -91,6 +91,37 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
                 "IMachine_setCPUCount",
                 [("_this", machine), ("CPUCount", str(cfg.vm_vcpus))],
             )
+            if cfg.vm_graphics_controller != "VMSVGA":
+                raise RuntimeError(
+                    "Linux VM graphics controller must be VMSVGA, got "
+                    f"{cfg.vm_graphics_controller!r}"
+                )
+            if cfg.vm_vram_mib < 64:
+                raise RuntimeError(
+                    f"Linux VM VRAM is too small: {cfg.vm_vram_mib} MiB"
+                )
+            graphics = box._vals(
+                "IMachine_getGraphicsAdapter", [("_this", machine)]
+            )[0]
+            box._vals(
+                "IGraphicsAdapter_setGraphicsControllerType",
+                [
+                    ("_this", graphics),
+                    ("graphicsControllerType", cfg.vm_graphics_controller),
+                ],
+            )
+            box._vals(
+                "IGraphicsAdapter_setVRAMSize",
+                [("_this", graphics), ("VRAMSize", str(cfg.vm_vram_mib))],
+            )
+            box._vals(
+                "IGraphicsAdapter_setFeature",
+                [
+                    ("_this", graphics),
+                    ("feature", "Acceleration3D"),
+                    ("enabled", str(cfg.vm_accel3d).lower()),
+                ],
+            )
             box.save_settings(machine)
         finally:
             box.unlock(session)

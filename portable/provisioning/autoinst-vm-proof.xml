@@ -30,6 +30,14 @@
         <path>users,0,user_password</path>
         <stage>initial</stage>
         </ask>
+      <ask>
+        <title>Portable workstation desktop user</title>
+        <question>Enter the desktop user password</question>
+        <type>string</type>
+        <password config:type="boolean">true</password>
+        <path>users,1,user_password</path>
+        <stage>initial</stage>
+        </ask>
     </ask-list>
   </general>
   <language><language>en_US</language></language>
@@ -162,6 +170,7 @@
       <package>sudo</package>
       <package>konsole</package>
       <package>sddm-qt6</package>
+      <package>xorg-x11-server</package>
       <package>MozillaFirefox</package>
       <package>google-chrome-stable</package>
       <package>transactional-update</package>
@@ -203,6 +212,14 @@ x-scheme-handler/https=firefox.desktop
   <users config:type="list">
     <user>
       <username>root</username>
+      <user_password>__ASK__</user_password>
+      <encrypted config:type="boolean">false</encrypted>
+    </user>
+    <user>
+      <username>portable</username>
+      <fullname>Portable Workstation</fullname>
+      <home>/home/portable</home>
+      <shell>/bin/bash</shell>
       <user_password>__ASK__</user_password>
       <encrypted config:type="boolean">false</encrypted>
     </user>

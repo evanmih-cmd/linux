@@ -135,6 +135,25 @@ class VBox:
             "IMachine_getCPUCount", [("_this", self.machine)]
         )[0])
 
+    def graphics_config(self):
+        adapter = self._vals(
+            "IMachine_getGraphicsAdapter", [("_this", self.machine)]
+        )[0]
+        return {
+            "controller": self._vals(
+                "IGraphicsAdapter_getGraphicsControllerType",
+                [("_this", adapter)],
+            )[0],
+            "vram_mib": int(self._vals(
+                "IGraphicsAdapter_getVRAMSize",
+                [("_this", adapter)],
+            )[0]),
+            "accel3d": self._vals(
+                "IGraphicsAdapter_isFeatureEnabled",
+                [("_this", adapter), ("feature", "Acceleration3D")],
+            )[0] == "true",
+        }
+
     def attachments(self):
         out = []
         root = self._raw(

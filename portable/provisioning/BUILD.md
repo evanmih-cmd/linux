@@ -56,9 +56,16 @@ A layer build must:
    prepatched OEMDRV/cache tree as an input;
 5. place `autoinst.xml` at overlay root and installer updates under the
    standard YaST DUD tree;
-6. add the pinned offline software payload under `/portable`;
-7. verify the offline software payload with networking disabled and record the
-   profile, patchset and software identities before use.
+6. solve the declarative software contract against the official DVD, the pinned
+   Snapshot history repository and the pinned Google Chrome repository;
+7. materialize `/portable/opensuse` automatically as only the exact openSUSE
+   RPMs selected from Snapshot history rather than from the DVD; a hand-maintained
+   openSUSE RPM map is forbidden;
+8. repeat the same complete transaction with networking disabled against only
+   the official DVD plus the generated `/portable` tree, and require exact
+   package/version/arch/source equality with the online transaction;
+9. record the profile, patchset, solver transaction and generated delta
+   identities before use.
 
 The old `layer/oemdrv-portable-root` is not a builder input. It may remain only
 as historical/live-proof evidence. The clean source cache is
@@ -75,11 +82,13 @@ iteration. Networking remains disabled during provisioning proof. Physical
 release keeps the same tree as a directory for post-Rufus copy onto the USB.
 
 Every overlay contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
-The fixed installer portion is allowlisted; `/portable` is checked against the
-pinned software manifest and its own tree hashes. VM builds additionally
-package the tree as OEMDRV, extract it again and verify the full file/symlink
-inventory. Physical release leaves the verified directory unwrapped and records
-its path in `current-build.txt`.
+The software payload additionally records `RESOLVED-SOFTWARE-TRANSACTION.json`,
+`RESOLVED-OPENSUSE-DELTA.json` and the zero-network solver proof. The fixed
+installer portion is allowlisted; `/portable` is checked against the
+declarative software manifest, generated solver evidence and its own tree
+hashes. VM builds additionally package the tree as OEMDRV, extract it again and
+verify the full file/symlink inventory. Physical release leaves the verified
+directory unwrapped and records its path in `current-build.txt`.
 
 This is a reconstructible and self-verifying build, not a promise of
 byte-for-byte identical packaging metadata across runs: build IDs and VM ISO
@@ -118,14 +127,14 @@ VM and physical-release credential sources are deliberately separated:
   VM credential file. It requires an explicit persistent release target,
   rejects the VM proof identifier and non-`by-id` paths, forces an empty
   credential set, writes a verified overlay directory under the separate
-  release cache, keeps all three native AutoYaST credential questions, and
+  release cache, keeps all four native AutoYaST credential questions, and
   leaves only the empty `0600` TPM PIN placeholder in DUD `inst-sys`.
 
 Thus a VM test password cannot be inherited by the physical release artifact
 through the builder's default credential path.
 
 `bench.py check` is a static-only validation path. It does not contact or
-start VirtualBox; it checks source/storage invariants, all eight
+start VirtualBox; it checks source/storage invariants, all sixteen
 present/missing credential combinations on temporary runtime profiles, the
 separate release runtime rendering, and the complete installer patchset against
 the pinned clean Snapshot sources. The canonical profile and every rendered
@@ -137,8 +146,13 @@ files must match pinned post-patch SHA-256 identities exactly.
 
 Every autonomous run owns a directory under `vmbench/runs` in the proof
 cache. VirtualBox COM1 writes directly to that run's `serial.log` and AutoYaST
-streams YaST `y2log` into COM1 from the pre-script. A failure is therefore
-diagnosable from host files without screenshots or later guest access.
+streams YaST `y2log` into COM1 from the VM-only pre-script. VM runtime profiles
+also contain an AutoYaST chroot script which installs a one-shot first-boot
+systemd unit. That unit waits for the `portable` KDE Wayland session, emits the
+session/process capability facts to COM1, then removes its unit, symlink and
+reporter script. Release/Rufus profiles contain no scripts section and no
+autologin setting. SOAP framebuffer captures are retained only as independent
+GUI diagnostic evidence; they do not replace the session/process gates.
 
 ## Promotion gate
 
@@ -147,4 +161,9 @@ safety, the accepted LUKS2->LVM storage graph, unchanged guard disk and no
 persistent owned NVRAM dependency. Boot artifact proof must include both the
 removable fallback `/EFI/BOOT/BOOTX64.EFI` and the normal systemd-boot policy
 location `/EFI/systemd/pcrlock.json`; TPM2+PIN unlock must then succeed without
-falling back to the ordinary LUKS passphrase.
+falling back to the ordinary LUKS passphrase. The same run must also receive a
+valid first-boot capability report proving `graphical.target`, an active
+display manager, the ordinary `portable` account and home, a KDE Wayland
+session owned by `portable`, live `kwin_wayland` and `plasmashell`, and the
+required GUI packages. Reaching arbitrary userspace or merely starting SDDM is
+not sufficient for `RUN_PASS`.

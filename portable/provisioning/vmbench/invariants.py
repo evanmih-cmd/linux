@@ -21,7 +21,7 @@ WHY_TCP_IS_FORBIDDEN = (
 # only issue-#3 software surfaces. Storage, boot, networking, credentials,
 # users, hostname, and every other installation setting remain frozen.
 PROVEN_PROFILE_EXCEPT_SOFTWARE_SHA256 = (
-    "5242d2230c572ba89192b92a01e491fbe9b85852d9f869e6ae433b6dfc11f3b4"
+    "d5781f609069a5f4ac8ac92f82ae76187bf5a3bbec2c515137fb95ed602df044"
 )
 
 SOFTWARE_MANAGED_FILE_PATHS = {

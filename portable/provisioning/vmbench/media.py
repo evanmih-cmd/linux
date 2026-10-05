@@ -29,7 +29,7 @@ def load_credentials(cfg):
     if not cfg.credentials.exists():
         return {}
     data = json.loads(cfg.credentials.read_text())
-    allowed = {"recovery", "pin", "root"}
+    allowed = {"recovery", "pin", "root", "desktop"}
     unknown = sorted(set(data) - allowed)
     if unknown:
         raise RuntimeError(
@@ -68,8 +68,9 @@ def render_runtime_profile(cfg, destination, credentials, *, vm_observability=Tr
     crypt_key = _child(outer, "crypt_key")
 
     users = _child(root, "users")
-    root_user = list(users)[0]
+    root_user, desktop_user = list(users)
     user_password = _child(root_user, "user_password")
+    desktop_password = _child(desktop_user, "user_password")
 
     general = _child(root, "general")
     ask_list = _child(general, "ask-list")
@@ -88,6 +89,13 @@ def render_runtime_profile(cfg, destination, credentials, *, vm_observability=Tr
             if _ask_path(ask) == "users,0,user_password":
                 ask_list.remove(ask)
         embedded.append("root")
+
+    if "desktop" in credentials:
+        desktop_password.text = credentials["desktop"]
+        for ask in list(ask_list):
+            if _ask_path(ask) == "users,1,user_password":
+                ask_list.remove(ask)
+        embedded.append("desktop")
 
     if "pin" in credentials:
         for ask in list(ask_list):
@@ -121,6 +129,18 @@ def render_runtime_profile(cfg, destination, credentials, *, vm_observability=Tr
                         if value == "repo:/":
                             media_url.text = "cd:/?devices=/dev/sr1"
 
+        login_settings = _child(root, "login_settings")
+        if login_settings is None:
+            login_settings = ET.SubElement(
+                root, f"{{{YAST_NS}}}login_settings"
+            )
+        autologin = _child(login_settings, "autologin_user")
+        if autologin is None:
+            autologin = ET.SubElement(
+                login_settings, f"{{{YAST_NS}}}autologin_user"
+            )
+        autologin.text = "portable"
+
         scripts = ET.SubElement(root, f"{{{YAST_NS}}}scripts")
         pre_scripts = ET.SubElement(
             scripts,
@@ -148,9 +168,117 @@ def render_runtime_profile(cfg, destination, credentials, *, vm_observability=Tr
 ( sleep 2; printf 'VMBENCH_PROFILE_READY\n' > /dev/ttyS0 ) &
 """
 
+        chroot_scripts = ET.SubElement(
+            scripts,
+            f"{{{YAST_NS}}}chroot-scripts",
+            {"{http://www.suse.com/1.0/configns}type": "list"},
+        )
+        chroot = ET.SubElement(chroot_scripts, f"{{{YAST_NS}}}script")
+        ET.SubElement(
+            chroot, f"{{{YAST_NS}}}filename"
+        ).text = "vmbench-first-boot-capability"
+        ET.SubElement(
+            chroot, f"{{{YAST_NS}}}interpreter"
+        ).text = "shell"
+        ET.SubElement(
+            chroot,
+            f"{{{YAST_NS}}}chrooted",
+            {"{http://www.suse.com/1.0/configns}type": "boolean"},
+        ).text = "true"
+        ET.SubElement(
+            chroot,
+            f"{{{YAST_NS}}}debug",
+            {"{http://www.suse.com/1.0/configns}type": "boolean"},
+        ).text = "false"
+        ET.SubElement(chroot, f"{{{YAST_NS}}}source").text = r"""
+cat >/usr/local/sbin/vmbench-capability-report <<'VMBENCH_REPORT'
+#!/bin/sh
+i=0
+while [ "$i" -lt 60 ]; do
+  if systemctl is-active --quiet display-manager.service     && pgrep -u portable -x kwin_wayland >/dev/null 2>&1     && pgrep -u portable -x plasmashell >/dev/null 2>&1; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+exec >/dev/ttyS0 2>&1
+printf 'VMBENCH_CAPABILITY_BEGIN
+'
+printf 'default_target='
+systemctl get-default || true
+printf 'display_active='
+systemctl is-active display-manager.service || true
+printf 'display_failed='
+systemctl is-failed display-manager.service || true
+printf 'desktop_user_account='
+id portable >/dev/null 2>&1 && printf 'yes
+' || printf 'no
+'
+printf 'desktop_home_owner='
+stat -c '%U' /home/portable 2>/dev/null || printf 'MISSING
+'
+printf 'sddm_process='
+pgrep -x sddm >/dev/null 2>&1 && printf 'yes
+' || printf 'no
+'
+printf 'kwin_wayland_process='
+pgrep -u portable -x kwin_wayland >/dev/null 2>&1 && printf 'yes
+' || printf 'no
+'
+printf 'plasmashell_process='
+pgrep -u portable -x plasmashell >/dev/null 2>&1 && printf 'yes
+' || printf 'no
+'
+session="$(loginctl list-sessions --no-legend 2>/dev/null | awk '$3=="portable" {print $1; exit}')"
+printf 'desktop_session_user='
+if [ -n "$session" ]; then
+  loginctl show-session "$session" -p Name --value 2>/dev/null || true
+else
+  printf 'MISSING
+'
+fi
+printf 'desktop_session_type='
+if [ -n "$session" ]; then
+  loginctl show-session "$session" -p Type --value 2>/dev/null || true
+else
+  printf 'MISSING
+'
+fi
+printf 'gui_packages='
+if rpm -q sddm-qt6 xorg-x11-server plasma6-session plasma6-workspace dolphin konsole >/dev/null 2>&1; then
+  printf 'ok
+'
+else
+  printf 'missing
+'
+fi
+printf 'VMBENCH_CAPABILITY_END
+'
+rm -f /etc/systemd/system/graphical.target.wants/vmbench-capability.service
+rm -f /etc/systemd/system/vmbench-capability.service
+rm -f /usr/local/sbin/vmbench-capability-report
+VMBENCH_REPORT
+chmod 0700 /usr/local/sbin/vmbench-capability-report
+cat >/etc/systemd/system/vmbench-capability.service <<'VMBENCH_UNIT'
+[Unit]
+Description=Desktop-Linux VM graphical capability proof
+Wants=display-manager.service
+After=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vmbench-capability-report
+
+[Install]
+WantedBy=graphical.target
+VMBENCH_UNIT
+mkdir -p /etc/systemd/system/graphical.target.wants
+ln -sfn ../vmbench-capability.service   /etc/systemd/system/graphical.target.wants/vmbench-capability.service
+"""
+
     tree.write(destination, encoding="UTF-8", xml_declaration=True)
 
-    missing = [key for key in ("recovery", "pin", "root") if key not in credentials]
+    missing = [key for key in ("recovery", "pin", "root", "desktop") if key not in credentials]
     return {
         "embedded": embedded,
         "missing": missing,
@@ -887,7 +1015,7 @@ def build_release_oemdrv(target_device, cfg=None):
             "release OEMDRV must not embed installer credentials: "
             + repr(mode["embedded"])
         )
-    if sorted(mode["missing"]) != ["pin", "recovery", "root"]:
+    if sorted(mode["missing"]) != ["desktop", "pin", "recovery", "root"]:
         raise RuntimeError(
             "release OEMDRV must retain all native credential asks: "
             + repr(mode["missing"])

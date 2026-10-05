@@ -25,6 +25,47 @@ BOOT_UNLOCK_FALLBACK_MARKERS = (
     "falling back to traditional unlocking.",
     "Please enter passphrase for disk ",
 )
+CAPABILITY_BEGIN = "VMBENCH_CAPABILITY_BEGIN"
+CAPABILITY_END = "VMBENCH_CAPABILITY_END"
+
+
+def parse_capability_report(text):
+    start = text.rfind(CAPABILITY_BEGIN)
+    end = text.find(CAPABILITY_END, start + len(CAPABILITY_BEGIN))
+    if start < 0 or end < 0:
+        raise RuntimeError("complete first-boot capability report not found")
+    body = text[start + len(CAPABILITY_BEGIN):end]
+    facts = {}
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        facts[key.strip()] = value.strip()
+
+    required = {
+        "default_target": "graphical.target",
+        "display_active": "active",
+        "display_failed": "inactive",
+        "desktop_user_account": "yes",
+        "desktop_home_owner": "portable",
+        "sddm_process": "yes",
+        "kwin_wayland_process": "yes",
+        "plasmashell_process": "yes",
+        "desktop_session_user": "portable",
+        "desktop_session_type": "wayland",
+        "gui_packages": "ok",
+    }
+    failures = [
+        f"{key}={facts.get(key)!r}, expected {expected!r}"
+        for key, expected in required.items()
+        if facts.get(key) != expected
+    ]
+    if failures:
+        raise RuntimeError(
+            "first-boot graphical capability failed: " + "; ".join(failures)
+        )
+    return facts
 
 
 def classify_boot_unlock(text, *, pin_submitted=False):
@@ -78,7 +119,7 @@ class BenchRun:
         self.last_event = None
         self.credential_mode = {
             "embedded": [],
-            "missing": ["recovery", "pin", "root"],
+            "missing": ["recovery", "pin", "root", "desktop"],
         }
         self.boot_pin = None
         self.post_install_boot_mark = None
@@ -175,10 +216,10 @@ class BenchRun:
         built = build_oemdrv(self.cfg)
         self.credential_mode = built["credentials"]
         credentials = load_credentials(self.cfg)
-        required = {"recovery", "pin", "root"}
+        required = {"recovery", "pin", "root", "desktop"}
         if set(credentials) != required:
             raise RuntimeError(
-                "final autonomous E2E requires all three VM test credentials "
+                "final autonomous E2E requires all four VM test credentials "
                 "in the local credential file"
             )
         self.boot_pin = credentials["pin"]
@@ -217,6 +258,22 @@ class BenchRun:
                 "invariant-check",
                 check="vm-vcpu-count",
                 vcpus=actual_vcpus,
+            )
+            graphics = post_reset.graphics_config()
+            expected_graphics = {
+                "controller": self.cfg.vm_graphics_controller,
+                "vram_mib": self.cfg.vm_vram_mib,
+                "accel3d": self.cfg.vm_accel3d,
+            }
+            if graphics != expected_graphics:
+                raise RuntimeError(
+                    "post-reset VM graphics mismatch: "
+                    f"{graphics} != {expected_graphics}"
+                )
+            self.event(
+                "invariant-check",
+                check="vm-linux-graphics",
+                **graphics,
             )
         finally:
             post_reset.logoff()
@@ -526,6 +583,24 @@ class BenchRun:
             "Guest Additions userland"
         )
 
+    def verify_first_boot_capabilities(self):
+        self.set_stage("capability-audit")
+        if self.post_install_boot_mark is None:
+            raise RuntimeError("first-boot serial mark is missing")
+        self.term.wait_any(
+            CAPABILITY_END,
+            timeout=75,
+            new_since=self.post_install_boot_mark,
+        )
+        data = self.term._bytes()[self.post_install_boot_mark:]
+        text = clean_text(data)
+        facts = parse_capability_report(text)
+        (self.dir / "capability-report.json").write_text(
+            json.dumps(facts, indent=2, sort_keys=True) + "\n"
+        )
+        self.event("capability-audit-pass", facts=facts)
+        return facts
+
     def capture_failure_logs(self):
         if self.term:
             try:
@@ -599,6 +674,7 @@ class BenchRun:
             "installing": "Destructive storage had started, but installation did not finish or stopped making progress.",
             "boot-unlock": "Installed boot did not prove one-shot TPM2+PIN unlock without traditional LUKS fallback.",
             "postcheck": "Installation reached postcheck, but an invariant such as guard-disk safety or substantial target content failed.",
+            "capability-audit": "Installed system reached userspace but failed one or more required product capabilities such as graphical login or software baseline state.",
         }.get(stage, "Harness failed during the recorded stage.")
         return {
             "exception_type": exc.__class__.__name__,
@@ -607,7 +683,15 @@ class BenchRun:
             "last_event": self.last_event,
         }
 
-    def result(self, status, error=None, post=None, failure=None, stage=None):
+    def result(
+        self,
+        status,
+        error=None,
+        post=None,
+        failure=None,
+        stage=None,
+        capability_audit=None,
+    ):
         data = {
             "status": status,
             "stage": stage or self.stage,
@@ -615,6 +699,7 @@ class BenchRun:
             "failure": failure,
             "run": str(self.dir),
             "postcheck": post,
+            "capability_audit": capability_audit,
             "evidence": {
                 "events": str(self.dir / "events.jsonl"),
                 "traceback": str(self.dir / "traceback.txt"),
@@ -652,6 +737,7 @@ class BenchRun:
 
 def run(cfg=None):
     bench = BenchRun(cfg)
+    capability_audit = None
     try:
         bench.prepare()
         bench.configure_and_launch()
@@ -661,9 +747,15 @@ def run(cfg=None):
         bench.wait_install()
         bench.verify_tpm_pin_unlock()
         post = bench.postcheck()
+        capability_audit = bench.verify_first_boot_capabilities()
+
         bench.stage = "complete"
         bench.event("RUN_PASS")
-        return bench.result("PASS", post=post)
+        return bench.result(
+            "PASS",
+            post=post,
+            capability_audit=capability_audit,
+        )
     except Exception as exc:
         failure_stage = bench.stage
         failure = bench.failure_summary(exc, failure_stage)
@@ -692,6 +784,7 @@ def run(cfg=None):
             post=post,
             failure=failure,
             stage=failure_stage,
+            capability_audit=capability_audit,
         )
         print(
             "FAILURE_SUMMARY",
@@ -715,10 +808,10 @@ def verify_installed_boot(cfg=None):
     try:
         bench.set_stage("installed-boot-prepare")
         credentials = load_credentials(bench.cfg)
-        required = {"recovery", "pin", "root"}
+        required = {"recovery", "pin", "root", "desktop"}
         if set(credentials) != required:
             raise RuntimeError(
-                "installed boot verification requires all three VM test credentials"
+                "installed boot verification requires all four VM test credentials"
             )
         if not credentials["pin"]:
             raise RuntimeError("VM test TPM PIN is empty")

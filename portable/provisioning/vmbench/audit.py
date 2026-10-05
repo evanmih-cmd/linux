@@ -119,6 +119,46 @@ def probe_commands():
         ("nm_service", "systemctl is-active NetworkManager"),
         ("failed_units", "systemctl --failed --no-legend --plain"),
         ("system_state", "systemctl is-system-running"),
+        ("desktop_user", "id portable"),
+        (
+            "login_sessions",
+            "loginctl list-sessions --no-legend; "
+            "for s in $(loginctl list-sessions --no-legend | awk '{print $1}'); do "
+            "echo ===$s===; loginctl show-session $s "
+            "-p Id -p Name -p User -p State -p Type -p Class -p Service "
+            "-p Desktop -p Seat -p TTY -p VTNr -p Leader; done",
+        ),
+        (
+            "plasma_processes",
+            "ps -u portable -o pid,ppid,stat,comm,args",
+        ),
+        (
+            "logind_status",
+            "systemctl status systemd-logind --no-pager -l",
+        ),
+        (
+            "logind_config",
+            "grep -RHE '^[[:space:]]*(HandlePowerKey|HandlePowerKeyLongPress|"
+            "PowerKeyIgnoreInhibited|LidSwitchIgnoreInhibited)=' "
+            "/etc/systemd/logind.conf /etc/systemd/logind.conf.d "
+            "/usr/lib/systemd/logind.conf.d 2>/dev/null || true",
+        ),
+        (
+            "logind_properties",
+            "for p in HandlePowerKey HandlePowerKeyLongPress "
+            "PowerKeyIgnoreInhibited; do printf \"$p=\"; "
+            "busctl get-property org.freedesktop.login1 "
+            "/org/freedesktop/login1 org.freedesktop.login1.Manager "
+            "$p 2>&1 || true; done",
+        ),
+        (
+            "inhibitors",
+            "timeout 8 systemd-inhibit --list --no-pager || true",
+        ),
+        (
+            "desktop_journal",
+            "journalctl -b _UID=$(id -u portable) --no-pager -n 300",
+        ),
         ("packages", "rpm -q sdbootutil snapper NetworkManager lvm2"),
         (
             "software_packages",
@@ -174,6 +214,7 @@ def build_probe_script(token):
     lines = [
         "#!/bin/bash",
         "set +e",
+        "export SYSTEMD_PAGER=cat PAGER=cat SYSTEMD_COLORS=0",
         "exec >/dev/ttyS0 2>&1",
         f"TOKEN={shlex.quote(token)}",
         'echo "__AUDIT_BEGIN__"$TOKEN',
@@ -256,13 +297,14 @@ def hot_swap_audit_iso(box, iso):
         box.unlock(session)
 
 
-def audit_launcher():
+def audit_launcher(token):
+    mountpoint = f"/run/dla-{token}"
     return (
-        "mkdir -p /run/dla;"
-        "umount /run/dla 2>/dev/null;"
-        "mount -o ro /dev/disk/by-label/DLAUDIT /run/dla;"
-        "bash /run/dla/audit.sh;"
-        "umount /run/dla"
+        f"mkdir -p {mountpoint};"
+        f"mount -o ro /dev/disk/by-label/DLAUDIT {mountpoint};"
+        f"bash {mountpoint}/audit.sh;"
+        f"umount {mountpoint};"
+        f"rmdir {mountpoint}"
     )
 
 def local_serial_path(raw_path):
@@ -1012,6 +1054,7 @@ class InstalledAudit:
 
     def run(self):
         box = VBox(self.cfg)
+        keyboard = None
         try:
             if box.state() != "Running":
                 raise AuditFailure(
@@ -1080,7 +1123,7 @@ class InstalledAudit:
             # a real text VT and log in there before sending the tiny audit
             # launcher. This keeps the transport inside the harness and avoids
             # relying on whatever GUI currently owns keyboard focus.
-            keyboard.alt_fn(3)
+            keyboard.ctrl_alt_fn(6)
             time.sleep(0.8)
             keyboard.text("root")
             keyboard.enter()
@@ -1093,10 +1136,10 @@ class InstalledAudit:
             monitor.wait_any(
                 ready, timeout=10, new_since=mark
             )
-            self.event("root-shell-observed", transport="tty3-login")
+            self.event("root-shell-observed", transport="tty6-login")
 
             probe_mark = monitor.mark()
-            self.send_line(keyboard, audit_launcher())
+            self.send_line(keyboard, audit_launcher(token))
             monitor.wait_any(
                 f"__AUDIT_DONE__{token}",
                 timeout=90,
@@ -1107,6 +1150,10 @@ class InstalledAudit:
             (self.dir / "probe-output.log").write_bytes(
                 captured
             )
+            keyboard.text("exit")
+            keyboard.enter()
+            time.sleep(0.4)
+            self.event("root-shell-closed", transport="tty6-login")
             text = captured.decode(
                 "utf-8", "replace"
             ).replace("\r", "\n")
@@ -1187,6 +1234,13 @@ class InstalledAudit:
                 },
             )
         finally:
+            if keyboard is not None:
+                try:
+                    keyboard.ctrl_alt_fn(2)
+                    time.sleep(0.5)
+                    self.event("returned-to-graphical-vt", vt=2)
+                except Exception as exc:
+                    self.event("graphical-vt-return-failed", error=repr(exc))
             box.logoff()
             self.events.close()
 

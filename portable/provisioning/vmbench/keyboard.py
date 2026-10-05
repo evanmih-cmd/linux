@@ -146,3 +146,20 @@ class Keyboard:
 
         self._with_keyboard(action)
         time.sleep(0.4)
+
+    def ctrl_alt_fn(self, number):
+        codes = {
+            1: 0x3b, 2: 0x3c, 3: 0x3d, 4: 0x3e,
+            5: 0x3f, 6: 0x40, 7: 0x41,
+        }
+        code = codes[number]
+
+        def action(keyboard):
+            self._scancode(keyboard, 0x1d)
+            self._scancode(keyboard, 0x38)
+            self._press(keyboard, code)
+            self._scancode(keyboard, 0xb8)
+            self._scancode(keyboard, 0x9d)
+
+        self._with_keyboard(action)
+        time.sleep(0.4)

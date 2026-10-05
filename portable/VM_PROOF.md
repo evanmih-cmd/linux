@@ -14,6 +14,9 @@ The single proof VM models:
 - SATA3: current Desktop-Linux OEMDRV layer;
 - NICs disabled during provisioning;
 - UEFI + Secure Boot + TPM2;
+- Linux graphics controller `VMSVGA`, at least 64 MiB VRAM
+  (128 MiB by default), with 3D acceleration disabled unless a proof run
+  explicitly enables and validates it;
 - COM1 16550A in VirtualBox RawFile mode.
 
 The proof target storage graph is exactly:
@@ -39,8 +42,10 @@ YaST `y2log` into the same COM1 stream. The log therefore survives harness,
 installer or VM failure up to the last byte VirtualBox wrote.
 
 Each run also records host-side events, preflight identities, attachments,
-guard/target hashes and NVRAM state. Screenshots are not part of correctness or
-diagnosis.
+guard/target hashes and NVRAM state. Serial/system-state evidence remains the
+primary correctness evidence. SOAP framebuffer captures may be retained as
+diagnostic evidence for graphical-session failures, but never replace the
+service/session/process gates.
 
 Proof credentials are local inputs, not repository content. Present values are
 embedded only into the generated OEMDRV/runtime AutoYaST profile; absent values
@@ -65,6 +70,10 @@ values.
    persistent owned openSUSE NVRAM boot dependency.
 8. Installed-target cold boot succeeds through Secure Boot and requires only
    one cryptographic credential for the outer LUKS2 container.
+9. The installed workstation reaches a KDE Plasma Wayland session as the
+   ordinary `portable` user, with `kwin_wayland` and `plasmashell` running and a
+   non-black framebuffer. Legacy `VBoxVGA` or undersized VRAM is a bench
+   configuration failure, not an acceptable product result.
 
 ## Later system gates
 

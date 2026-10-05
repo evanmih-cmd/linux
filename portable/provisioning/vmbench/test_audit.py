@@ -213,9 +213,9 @@ class AuditTests(unittest.TestCase):
 
     def test_fast_keyboard_supports_launcher(self):
         keyboard = Keyboard(None)
-        codes = keyboard._text_scancodes(audit_launcher())
+        codes = keyboard._text_scancodes(audit_launcher("deadbeef1234"))
         self.assertTrue(codes)
-        self.assertNotIn("base64", audit_launcher())
+        self.assertNotIn("base64", audit_launcher("deadbeef1234"))
 
 
 if __name__ == "__main__":

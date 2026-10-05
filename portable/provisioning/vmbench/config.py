@@ -21,6 +21,16 @@ class Config:
     vm_vcpus: int = int(
         os.environ.get("DESKTOP_LINUX_VM_VCPUS", "1")
     )
+    vm_graphics_controller: str = os.environ.get(
+        "DESKTOP_LINUX_VM_GRAPHICS_CONTROLLER", "VMSVGA"
+    )
+    vm_vram_mib: int = int(
+        os.environ.get("DESKTOP_LINUX_VM_VRAM_MIB", "128")
+    )
+    vm_accel3d: bool = (
+        os.environ.get("DESKTOP_LINUX_VM_ACCEL3D", "0").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
     keep_runs: int = int(
         os.environ.get("DESKTOP_LINUX_KEEP_RUNS", "8")
     )

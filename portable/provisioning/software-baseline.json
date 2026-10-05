@@ -61,33 +61,7 @@
   },
   "opensuse_history": {
     "base_url": "https://download.opensuse.org/history/20260930/tumbleweed/repo/oss/",
-    "repomd_sha256": "2a43256fd3283eb5970f6cc0bb320df48fc3886116eb4f83a619cde76c010f55",
-    "rpms": {
-      "noarch/breeze6-wallpapers-6.7.5-1.1.noarch.rpm": "4b9359f6db3e0beee900db7177dfed0d8a5ddc98d277afc3ffac29008d940766",
-      "noarch/kernel-firmware-all-20250206-1.3.noarch.rpm": "c06233a979c2e84dd612af5fd695ac9d60f7519a51af87c7913f13c614fa36f5",
-      "noarch/kernel-firmware-mellanox-20260610-1.2.noarch.rpm": "6b148a5c939043dfe3766b7cf919850db9def35d897eaadcc1134f67faec4913",
-      "noarch/kernel-firmware-prestera-20260610-1.2.noarch.rpm": "e254a58719f21828d7ee522f5dbf79079334065658ac4754e2511076bc524e64",
-      "noarch/poppler-data-0.4.12-1.7.noarch.rpm": "cf5cb0814a499cff2317eabe3d29c441c8f8437092ea941ff4710820456305ab",
-      "noarch/sdbootutil-enroll-1+git20260929.26b6989-1.1.noarch.rpm": "bd421e5b47f7a346f6da918a76f444dccfe5970a9143dbf800b6aed9194245cb",
-      "noarch/sdbootutil-kernel-install-1+git20260929.26b6989-1.1.noarch.rpm": "cf7ad154a602251cb5eea64af3fdc97ccba2eef118cfcd69e2fddb9ebb6e463b",
-      "noarch/sdbootutil-tukit-1+git20260929.26b6989-1.1.noarch.rpm": "3a10f6a5f815310dc15dc4eb5ff1fb4899be0ec50a8196080503c4abc9a61e7a",
-      "noarch/ucode-amd-20260926-1.1.noarch.rpm": "1ceb3330442090bb45e3a52d942b22681df11755701d18a5d32c720c2803b62d",
-      "x86_64/dracut-transactional-update-6.1.3-1.2.x86_64.rpm": "b2476c86a4f27eff396b4917397bd971308c300bec08c2572439a5960bc62147",
-      "x86_64/fcoe-utils-1.0.34+9.3d27180c86c-1.4.x86_64.rpm": "fdd4bc8f30c5de6d5796b8fa0c83f3ff4e0cb20bd4164bcd784856b7d05ed4e2",
-      "x86_64/inotify-tools-4.25.9.0-1.5.x86_64.rpm": "3c83e599e3a741f10b8914efcb8f30a5207462532f1fcbd283951f3da49ed795",
-      "x86_64/libconfig15-1.8.1-1.6.x86_64.rpm": "654c5a8e3762f49948a69ddbe305f74e92a416027802001f0e3aa8ec115caab0",
-      "x86_64/libinotifytools0-4.25.9.0-1.5.x86_64.rpm": "9cddb56237c6b99d33a319c555a20b2847832e4decd4390768bc712cfbec0ae4",
-      "x86_64/liblldp_clif1-1.1+110.f16f944-1.1.x86_64.rpm": "391d04f587010a23b555cf789e915ac5fc26d201ec0995cdbee2a7decc35969e",
-      "x86_64/libtukit8-6.1.3-1.2.x86_64.rpm": "39876cd9489fcef83bbdd4c4f0b89fa0d3257ea7fe2da8a3e92b55f12b82e026",
-      "x86_64/open-lldp-1.1+110.f16f944-1.1.x86_64.rpm": "c70c98c7edf11c56103815c80ac32808c59616d0eba8ff2b41e225a53acd037b",
-      "x86_64/patterns-base-hardware-20241218-34.1.x86_64.rpm": "14d784b4c271ec1b57aa7ca4de8e6bbe04d0325ec2a436365cd9d84f795e7dc4",
-      "x86_64/rebootmgr-3.3+git20250722.adf0149-1.5.x86_64.rpm": "837edda5cebc96bfc3b205dfd5d50089c268954364c66c967690241a8032c9c5",
-      "x86_64/spice-vdagent-0.23.0-4.2.x86_64.rpm": "451726c0328eeb67e60aa5a7799b1b0847868037faef28bd250bd434576ba68c",
-      "x86_64/transactional-update-6.1.3-1.2.x86_64.rpm": "aee8b54c00bf0cb0d109b7b4027656e321434b43f5d79f702b2d8fa88504c5db",
-      "x86_64/tukit-6.1.3-1.2.x86_64.rpm": "e92d543a11911c40838cdbacfe7e023f5eb27c6056c42f622eb38b1dbdd6f45b",
-      "x86_64/ucode-intel-20260812-1.1.x86_64.rpm": "11f15eb18ed9d7060a9c9576ab3f9188887ae35615fd9252277dee1b7f95144c",
-      "x86_64/zypp-boot-plugin-0.0.13-3.9.x86_64.rpm": "9b623fc03416fa61c1b027cf0206d6052e6ab8cf61a3075d9c146cb2a576c009"
-    }
+    "repomd_sha256": "2a43256fd3283eb5970f6cc0bb320df48fc3886116eb4f83a619cde76c010f55"
   },
   "packages": [
     "sdbootutil",
@@ -109,6 +83,7 @@
     "sudo",
     "konsole",
     "sddm-qt6",
+    "xorg-x11-server",
     "MozillaFirefox",
     "google-chrome-stable",
     "transactional-update",
