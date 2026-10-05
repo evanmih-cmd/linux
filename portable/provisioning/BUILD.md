@@ -3,8 +3,11 @@
 ## Canonical inputs
 
 The release model is the verified official openSUSE Tumbleweed
-Snapshot20260930 Offline ISO plus a separately verifiable Desktop-Linux OEMDRV
-layer. The upstream ISO is not repacked for routine development.
+Snapshot20260930 Offline ISO written to the installer USB with Rufus, followed
+by a separately verifiable Desktop-Linux overlay copied onto that same USB.
+The upstream ISO is never remastered. The VM bench presents the same overlay
+tree as a separate OEMDRV ISO only because VirtualBox cannot model the
+post-Rufus writable installation medium directly.
 
 Canonical source-controlled layer inputs:
 
@@ -15,7 +18,9 @@ Canonical source-controlled layer inputs:
   `update_nvram=false`;
 - `networkmanager-offline-write.patch` — permits offline target config
   writes without requiring a live NetworkManager connection;
-- `installer-overlay-manifest.txt`.
+- `installer-overlay-manifest.txt`;
+- `software-baseline.json` — pinned software contract, vendor identities and offline payload digests;
+- `assets/20-hw1.rules` and `assets/mimeapps.list` — managed Ledger udev rules and Firefox-default policy.
 
 Do not use `sdbootutil --portable` for this design. Stock `sdbootutil install`
 already writes the removable fallback `/EFI/BOOT/BOOTX64.EFI`. Keeping the
@@ -49,11 +54,11 @@ A layer build must:
    Snapshot identity;
 4. apply all three source-controlled installer patches from scratch, with no
    prepatched OEMDRV/cache tree as an input;
-5. place `autoinst.xml` at OEMDRV root and installer updates under the
+5. place `autoinst.xml` at overlay root and installer updates under the
    standard YaST DUD tree;
-6. build the small OEMDRV artifact;
-7. record the profile hash, aggregate patchset hash, each patch hash and built
-   artifact identity before VM boot.
+6. add the pinned offline software payload under `/portable`;
+7. verify the offline software payload with networking disabled and record the
+   profile, patchset and software identities before use.
 
 The old `layer/oemdrv-portable-root` is not a builder input. It may remain only
 as historical/live-proof evidence. The clean source cache is
@@ -65,21 +70,20 @@ files, verifies their pinned SHA-256 identities, and only then applies patches.
 The full ISO hash is therefore paid only on cold/recovery rebuilds, not every
 normal iteration.
 
-The VM harness rebuilds only this small layer during iteration. Networking
-remains disabled during provisioning proof.
+The VM harness packages the complete Desktop-Linux overlay tree as OEMDRV for
+iteration. Networking remains disabled during provisioning proof. Physical
+release keeps the same tree as a directory for post-Rufus copy onto the USB.
 
-Each built OEMDRV contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
-After ISO creation the builder extracts the ISO again and verifies the complete
-regular-file hash set and symlink inventory before publishing it as the current
-artifact. A strict payload allowlist additionally requires exactly the expected
-profile/metadata files, one DUD update marker, the TPM PIN handoff and the six
-installer-only YaST files; the generated DUD contains no symlinks. Any
-unexpected payload path fails the build. The external ISO SHA-256 is then recorded in
-`current-build.txt`.
+Every overlay contains `SOURCE-IDENTITY.txt`, `SHA256SUMS` and `SYMLINKS`.
+The fixed installer portion is allowlisted; `/portable` is checked against the
+pinned software manifest and its own tree hashes. VM builds additionally
+package the tree as OEMDRV, extract it again and verify the full file/symlink
+inventory. Physical release leaves the verified directory unwrapped and records
+its path in `current-build.txt`.
 
 This is a reconstructible and self-verifying build, not a promise of
-byte-for-byte identical ISO bytes across runs: build IDs and filesystem/ISO
-metadata may differ between otherwise equivalent builds.
+byte-for-byte identical packaging metadata across runs: build IDs and VM ISO
+filesystem metadata may differ between otherwise equivalent overlay trees.
 
 ## Local credential rule
 
@@ -113,9 +117,9 @@ VM and physical-release credential sources are deliberately separated:
 - `bench.py build-release --target-device /dev/disk/by-id/...` never reads that
   VM credential file. It requires an explicit persistent release target,
   rejects the VM proof identifier and non-`by-id` paths, forces an empty
-  credential set, writes the artifact under the separate release cache, keeps
-  all three native AutoYaST credential questions, and leaves only the empty
-  `0600` TPM PIN placeholder in DUD `inst-sys`.
+  credential set, writes a verified overlay directory under the separate
+  release cache, keeps all three native AutoYaST credential questions, and
+  leaves only the empty `0600` TPM PIN placeholder in DUD `inst-sys`.
 
 Thus a VM test password cannot be inherited by the physical release artifact
 through the builder's default credential path.

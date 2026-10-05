@@ -141,6 +141,32 @@ def good_sections():
     sections["packages"]["output"] = "\n".join([
         "sdbootutil-1", "snapper-1", "NetworkManager-1", "lvm2-1"
     ])
+    sections["software_packages"]["output"] = "\n".join([
+        "MozillaFirefox-1",
+        "google-chrome-stable-1",
+        "NetworkManager-1",
+        "plasma6-nm-1",
+        "wpa_supplicant-1",
+        "firewalld-1",
+        "transactional-update-1",
+        "zypp-boot-plugin-1",
+        "sdbootutil-tukit-1",
+    ])
+    sections["software_patterns"]["output"] = "\n".join([
+        "patterns-base-base-1",
+        "patterns-base-hardware-1",
+        "patterns-kde-kde_plasma-1",
+    ])
+    sections["software_forbidden"]["output"] = ""
+    sections["package_closure"]["output"] = "\n".join([
+        "MozillaFirefox-1.x86_64",
+        "google-chrome-stable-1.x86_64",
+    ])
+    sections["software_files"]["output"] = "\n".join([
+        "0a67fa9b7024048f7f967fef8d33c2da38dae9354e996c131b79a014f62b7efc  /etc/udev/rules.d/20-hw1.rules",
+        "37ac8c63e1d018a3472eba490d66c69c3a085aa7654035d05707f153c3248df6  /etc/xdg/mimeapps.list",
+    ])
+    sections["firewalld_state"]["output"] = "enabled=enabled\nactive=active"
     sections["pin_file_absent"]["output"] = ""
     return sections
 
@@ -157,6 +183,23 @@ class AuditTests(unittest.TestCase):
         result = summarize(evaluate(fixture))
         self.assertEqual(result["status"], "FAIL")
         self.assertIn("hostname", result["failed"])
+
+    def test_ansi_colored_kdump_only_is_warning(self):
+        fixture = good_sections()
+        fixture["failed_units"]["output"] = (
+            "\x1b[0;1;31mkdump-early.service\x1b[0m loaded failed\n"
+            "\x1b[0;1;31mkdump.service\x1b[0m loaded failed\n"
+            "\x1b[K"
+        )
+        fixture["system_state"]["output"] = "degraded"
+        result = summarize(evaluate(fixture))
+        self.assertEqual(result["status"], "PASS", result)
+        self.assertIn("failed-units", result["warnings"])
+        self.assertIn("system-state", result["warnings"])
+
+    def test_forbidden_probe_is_successful_when_nothing_is_installed(self):
+        command = dict(probe_commands())["software_forbidden"]
+        self.assertTrue(command.endswith("; true"), command)
 
     def test_mutating_probe_rejected(self):
         with self.assertRaises(AuditFailure):

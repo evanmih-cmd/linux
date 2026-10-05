@@ -50,7 +50,7 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
         session = box.lock("Write")
         try:
             machine = box.session_machine(session)
-            for port in (1, 2, 3):
+            for port in (0, 1, 2, 3):
                 try:
                     box._vals(
                         "IMachine_detachDevice",
@@ -105,34 +105,39 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
             except Exception:
                 pass
 
-        target = cfg.bench / "target.vdi"
-        target_unc = unc(target)
-        box.close_hard_disks_at(target_unc)
-        if target.exists():
-            target.unlink()
+        def create_vdi(path, size_gib, label):
+            location = unc(path)
+            box.close_hard_disks_at(location)
+            if path.exists():
+                path.unlink()
+            disk = box._vals(
+                "IVirtualBox_createMedium",
+                [
+                    ("_this", box.handle),
+                    ("format", "VDI"),
+                    ("location", location),
+                    ("accessMode", "ReadWrite"),
+                    ("aDeviceTypeType", "HardDisk"),
+                ],
+            )[0]
+            progress = box._vals(
+                "IMedium_createBaseStorage",
+                [
+                    ("_this", disk),
+                    ("logicalSize", str(size_gib * 1024**3)),
+                    ("variant", "Standard"),
+                ],
+            )[0]
+            box.wait_progress(progress, 60000)
+            error = box.progress_error(progress)
+            if error:
+                raise RuntimeError(f"{label} VDI creation failed: {error}")
+            return disk
 
-        medium = box._vals(
-            "IVirtualBox_createMedium",
-            [
-                ("_this", box.handle),
-                ("format", "VDI"),
-                ("location", target_unc),
-                ("accessMode", "ReadWrite"),
-                ("aDeviceTypeType", "HardDisk"),
-            ],
-        )[0]
-        progress = box._vals(
-            "IMedium_createBaseStorage",
-            [
-                ("_this", medium),
-                ("logicalSize", str(cfg.target_size_gib * 1024**3)),
-                ("variant", "Standard"),
-            ],
-        )[0]
-        box.wait_progress(progress, 60000)
-        error = box.progress_error(progress)
-        if error:
-            raise RuntimeError(f"target VDI creation failed: {error}")
+        guard = cfg.guard
+        guard_medium = create_vdi(guard, cfg.guard_size_gib, "guard")
+        target = cfg.vm_target_vdi
+        medium = create_vdi(target, cfg.target_size_gib, "target")
 
         official = cfg.cache / (
             "tumbleweed-dvd/"
@@ -159,11 +164,11 @@ def reset_vm(oem_path, cfg=None, serial_path=None):
                 ("forceNewUuid", "false"),
             ],
         )[0]
-
         session = box.lock("Write")
         try:
             machine = box.session_machine(session)
             attachments = [
+                (0, "HardDisk", guard_medium),
                 (1, "HardDisk", medium),
                 (2, "DVD", base),
                 (3, "DVD", oem),

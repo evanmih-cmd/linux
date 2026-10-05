@@ -11,6 +11,7 @@ from pathlib import Path
 from config import Config
 from keyboard import Keyboard
 from machine import unc
+from media import load_credentials
 from rawserial import RawSerialMonitor
 from vbox import VBox
 
@@ -46,6 +47,21 @@ def sha256(path):
         for chunk in iter(lambda: src.read(4 * 1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def autoyast_installed_asset_sha256(relative_path, cfg=None):
+    """Hash bytes after AutoYaST's trailing-newline normalization."""
+    cfg = cfg or Config()
+    data = (
+        cfg.repo / "portable/provisioning/assets" / relative_path
+    ).read_bytes().rstrip(b"\n")
+    return hashlib.sha256(data).hexdigest()
+
+
+def expected_managed_file_hash(relative_path, cfg=None):
+    cfg = cfg or Config()
+    data = (cfg.repo / "portable/provisioning/assets" / relative_path).read_bytes().rstrip(b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def probe_commands():
@@ -104,6 +120,37 @@ def probe_commands():
         ("failed_units", "systemctl --failed --no-legend --plain"),
         ("system_state", "systemctl is-system-running"),
         ("packages", "rpm -q sdbootutil snapper NetworkManager lvm2"),
+        (
+            "software_packages",
+            "rpm -q MozillaFirefox google-chrome-stable NetworkManager "
+            "plasma6-nm wpa_supplicant firewalld transactional-update "
+            "zypp-boot-plugin sdbootutil-tukit",
+        ),
+        (
+            "software_patterns",
+            "rpm -q patterns-base-base patterns-base-hardware "
+            "patterns-kde-kde_plasma",
+        ),
+        (
+            "software_forbidden",
+            "for p in patterns-kde-kde patterns-base-enhanced_base "
+            "openssh-server fwupd flatpak; do "
+            "rpm -q \"$p\" >/dev/null 2>&1 && echo \"$p\"; done; true",
+        ),
+        (
+            "package_closure",
+            "rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\\n' | sort",
+        ),
+        (
+            "software_files",
+            "sha256sum /etc/udev/rules.d/20-hw1.rules "
+            "/etc/xdg/mimeapps.list",
+        ),
+        (
+            "firewalld_state",
+            "printf 'enabled='; systemctl is-enabled firewalld; "
+            "printf 'active='; systemctl is-active firewalld",
+        ),
         ("pin_file_absent", "test ! -e /etc/desktop-linux-tpm2-pin"),
     ]
 
@@ -782,9 +829,11 @@ def evaluate(sections):
         ),
     ])
 
+    ansi_csi = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
     failed = [
-        line for line in out("failed_units").splitlines()
-        if line.strip()
+        clean
+        for line in out("failed_units").splitlines()
+        if (clean := ansi_csi.sub("", line).strip())
     ]
     kdump_only = bool(failed) and all(
         "kdump.service" in line or "kdump-early.service" in line
@@ -813,6 +862,72 @@ def evaluate(sections):
         sections["packages"]["rc"] == 0,
         out("packages").splitlines(),
         ["sdbootutil", "snapper", "NetworkManager", "lvm2"],
+    ))
+    checks.append(result_check(
+        "software-baseline-packages",
+        sections["software_packages"]["rc"] == 0,
+        out("software_packages").splitlines(),
+        [
+            "MozillaFirefox",
+            "google-chrome-stable",
+            "NetworkManager",
+            "plasma6-nm",
+            "wpa_supplicant",
+            "firewalld",
+            "transactional-update",
+            "zypp-boot-plugin",
+            "sdbootutil-tukit",
+        ],
+    ))
+    checks.append(result_check(
+        "software-baseline-patterns",
+        sections["software_patterns"]["rc"] == 0,
+        out("software_patterns").splitlines(),
+        [
+            "patterns-base-base",
+            "patterns-base-hardware",
+            "patterns-kde-kde_plasma",
+        ],
+    ))
+    forbidden_software = out("software_forbidden").splitlines()
+    checks.append(result_check(
+        "software-forbidden-baseline-absent",
+        sections["software_forbidden"]["rc"] == 0
+        and not forbidden_software,
+        forbidden_software,
+        [],
+    ))
+    facts["package_closure"] = [
+        line for line in out("package_closure").splitlines() if line.strip()
+    ]
+    checks.append(result_check(
+        "package-closure-captured",
+        sections["package_closure"]["rc"] == 0
+        and bool(facts["package_closure"]),
+        len(facts["package_closure"]),
+        "non-empty installed RPM closure",
+    ))
+    software_hashes = {
+        line for line in out("software_files").splitlines() if line.strip()
+    }
+    required_software_hashes = {
+        f"{expected_managed_file_hash('20-hw1.rules')}  /etc/udev/rules.d/20-hw1.rules",
+        f"{expected_managed_file_hash('mimeapps.list')}  /etc/xdg/mimeapps.list",
+    }
+    checks.append(result_check(
+        "software-managed-files",
+        sections["software_files"]["rc"] == 0
+        and software_hashes == required_software_hashes,
+        sorted(software_hashes),
+        sorted(required_software_hashes),
+    ))
+    checks.append(result_check(
+        "firewalld-enabled-active",
+        sections["firewalld_state"]["rc"] == 0
+        and "enabled=enabled" in out("firewalld_state")
+        and "active=active" in out("firewalld_state"),
+        out("firewalld_state"),
+        "enabled=enabled / active=active",
     ))
     checks.append(result_check(
         "installer-pin-file-absent",
@@ -954,14 +1069,31 @@ class InstalledAudit:
 
             keyboard = Keyboard(box)
             ready = "auditready" + token
-            keyboard.ctrl_c()
-            time.sleep(0.2)
+            credentials = load_credentials(self.cfg)
+            root_password = credentials.get("root")
+            if not root_password:
+                raise AuditFailure(
+                    "post-boot audit requires the VM root credential"
+                )
+
+            # The installed system boots into the graphical target. Switch to
+            # a real text VT and log in there before sending the tiny audit
+            # launcher. This keeps the transport inside the harness and avoids
+            # relying on whatever GUI currently owns keyboard focus.
+            keyboard.alt_fn(3)
+            time.sleep(0.8)
+            keyboard.text("root")
+            keyboard.enter()
+            time.sleep(0.8)
+            keyboard.text(root_password)
+            keyboard.enter()
+            time.sleep(1.2)
             keyboard.text(f"echo {ready}>/dev/ttyS0")
             keyboard.enter()
             monitor.wait_any(
                 ready, timeout=10, new_since=mark
             )
-            self.event("root-shell-observed")
+            self.event("root-shell-observed", transport="tty3-login")
 
             probe_mark = monitor.mark()
             self.send_line(keyboard, audit_launcher())

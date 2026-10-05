@@ -17,22 +17,53 @@ WHY_TCP_IS_FORBIDDEN = (
     "COM1 transport is RawFile only."
 )
 
-# Hash of the semantically normalized AutoYaST profile after removing only the
-# top-level <software> section. This freezes the already-proven provisioning
-# contract while allowing issue #3 to change software selection.
+# Hash of the semantically normalized proven AutoYaST profile after removing
+# only issue-#3 software surfaces. Storage, boot, networking, credentials,
+# users, hostname, and every other installation setting remain frozen.
 PROVEN_PROFILE_EXCEPT_SOFTWARE_SHA256 = (
     "5242d2230c572ba89192b92a01e491fbe9b85852d9f869e6ae433b6dfc11f3b4"
 )
+
+SOFTWARE_MANAGED_FILE_PATHS = {
+    "/etc/udev/rules.d/20-hw1.rules",
+    "/etc/xdg/mimeapps.list",
+}
 
 
 def _local_name(name):
     return name.rsplit("}", 1)[-1]
 
 
+def _software_file_path(file_node):
+    for child in list(file_node):
+        if _local_name(child.tag) == "file_path":
+            return (child.text or "").strip()
+    return None
+
+
 def _normalized_xml_element(element, *, root=False):
     children = []
     for child in list(element):
-        if root and _local_name(child.tag) == "software":
+        child_name = _local_name(child.tag)
+        if root and child_name in {"software", "add-on"}:
+            continue
+        if root and child_name == "files":
+            unmanaged = [
+                file_node
+                for file_node in list(child)
+                if not (
+                    _local_name(file_node.tag) == "file"
+                    and _software_file_path(file_node)
+                    in SOFTWARE_MANAGED_FILE_PATHS
+                )
+            ]
+            if not unmanaged:
+                continue
+            files_copy = ET.Element(child.tag, child.attrib)
+            files_copy.text = child.text
+            for file_node in unmanaged:
+                files_copy.append(file_node)
+            children.append(_normalized_xml_element(files_copy))
             continue
         children.append(_normalized_xml_element(child))
     return {

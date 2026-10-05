@@ -100,15 +100,106 @@
       <timeout config:type="integer">5</timeout>
     </global>
   </bootloader>
+  <add-on>
+    <add_on_others config:type="list">
+      <listentry>
+        <media_url>repo:/</media_url>
+        <product_dir>/portable/google</product_dir>
+        <alias>portable-google-chrome</alias>
+        <name>Portable Google Chrome mirror</name>
+        <priority config:type="integer">110</priority>
+        <ask_on_error config:type="boolean">false</ask_on_error>
+        <confirm_license config:type="boolean">false</confirm_license>
+        <signature-handling>
+          <accept_unknown_gpg_key>
+            <all config:type="boolean">false</all>
+            <keys config:type="list">
+              <keyid>7721F63BD38B4796</keyid>
+            </keys>
+          </accept_unknown_gpg_key>
+          <import_gpg_key>
+            <all config:type="boolean">false</all>
+            <keys config:type="list">
+              <keyid>7721F63BD38B4796</keyid>
+            </keys>
+          </import_gpg_key>
+        </signature-handling>
+      </listentry>
+      <listentry>
+        <media_url>repo:/</media_url>
+        <product_dir>/portable/opensuse</product_dir>
+        <alias>portable-opensuse-snapshot</alias>
+        <name>Portable openSUSE Snapshot20260930 add-on</name>
+        <priority config:type="integer">120</priority>
+        <ask_on_error config:type="boolean">false</ask_on_error>
+        <confirm_license config:type="boolean">false</confirm_license>
+      </listentry>
+    </add_on_others>
+  </add-on>
   <software>
-    <patterns config:type="list"><pattern>base</pattern></patterns>
+    <patterns config:type="list">
+      <pattern>base</pattern>
+      <pattern>hardware</pattern>
+      <pattern>kde_plasma</pattern>
+    </patterns>
     <packages config:type="list">
       <package>sdbootutil</package>
+      <package>sdbootutil-enroll</package>
+      <package>sdbootutil-kernel-install</package>
+      <package>sdbootutil-snapper</package>
+      <package>systemd-boot</package>
+      <package>cryptsetup</package>
       <package>lvm2</package>
+      <package>btrfsprogs</package>
+      <package>xfsprogs</package>
+      <package>snapper</package>
+      <package>shim</package>
+      <package>mokutil</package>
+      <package>NetworkManager</package>
+      <package>plasma6-nm</package>
+      <package>wpa_supplicant</package>
+      <package>firewalld</package>
+      <package>sudo</package>
+      <package>konsole</package>
+      <package>sddm-qt6</package>
+      <package>MozillaFirefox</package>
+      <package>google-chrome-stable</package>
+      <package>transactional-update</package>
+      <package>zypp-boot-plugin</package>
+      <package>sdbootutil-tukit</package>
+      <package>util-linux</package>
+      <package>coreutils</package>
     </packages>
     <do_online_update config:type="boolean">false</do_online_update>
     <install_recommended config:type="boolean">true</install_recommended>
   </software>
+  <files config:type="list">
+    <file>
+      <file_path>/etc/udev/rules.d/20-hw1.rules</file_path>
+      <file_owner>root:root</file_owner>
+      <file_permissions>0644</file_permissions>
+      <file_contents><![CDATA[# HW.1, Nano
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2581", ATTRS{idProduct}=="1b7c|2b7c|3b7c|4b7c", TAG+="uaccess", TAG+="udev-acl"
+
+# Blue, NanoS, Aramis, HW.2, Nano X, NanoSP, Stax, Ledger Test,
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2c97", TAG+="uaccess", TAG+="udev-acl"
+
+# Same, but with hidraw-based library (instead of libusb)
+KERNEL=="hidraw*", ATTRS{idVendor}=="2c97", MODE="0666"
+]]></file_contents>
+    </file>
+    <file>
+      <file_path>/etc/xdg/mimeapps.list</file_path>
+      <file_owner>root:root</file_owner>
+      <file_permissions>0644</file_permissions>
+      <file_contents><![CDATA[[Default Applications]
+text/html=firefox.desktop
+application/xhtml+xml=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+]]></file_contents>
+    </file>
+  </files>
   <users config:type="list">
     <user>
       <username>root</username>

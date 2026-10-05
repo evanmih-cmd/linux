@@ -9,6 +9,7 @@ from pathlib import Path
 
 from config import Config
 from invariants import validate_proven_profile_except_software
+from software import prepare_software_payload, verify_software_payload_tree
 
 
 YAST_NS = "http://www.suse.com/1.0/yast2ns"
@@ -103,6 +104,23 @@ def render_runtime_profile(cfg, destination, credentials, *, vm_observability=Tr
         root.remove(scripts)
 
     if vm_observability:
+        add_on = _child(root, "add-on")
+        if add_on is not None:
+            others = _child(add_on, "add_on_others")
+            if others is not None:
+                for entry in list(others):
+                    media_url = _child(entry, "media_url")
+                    if media_url is not None:
+                        # Production uses repo:/ plus product_dir so the
+                        # post-Rufus overlay is resolved from the same physical
+                        # installation USB. VM bench presents that logical
+                        # Desktop-Linux layer as SATA3 (/dev/sr1), so only the
+                        # repository medium is rewritten here; product_dir is
+                        # intentionally preserved verbatim.
+                        value = (media_url.text or "").strip()
+                        if value == "repo:/":
+                            media_url.text = "cd:/?devices=/dev/sr1"
+
         scripts = ET.SubElement(root, f"{{{YAST_NS}}}scripts")
         pre_scripts = ET.SubElement(
             scripts,
@@ -541,12 +559,20 @@ def _verify_layer_policy(root):
         raise RuntimeError(f"invalid DUD update marker identity: {marker}")
 
     expected_files = set(OEMDRV_STATIC_FILES) | {marker}
-    if actual_files != expected_files:
+    actual_fixed_files = {
+        name for name in actual_files if not name.startswith("portable/")
+    }
+    if actual_fixed_files != expected_files:
         raise RuntimeError(
-            "OEMDRV file policy mismatch: "
-            f"missing={sorted(expected_files - actual_files)}, "
-            f"extra={sorted(actual_files - expected_files)}"
+            "OEMDRV fixed-file policy mismatch: "
+            f"missing={sorted(expected_files - actual_fixed_files)}, "
+            f"extra={sorted(actual_fixed_files - expected_files)}"
         )
+
+    portable = root / "portable"
+    if not portable.is_dir():
+        raise RuntimeError("Desktop-Linux layer is missing /portable payload")
+    verify_software_payload_tree(portable)
 
     actual_symlinks = {
         path.relative_to(root).as_posix(): os.readlink(path)
@@ -640,6 +666,7 @@ def build_oemdrv(
     vm_observability=True,
     build_flavor="vmbench",
     target_device=None,
+    package_iso=True,
 ):
     cfg = cfg or Config()
     validate_proven_profile_except_software(cfg.profile)
@@ -662,6 +689,7 @@ def build_oemdrv(
 
     source = _verified_snapshot_source(cfg)
     patches = _patchset(cfg)
+    software_payload = prepare_software_payload(cfg)
     profile_sha = sha256(cfg.profile)
     patchset_material = "\n".join(
         f"{name}={digest}" for name, _, digest in patches
@@ -680,6 +708,7 @@ def build_oemdrv(
     )
     opaque_input = (
         f"{profile_sha}\n{patch_sha}\n"
+        f"software={software_payload['manifest_sha']}\n"
         f"{build_flavor}\n{credential_source_stamp}\n"
         f"{time.time_ns()}\n"
     )
@@ -692,6 +721,9 @@ def build_oemdrv(
 
     output_dir = Path(output_dir) if output_dir is not None else cfg.bench
     output_dir.mkdir(parents=True, exist_ok=True)
+    for stale_root in output_dir.glob(f"{artifact_prefix}-root-*"):
+        if stale_root.is_dir():
+            shutil.rmtree(stale_root)
     build_root = output_dir / f"{artifact_prefix}-root-{ident}"
     iso = output_dir / f"{artifact_prefix}-{ident}.iso"
 
@@ -706,6 +738,8 @@ def build_oemdrv(
         vm_observability=vm_observability,
         target_device=target_device,
     )
+
+    shutil.copytree(software_payload["path"], build_root / "portable")
 
     inst = build_root / "linux/suse/x86_64-tw/inst-sys"
     inst.mkdir(parents=True)
@@ -747,6 +781,8 @@ def build_oemdrv(
         f"target-device={target_device}",
         f"profile-sha256={profile_sha}",
         f"patchset-sha256={patch_sha}",
+        f"software-manifest-sha256={software_payload['manifest_sha']}",
+        f"software-payload-id={software_payload['id']}",
     ]
     source_identity.extend(
         f"rpm={rpm_path}" for rpm_path in SNAPSHOT_RPM_INPUTS
@@ -762,46 +798,65 @@ def build_oemdrv(
 
     _write_layer_manifests(build_root)
 
-    env = os.environ.copy()
-    env["LD_LIBRARY_PATH"] = str(xorriso_lib)
-    subprocess.run(
-        [
-            str(xorriso), "-as", "mkisofs",
-            "-R", "-J", "-V", "OEMDRV",
-            "-o", str(iso), str(build_root),
-        ],
-        env=env,
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    _verify_oemdrv_iso(iso, xorriso, xorriso_lib)
-    iso_sha = sha256(iso)
-    shutil.rmtree(build_root)
-
-    (output_dir / "current-oem.path").write_text(str(iso) + "\n")
-    (output_dir / "current-build.txt").write_text(
-        f"PROFILE_SHA={profile_sha}\n"
-        f"PATCHSET_SHA={patch_sha}\n"
-        + "".join(
-            f"{name.upper()}_SHA={digest}\n"
-            for name, _, digest in patches
+    iso_sha = None
+    if package_iso:
+        env = os.environ.copy()
+        env["LD_LIBRARY_PATH"] = str(xorriso_lib)
+        subprocess.run(
+            [
+                str(xorriso), "-as", "mkisofs",
+                "-R", "-J", "-V", "OEMDRV",
+                "-o", str(iso), str(build_root),
+            ],
+            env=env,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        + f"ID={ident}\n"
-        f"ISO={iso}\n"
-        f"ISO_SHA256={iso_sha}\n"
-        f"TARGET_DEVICE={target_device}\n"
-        f"EMBEDDED={','.join(credential_mode['embedded'])}\n"
-        f"MISSING={','.join(credential_mode['missing'])}\n"
-    )
-
-    for stale in output_dir.glob(f"{artifact_prefix}-*.iso"):
-        if stale != iso:
+        _verify_oemdrv_iso(iso, xorriso, xorriso_lib)
+        iso_sha = sha256(iso)
+        shutil.rmtree(build_root)
+        (output_dir / "current-oem.path").write_text(str(iso) + "\n")
+        (output_dir / "current-overlay.path").unlink(missing_ok=True)
+        for stale in output_dir.glob(f"{artifact_prefix}-*.iso"):
+            if stale != iso:
+                stale.unlink()
+    else:
+        _verify_layer_tree(build_root)
+        (output_dir / "current-overlay.path").write_text(
+            str(build_root) + "\n"
+        )
+        (output_dir / "current-oem.path").unlink(missing_ok=True)
+        for stale in output_dir.glob(f"{artifact_prefix}-*.iso"):
             stale.unlink()
+
+    build_lines = [
+        f"PROFILE_SHA={profile_sha}",
+        f"PATCHSET_SHA={patch_sha}",
+        *[
+            f"{name.upper()}_SHA={digest}"
+            for name, _, digest in patches
+        ],
+        f"ID={ident}",
+        f"TARGET_DEVICE={target_device}",
+        f"EMBEDDED={','.join(credential_mode['embedded'])}",
+        f"MISSING={','.join(credential_mode['missing'])}",
+    ]
+    if package_iso:
+        build_lines.extend([
+            f"ISO={iso}",
+            f"ISO_SHA256={iso_sha}",
+        ])
+    else:
+        build_lines.append(f"OVERLAY_ROOT={build_root}")
+    (output_dir / "current-build.txt").write_text(
+        "\n".join(build_lines) + "\n"
+    )
 
     return {
         "id": ident,
-        "iso": iso,
+        "overlay_root": None if package_iso else build_root,
+        "iso": iso if package_iso else None,
         "iso_sha": iso_sha,
         "profile_sha": profile_sha,
         "patch_sha": patch_sha,
@@ -823,6 +878,7 @@ def build_release_oemdrv(target_device, cfg=None):
         vm_observability=False,
         build_flavor="release",
         target_device=target_device,
+        package_iso=False,
     )
 
     mode = result["credentials"]

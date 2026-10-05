@@ -31,7 +31,7 @@ class ProvenProfileInvariantTests(unittest.TestCase):
     def test_current_proven_profile_passes(self):
         validate_proven_profile_except_software(self.profile)
 
-    def test_software_section_is_the_only_mutable_top_level_section(self):
+    def test_software_section_is_mutable(self):
         def mutate(root):
             software = root.find(f"{{{YAST_NS}}}software")
             packages = software.find(f"{{{YAST_NS}}}packages")
@@ -44,6 +44,36 @@ class ProvenProfileInvariantTests(unittest.TestCase):
             profile_except_software_sha256(self.profile),
         )
         validate_proven_profile_except_software(changed)
+
+    def test_software_add_on_section_is_mutable(self):
+        def mutate(root):
+            add_on = ET.SubElement(root, f"{{{YAST_NS}}}add-on")
+            others = ET.SubElement(add_on, f"{{{YAST_NS}}}add_on_others")
+            entry = ET.SubElement(others, f"{{{YAST_NS}}}listentry")
+            ET.SubElement(entry, f"{{{YAST_NS}}}media_url").text = "cd:///google"
+
+        validate_proven_profile_except_software(self._mutated_profile(mutate))
+
+    def test_known_software_managed_file_is_mutable(self):
+        def mutate(root):
+            files = ET.SubElement(root, f"{{{YAST_NS}}}files")
+            entry = ET.SubElement(files, f"{{{YAST_NS}}}file")
+            ET.SubElement(entry, f"{{{YAST_NS}}}file_path").text = (
+                "/etc/xdg/mimeapps.list"
+            )
+            ET.SubElement(entry, f"{{{YAST_NS}}}file_contents").text = "changed"
+
+        validate_proven_profile_except_software(self._mutated_profile(mutate))
+
+    def test_unrelated_file_change_hard_fails(self):
+        def mutate(root):
+            files = ET.SubElement(root, f"{{{YAST_NS}}}files")
+            entry = ET.SubElement(files, f"{{{YAST_NS}}}file")
+            ET.SubElement(entry, f"{{{YAST_NS}}}file_path").text = "/etc/shadow"
+            ET.SubElement(entry, f"{{{YAST_NS}}}file_contents").text = "changed"
+
+        with self.assertRaises(BenchInvariantError):
+            validate_proven_profile_except_software(self._mutated_profile(mutate))
 
     def test_hostname_change_hard_fails(self):
         def mutate(root):

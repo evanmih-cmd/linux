@@ -1,0 +1,131 @@
+{
+  "add_on_repositories": [
+    {
+      "alias": "portable-google-chrome",
+      "ask_on_error": false,
+      "confirm_license": false,
+      "media_url": "repo:/",
+      "product_dir": "/portable/google",
+      "name": "Portable Google Chrome mirror",
+      "priority": 110,
+      "signature_keyids": [
+        "7721F63BD38B4796"
+      ]
+    },
+    {
+      "alias": "portable-opensuse-snapshot",
+      "ask_on_error": false,
+      "confirm_license": false,
+      "media_url": "repo:/",
+      "product_dir": "/portable/opensuse",
+      "name": "Portable openSUSE Snapshot20260930 add-on",
+      "priority": 120
+    }
+  ],
+  "browser_policy": {
+    "asset_path": "portable/provisioning/assets/mimeapps.list",
+    "install_path": "/etc/xdg/mimeapps.list",
+    "owner": "root:root",
+    "permissions": "0644",
+    "sha256": "82c0d42ea807d59e64812d7a5b30d899ebbb06a504fb5852e1a5c4f936d17f6c"
+  },
+  "build_tool": {
+    "docker_image": "opensuse/tumbleweed@sha256:db7d09c264b72eb95655deb7a696a64d65a0159d1dfb0a4d703347669c709e44"
+  },
+  "google_chrome": {
+    "base_url": "https://dl.google.com/linux/chrome/rpm/stable/x86_64/",
+    "files": {
+      "google-chrome-stable-154.0.8037.97-1.x86_64.rpm": "d6086fb6be1a193ebe4699d8ae8bbec67ea333c1d799a91faca479c4f4064ac9",
+      "repodata/filelists.xml.gz": "98c7f27eb672740c0b6463ec8aa6bd9d915c4abf9e368e0a8d5bb4fb9f16b320",
+      "repodata/other.xml.gz": "65f5741eda7070e86bbe575e1e4602d338f746a22473e9f4ff1fd31a360f0e4e",
+      "repodata/primary.xml.gz": "aa26e2aa0390ed32941934241ec92c04acf88863c988dd136219110e57ffbe4f",
+      "repodata/repomd.xml": "44009a7480ad364e65cebef2a8c0ae8ca02e5e5bec9b04303ad20455160b6153",
+      "repodata/repomd.xml.asc": "778184aab505e3c19af2271ed4eeb54cbc89f13330bfc4b89ec1b654792c060d"
+    },
+    "signing_key_fingerprint": "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796",
+    "repomd_signature_keyid": "FD533C07C264648F",
+    "signing_key_sha256": "54dea5f6c2a26091578cf52a999cebc6b64df478d37ad4dce96376b711e3b27c",
+    "signing_key_url": "https://dl.google.com/linux/linux_signing_key.pub",
+    "version": "154.0.8037.97-1"
+  },
+  "ledger_udev": {
+    "asset_path": "portable/provisioning/assets/20-hw1.rules",
+    "blob_sha": "b583388f1a50772534de8d6dc348f9aff3b9c1a8",
+    "commit": "6d9b02572ce3ba3cddcbabdb6f625a8cf333e592",
+    "install_path": "/etc/udev/rules.d/20-hw1.rules",
+    "owner": "root:root",
+    "permissions": "0644",
+    "repository": "LedgerHQ/udev-rules",
+    "sha256": "354a25ecaeac63b93ba1d3b353f6d9f660f8b32635027ba059e1abbe0a3f0ab8",
+    "source_path": "20-hw1.rules"
+  },
+  "opensuse_history": {
+    "base_url": "https://download.opensuse.org/history/20260930/tumbleweed/repo/oss/",
+    "repomd_sha256": "2a43256fd3283eb5970f6cc0bb320df48fc3886116eb4f83a619cde76c010f55",
+    "rpms": {
+      "noarch/breeze6-wallpapers-6.7.5-1.1.noarch.rpm": "4b9359f6db3e0beee900db7177dfed0d8a5ddc98d277afc3ffac29008d940766",
+      "noarch/kernel-firmware-all-20250206-1.3.noarch.rpm": "c06233a979c2e84dd612af5fd695ac9d60f7519a51af87c7913f13c614fa36f5",
+      "noarch/kernel-firmware-mellanox-20260610-1.2.noarch.rpm": "6b148a5c939043dfe3766b7cf919850db9def35d897eaadcc1134f67faec4913",
+      "noarch/kernel-firmware-prestera-20260610-1.2.noarch.rpm": "e254a58719f21828d7ee522f5dbf79079334065658ac4754e2511076bc524e64",
+      "noarch/poppler-data-0.4.12-1.7.noarch.rpm": "cf5cb0814a499cff2317eabe3d29c441c8f8437092ea941ff4710820456305ab",
+      "noarch/sdbootutil-enroll-1+git20260929.26b6989-1.1.noarch.rpm": "bd421e5b47f7a346f6da918a76f444dccfe5970a9143dbf800b6aed9194245cb",
+      "noarch/sdbootutil-kernel-install-1+git20260929.26b6989-1.1.noarch.rpm": "cf7ad154a602251cb5eea64af3fdc97ccba2eef118cfcd69e2fddb9ebb6e463b",
+      "noarch/sdbootutil-tukit-1+git20260929.26b6989-1.1.noarch.rpm": "3a10f6a5f815310dc15dc4eb5ff1fb4899be0ec50a8196080503c4abc9a61e7a",
+      "noarch/ucode-amd-20260926-1.1.noarch.rpm": "1ceb3330442090bb45e3a52d942b22681df11755701d18a5d32c720c2803b62d",
+      "x86_64/dracut-transactional-update-6.1.3-1.2.x86_64.rpm": "b2476c86a4f27eff396b4917397bd971308c300bec08c2572439a5960bc62147",
+      "x86_64/fcoe-utils-1.0.34+9.3d27180c86c-1.4.x86_64.rpm": "fdd4bc8f30c5de6d5796b8fa0c83f3ff4e0cb20bd4164bcd784856b7d05ed4e2",
+      "x86_64/inotify-tools-4.25.9.0-1.5.x86_64.rpm": "3c83e599e3a741f10b8914efcb8f30a5207462532f1fcbd283951f3da49ed795",
+      "x86_64/libconfig15-1.8.1-1.6.x86_64.rpm": "654c5a8e3762f49948a69ddbe305f74e92a416027802001f0e3aa8ec115caab0",
+      "x86_64/libinotifytools0-4.25.9.0-1.5.x86_64.rpm": "9cddb56237c6b99d33a319c555a20b2847832e4decd4390768bc712cfbec0ae4",
+      "x86_64/liblldp_clif1-1.1+110.f16f944-1.1.x86_64.rpm": "391d04f587010a23b555cf789e915ac5fc26d201ec0995cdbee2a7decc35969e",
+      "x86_64/libtukit8-6.1.3-1.2.x86_64.rpm": "39876cd9489fcef83bbdd4c4f0b89fa0d3257ea7fe2da8a3e92b55f12b82e026",
+      "x86_64/open-lldp-1.1+110.f16f944-1.1.x86_64.rpm": "c70c98c7edf11c56103815c80ac32808c59616d0eba8ff2b41e225a53acd037b",
+      "x86_64/patterns-base-hardware-20241218-34.1.x86_64.rpm": "14d784b4c271ec1b57aa7ca4de8e6bbe04d0325ec2a436365cd9d84f795e7dc4",
+      "x86_64/rebootmgr-3.3+git20250722.adf0149-1.5.x86_64.rpm": "837edda5cebc96bfc3b205dfd5d50089c268954364c66c967690241a8032c9c5",
+      "x86_64/spice-vdagent-0.23.0-4.2.x86_64.rpm": "451726c0328eeb67e60aa5a7799b1b0847868037faef28bd250bd434576ba68c",
+      "x86_64/transactional-update-6.1.3-1.2.x86_64.rpm": "aee8b54c00bf0cb0d109b7b4027656e321434b43f5d79f702b2d8fa88504c5db",
+      "x86_64/tukit-6.1.3-1.2.x86_64.rpm": "e92d543a11911c40838cdbacfe7e023f5eb27c6056c42f622eb38b1dbdd6f45b",
+      "x86_64/ucode-intel-20260812-1.1.x86_64.rpm": "11f15eb18ed9d7060a9c9576ab3f9188887ae35615fd9252277dee1b7f95144c",
+      "x86_64/zypp-boot-plugin-0.0.13-3.9.x86_64.rpm": "9b623fc03416fa61c1b027cf0206d6052e6ab8cf61a3075d9c146cb2a576c009"
+    }
+  },
+  "packages": [
+    "sdbootutil",
+    "sdbootutil-enroll",
+    "sdbootutil-kernel-install",
+    "sdbootutil-snapper",
+    "systemd-boot",
+    "cryptsetup",
+    "lvm2",
+    "btrfsprogs",
+    "xfsprogs",
+    "snapper",
+    "shim",
+    "mokutil",
+    "NetworkManager",
+    "plasma6-nm",
+    "wpa_supplicant",
+    "firewalld",
+    "sudo",
+    "konsole",
+    "sddm-qt6",
+    "MozillaFirefox",
+    "google-chrome-stable",
+    "transactional-update",
+    "zypp-boot-plugin",
+    "sdbootutil-tukit",
+    "util-linux",
+    "coreutils"
+  ],
+  "patterns": [
+    "base",
+    "hardware",
+    "kde_plasma"
+  ],
+  "schema": 1,
+  "snapshot": "20260930",
+  "software": {
+    "do_online_update": false,
+    "install_recommended": true
+  }
+}

@@ -6,6 +6,7 @@ import sys
 from runner import run, verify_installed_boot
 from audit import audit_installed
 from media import build_release_oemdrv
+from software import prepare_software_payload, verify_offline_software_tree
 from workflow import static_check, status
 
 
@@ -15,6 +16,10 @@ def main():
     sub.add_parser("check")
     release = sub.add_parser("build-release")
     release.add_argument("--target-device", required=True)
+    software = sub.add_parser("build-software-payload")
+    software.add_argument("--force", action="store_true")
+    software_verify = sub.add_parser("verify-software-tree")
+    software_verify.add_argument("path")
     sub.add_parser("run")
     sub.add_parser("verify-installed-boot")
     sub.add_parser("audit-installed")
@@ -26,6 +31,18 @@ def main():
     elif args.command == "build-release":
         print(json.dumps(
             build_release_oemdrv(args.target_device),
+            indent=2,
+            default=str,
+        ))
+    elif args.command == "build-software-payload":
+        print(json.dumps(
+            prepare_software_payload(force=args.force),
+            indent=2,
+            default=str,
+        ))
+    elif args.command == "verify-software-tree":
+        print(json.dumps(
+            verify_offline_software_tree(args.path),
             indent=2,
             default=str,
         ))

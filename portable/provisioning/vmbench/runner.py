@@ -258,8 +258,8 @@ class BenchRun:
             if a["controller"] == "SATA"
         }
         expected = {
-            0: "asus-internal-guard.vdi",
-            1: "target.vdi",
+            0: self.cfg.guard.name,
+            1: self.cfg.vm_target_vdi.name,
             2: "Snapshot20260930-Media.iso",
             3: "oemdrv-",
         }
@@ -327,7 +327,7 @@ class BenchRun:
 
     def wait_for_storage(self):
         self.set_stage("storage")
-        target = self.cfg.bench / "target.vdi"
+        target = self.cfg.vm_target_vdi
         baseline = alloc_bytes(target)
         deadline = time.time() + (1800 if self.credential_mode["missing"] else 300)
         paused_since = None
@@ -360,7 +360,7 @@ class BenchRun:
 
     def wait_install(self):
         self.set_stage("installing")
-        target = self.cfg.bench / "target.vdi"
+        target = self.cfg.vm_target_vdi
         last_alloc = alloc_bytes(target)
         last_progress = time.time()
         paused_since = None
@@ -535,7 +535,7 @@ class BenchRun:
 
     def postcheck(self):
         self.set_stage("postcheck")
-        target = self.cfg.bench / "target.vdi"
+        target = self.cfg.vm_target_vdi
         post = {
             "vm_state": self.vm_state(),
             "target_sha256": sha256(target),
@@ -728,7 +728,7 @@ def verify_installed_boot(cfg=None):
             )
         bench.boot_pin = credentials["pin"]
 
-        target = bench.cfg.bench / "target.vdi"
+        target = bench.cfg.vm_target_vdi
         if not target.exists() or alloc_bytes(target) < 1024**3:
             raise RuntimeError("installed target VDI is missing or not substantial")
         if not bench.cfg.guard.exists():

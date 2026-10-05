@@ -45,8 +45,16 @@ class Config:
         return "/dev/disk/by-id/ata-PORTABLE_WORKSTATION_SSD_PORTABLETARGET000001"
 
     @property
+    def vm_target_vdi(self):
+        return self.bench / "target-software-baseline.vdi"
+
+    @property
     def guard(self):
-        return self.cache / "vbox-proof/asus-internal-guard.vdi"
+        return self.bench / "asus-internal-guard-proof.vdi"
+
+    @property
+    def guard_size_gib(self):
+        return 16
 
     @property
     def official_iso(self):
@@ -119,3 +127,27 @@ class Config:
     @property
     def snapshot_instsys_source(self):
         return self.cache / "tools/snapshot20260930-instsys-source"
+
+    @property
+    def official_iso_sha256(self):
+        return "0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99"
+
+    @property
+    def extracted_official_iso(self):
+        return self.cache / "tumbleweed-dvd/extracted-20260930"
+
+    @property
+    def software_manifest(self):
+        return self.repo / "portable/provisioning/software-baseline.json"
+
+    @property
+    def software_media_dir(self):
+        return self.cache / "software-media"
+
+    @property
+    def xorriso(self):
+        return self.cache / "tools/rootless/xorriso/usr/bin/xorriso"
+
+    @property
+    def xorriso_lib(self):
+        return self.cache / "tools/rootless/xorriso/usr/lib/x86_64-linux-gnu"

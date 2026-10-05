@@ -17,6 +17,7 @@ from media import (
 )
 from rawserial import clean_text
 from runner import classify_boot_unlock
+from software import validate_software_profile
 from vbox import VBox
 
 
@@ -176,6 +177,7 @@ def static_check(cfg=None):
     validate_source_tree(harness_root)
     validate_proven_profile_except_software(cfg.profile)
     validate_profile_storage(cfg.profile)
+    validate_software_profile(cfg.profile, cfg)
     _check_boot_unlock_classifier()
     _validate_relaxng(cfg, cfg.profile)
     patch_proof = verify_patchset_against_snapshot(cfg)
@@ -227,6 +229,7 @@ def static_check(cfg=None):
         "source_invariants": "PASS",
         "proven_profile_except_software": "PASS",
         "storage_profile_invariant": "PASS",
+        "software_profile_contract": "PASS",
         "patchset_applicability": "PASS",
         "relaxng_validation": "PASS",
         "boot_unlock_classifier": "PASS",
@@ -239,7 +242,7 @@ def status(cfg=None):
     cfg = cfg or Config()
     box = VBox(cfg)
     try:
-        target = cfg.bench / "target.vdi"
+        target = cfg.vm_target_vdi
         serial = latest_serial_path(cfg)
         serial_tail = ""
         if serial and serial.exists():
