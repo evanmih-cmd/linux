@@ -20,16 +20,24 @@ class VBox:
             "IVirtualBox_getMachines",
             [("_this", self.handle)]
         )
-        matches = [
-            m for m in machines
-            if self._vals("IMachine_getName", [("_this", m)])[0]
-            == self.cfg.vm_name
+        named = [
+            (m, self._vals("IMachine_getName", [("_this", m)])[0])
+            for m in machines
         ]
-        if len(matches) != 1:
+        matches = [m for m, name in named if name == self.cfg.vm_name]
+        if len(matches) == 1:
+            self.machine = matches[0]
+        elif len(named) == 1:
+            self.machine = named[0][0]
+        else:
+            names = ", ".join(name for _, name in named)
             raise RuntimeError(
-                f"expected one VM named {self.cfg.vm_name}, got {len(matches)}"
+                f"expected VM {self.cfg.vm_name!r} or one registered VM; "
+                f"found {len(named)}: {names}"
             )
-        self.machine = matches[0]
+        self.actual_vm_name = self._vals(
+            "IMachine_getName", [("_this", self.machine)]
+        )[0]
 
     def _raw(self, op, pairs):
         env = ET.Element(f"{{{SOAP}}}Envelope")
@@ -73,6 +81,79 @@ class VBox:
             "IMachine_getSessionState", [("_this", self.machine)]
         )[0]
 
+
+    def log_folder(self):
+        vals = self._vals(
+            "IMachine_getLogFolder", [("_this", self.machine)]
+        )
+        return vals[0] if vals else ""
+
+    def serial_config(self):
+        serial = self._vals(
+            "IMachine_getSerialPort",
+            [("_this", self.machine), ("slot", "0")],
+        )[0]
+        def get(op):
+            vals = self._vals(op, [("_this", serial)])
+            return vals[0] if vals else None
+        return {
+            "enabled": get("ISerialPort_getEnabled"),
+            "host_mode": get("ISerialPort_getHostMode"),
+            "path": get("ISerialPort_getPath"),
+            "server": get("ISerialPort_getServer"),
+            "io_address": get("ISerialPort_getIOAddress"),
+            "irq": get("ISerialPort_getIRQ"),
+        }
+
+    def set_serial_raw_file(self, path):
+        if self.state() != "PoweredOff":
+            raise RuntimeError(
+                f"serial path can only be changed while PoweredOff, got {self.state()}"
+            )
+        session = self.lock("Write")
+        try:
+            machine = self.session_machine(session)
+            serial = self._vals(
+                "IMachine_getSerialPort",
+                [("_this", machine), ("slot", "0")],
+            )[0]
+            for operation, key, value in (
+                ("ISerialPort_setEnabled", "enabled", "true"),
+                ("ISerialPort_setPath", "path", path),
+                ("ISerialPort_setHostMode", "hostMode", "RawFile"),
+            ):
+                self._vals(
+                    operation,
+                    [("_this", serial), (key, value)],
+                )
+            self.save_settings(machine)
+        finally:
+            self.unlock(session)
+
+    def cpu_count(self):
+        return int(self._vals(
+            "IMachine_getCPUCount", [("_this", self.machine)]
+        )[0])
+
+    def graphics_config(self):
+        adapter = self._vals(
+            "IMachine_getGraphicsAdapter", [("_this", self.machine)]
+        )[0]
+        return {
+            "controller": self._vals(
+                "IGraphicsAdapter_getGraphicsControllerType",
+                [("_this", adapter)],
+            )[0],
+            "vram_mib": int(self._vals(
+                "IGraphicsAdapter_getVRAMSize",
+                [("_this", adapter)],
+            )[0]),
+            "accel3d": self._vals(
+                "IGraphicsAdapter_isFeatureEnabled",
+                [("_this", adapter), ("feature", "Acceleration3D")],
+            )[0] == "true",
+        }
+
     def attachments(self):
         out = []
         root = self._raw(
@@ -93,6 +174,54 @@ class VBox:
                 "medium": medium,
                 "location": location,
             })
+        return out
+
+    def close_hard_disks_at(self, location):
+        closed = 0
+        for medium in self._vals(
+            "IVirtualBox_getHardDisks", [("_this", self.handle)]
+        ):
+            try:
+                current = self._vals(
+                    "IMedium_getLocation", [("_this", medium)]
+                )[0]
+            except Exception:
+                continue
+            if current != location:
+                continue
+            self._vals("IMedium_close", [("_this", medium)])
+            closed += 1
+        return closed
+
+    def boot_nvram(self):
+        nv = self._vals(
+            "IMachine_getNonVolatileStore", [("_this", self.machine)]
+        )[0]
+        store = self._vals(
+            "INvramStore_getUefiVariableStore", [("_this", nv)]
+        )[0]
+        root = self._raw(
+            "IUefiVariableStore_queryVariables", [("_this", store)]
+        )
+        response = root.find(
+            f".//{{{VBOX}}}IUefiVariableStore_queryVariablesResponse"
+        )
+        names = [x.text or "" for x in response.findall("names")]
+        owners = [x.text or "" for x in response.findall("owners")]
+        out = {}
+        for name, owner in zip(names, owners):
+            if not name.startswith("Boot"):
+                continue
+            item = self._raw(
+                "IUefiVariableStore_queryVariableByName",
+                [("_this", store), ("name", name)],
+            ).find(
+                f".//{{{VBOX}}}IUefiVariableStore_queryVariableByNameResponse"
+            )
+            out[name] = {
+                "owner": owner,
+                "data": item.findtext("data") or "",
+            }
         return out
 
     def lock(self, lock_type):
@@ -120,15 +249,56 @@ class VBox:
             "ISession_getConsole", [("_this", session)]
         )[0]
 
+    def guest_additions_run_level(self, session):
+        console = self.session_console(session)
+        guest = self._vals(
+            "IConsole_getGuest", [("_this", console)]
+        )[0]
+        values = self._vals(
+            "IGuest_getAdditionsRunLevel", [("_this", guest)]
+        )
+        return values[0] if values else "None"
+
     def unlock(self, session):
         self._vals("ISession_unlockMachine", [("_this", session)])
 
     def save_settings(self, machine):
         self._vals("IMachine_saveSettings", [("_this", machine)])
 
-    def launch(self):
-        if self.state() != "PoweredOff":
-            raise RuntimeError(f"cannot launch from {self.state()}")
+    def nvram_boot_variables(self):
+        nvram = self._vals(
+            "IMachine_getNonVolatileStore", [("_this", self.machine)]
+        )[0]
+        store = self._vals(
+            "INvramStore_getUefiVariableStore", [("_this", nvram)]
+        )[0]
+        root = self._raw(
+            "IUefiVariableStore_queryVariables", [("_this", store)]
+        )
+        response = root.find(
+            f".//{{{VBOX}}}IUefiVariableStore_queryVariablesResponse"
+        )
+        names = [x.text or "" for x in response.findall("names")]
+        owners = [x.text or "" for x in response.findall("owners")]
+        out = {}
+        for name, owner in zip(names, owners):
+            if not name.startswith("Boot"):
+                continue
+            item = self._raw(
+                "IUefiVariableStore_queryVariableByName",
+                [("_this", store), ("name", name)],
+            )
+            resp = item.find(
+                f".//{{{VBOX}}}IUefiVariableStore_queryVariableByNameResponse"
+            )
+            out[name] = {
+                "owner": owner,
+                "data": resp.findtext("data") or "",
+            }
+        return out
+
+
+    def launch_begin(self):
         session = self._vals(
             "IWebsessionManager_getSessionObject",
             [("refIVirtualBox", self.handle)]
@@ -141,11 +311,17 @@ class VBox:
                 ("name", "headless"),
             ],
         )[0]
-        self.wait_progress(progress, 30000)
-        if self._vals(
-            "IProgress_getResultCode", [("_this", progress)]
-        )[0] != "0":
-            raise RuntimeError("VirtualBox launch failed")
+        return session, progress
+
+    def launch_finish(self, progress, timeout_ms=30000):
+        self.wait_progress(progress, timeout_ms)
+        error = self.progress_error(progress)
+        if error:
+            raise RuntimeError(f"VirtualBox launch failed: {error}")
+
+    def launch(self):
+        session, progress = self.launch_begin()
+        self.launch_finish(progress)
         return session
 
     def wait_progress(self, progress, timeout_ms):
@@ -154,8 +330,27 @@ class VBox:
             [("_this", progress), ("timeout", str(timeout_ms))],
         )
 
+    def progress_error(self, progress):
+        code = self._vals(
+            "IProgress_getResultCode", [("_this", progress)]
+        )[0]
+        if code == "0":
+            return None
+        info = self._vals(
+            "IProgress_getErrorInfo", [("_this", progress)]
+        )
+        if not info or not info[0]:
+            return f"resultCode={code}"
+        try:
+            text = self._vals(
+                "IVirtualBoxErrorInfo_getText", [("_this", info[0])]
+            )[0]
+        except Exception:
+            text = ""
+        return f"resultCode={code} text={text}"
+
     def poweroff(self):
-        if self.state() != "Running":
+        if self.state() not in ("Running", "Paused"):
             return
         session = self.lock("Shared")
         try:

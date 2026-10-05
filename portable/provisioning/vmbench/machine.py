@@ -11,16 +11,21 @@ def unc(path):
     if not text.startswith(prefix):
         raise ValueError(f"cannot map to Windows UNC: {path}")
     suffix = text[len(prefix):].replace("/", "\\")
-    return r"\\wsl.localhost\runner02\home\github-runner\" + suffix
+    return "\\\\wsl.localhost\\runner02\\home\\github-runner\\" + suffix
 
 
-def reset_vm(oem_path, cfg=None):
+def reset_vm(oem_path, cfg=None, serial_path=None):
     cfg = cfg or Config()
+    serial_path = Path(serial_path or (cfg.bench / "serial.log"))
     box = VBox(cfg)
     try:
-        box.poweroff()
+        state = box.state()
+        if state not in ("PoweredOff", "Saved", "AbortedSaved"):
+            raise RuntimeError(
+                f"refusing destructive reset while VM state is {state}"
+            )
 
-        if box.state() in ("Saved", "AbortedSaved"):
+        if state in ("Saved", "AbortedSaved"):
             session = box.lock("Write")
             try:
                 machine = box.session_machine(session)
@@ -45,7 +50,7 @@ def reset_vm(oem_path, cfg=None):
         session = box.lock("Write")
         try:
             machine = box.session_machine(session)
-            for port in (1, 2, 3):
+            for port in (0, 1, 2, 3):
                 try:
                     box._vals(
                         "IMachine_detachDevice",
@@ -71,7 +76,7 @@ def reset_vm(oem_path, cfg=None):
                 (
                     "ISerialPort_setPath",
                     "path",
-                    unc(cfg.bench / "serial.log"),
+                    unc(serial_path),
                 ),
                 ("ISerialPort_setHostMode", "hostMode", "RawFile"),
             ]
@@ -80,17 +85,48 @@ def reset_vm(oem_path, cfg=None):
                     operation,
                     [("_this", serial), (key, value)],
                 )
+            if cfg.vm_vcpus < 1:
+                raise RuntimeError(f"invalid VM vCPU count: {cfg.vm_vcpus}")
+            box._vals(
+                "IMachine_setCPUCount",
+                [("_this", machine), ("CPUCount", str(cfg.vm_vcpus))],
+            )
+            if cfg.vm_graphics_controller != "VMSVGA":
+                raise RuntimeError(
+                    "Linux VM graphics controller must be VMSVGA, got "
+                    f"{cfg.vm_graphics_controller!r}"
+                )
+            if cfg.vm_vram_mib < 64:
+                raise RuntimeError(
+                    f"Linux VM VRAM is too small: {cfg.vm_vram_mib} MiB"
+                )
+            graphics = box._vals(
+                "IMachine_getGraphicsAdapter", [("_this", machine)]
+            )[0]
+            box._vals(
+                "IGraphicsAdapter_setGraphicsControllerType",
+                [
+                    ("_this", graphics),
+                    ("graphicsControllerType", cfg.vm_graphics_controller),
+                ],
+            )
+            box._vals(
+                "IGraphicsAdapter_setVRAMSize",
+                [("_this", graphics), ("VRAMSize", str(cfg.vm_vram_mib))],
+            )
+            box._vals(
+                "IGraphicsAdapter_setFeature",
+                [
+                    ("_this", graphics),
+                    ("feature", "Acceleration3D"),
+                    ("enabled", str(cfg.vm_accel3d).lower()),
+                ],
+            )
             box.save_settings(machine)
         finally:
             box.unlock(session)
 
-        if (
-            old_target
-            and (
-                old_target["location"].endswith("bench\\target.vdi")
-                or old_target["location"].endswith("bench/target.vdi")
-            )
-        ):
+        if old_target and "bench" in old_target["location"]:
             try:
                 progress = box._vals(
                     "IMedium_deleteStorage",
@@ -100,33 +136,39 @@ def reset_vm(oem_path, cfg=None):
             except Exception:
                 pass
 
-        target = cfg.bench / "target.vdi"
-        if target.exists():
-            target.unlink()
+        def create_vdi(path, size_gib, label):
+            location = unc(path)
+            box.close_hard_disks_at(location)
+            if path.exists():
+                path.unlink()
+            disk = box._vals(
+                "IVirtualBox_createMedium",
+                [
+                    ("_this", box.handle),
+                    ("format", "VDI"),
+                    ("location", location),
+                    ("accessMode", "ReadWrite"),
+                    ("aDeviceTypeType", "HardDisk"),
+                ],
+            )[0]
+            progress = box._vals(
+                "IMedium_createBaseStorage",
+                [
+                    ("_this", disk),
+                    ("logicalSize", str(size_gib * 1024**3)),
+                    ("variant", "Standard"),
+                ],
+            )[0]
+            box.wait_progress(progress, 60000)
+            error = box.progress_error(progress)
+            if error:
+                raise RuntimeError(f"{label} VDI creation failed: {error}")
+            return disk
 
-        medium = box._vals(
-            "IVirtualBox_createMedium",
-            [
-                ("_this", box.handle),
-                ("format", "VDI"),
-                ("location", unc(target)),
-                ("accessMode", "ReadWrite"),
-                ("aDeviceTypeType", "HardDisk"),
-            ],
-        )[0]
-        progress = box._vals(
-            "IMedium_createBaseStorage",
-            [
-                ("_this", medium),
-                ("logicalSize", str(cfg.target_size_gib * 1024**3)),
-                ("variant", "Standard"),
-            ],
-        )[0]
-        box.wait_progress(progress, 60000)
-        if box._vals(
-            "IProgress_getResultCode", [("_this", progress)]
-        )[0] != "0":
-            raise RuntimeError("target VDI creation failed")
+        guard = cfg.guard
+        guard_medium = create_vdi(guard, cfg.guard_size_gib, "guard")
+        target = cfg.vm_target_vdi
+        medium = create_vdi(target, cfg.target_size_gib, "target")
 
         official = cfg.cache / (
             "tumbleweed-dvd/"
@@ -153,11 +195,11 @@ def reset_vm(oem_path, cfg=None):
                 ("forceNewUuid", "false"),
             ],
         )[0]
-
         session = box.lock("Write")
         try:
             machine = box.session_machine(session)
             attachments = [
+                (0, "HardDisk", guard_medium),
                 (1, "HardDisk", medium),
                 (2, "DVD", base),
                 (3, "DVD", oem),
@@ -175,22 +217,6 @@ def reset_vm(oem_path, cfg=None):
                     ],
                 )
 
-            box._vals(
-                "IMachine_setBootOrder",
-                [
-                    ("_this", machine),
-                    ("position", "1"),
-                    ("device", "DVD"),
-                ],
-            )
-            box._vals(
-                "IMachine_setBootOrder",
-                [
-                    ("_this", machine),
-                    ("position", "2"),
-                    ("device", "HardDisk"),
-                ],
-            )
             for slot in range(4):
                 adapter = box._vals(
                     "IMachine_getNetworkAdapter",
@@ -204,9 +230,9 @@ def reset_vm(oem_path, cfg=None):
         finally:
             box.unlock(session)
 
-        serial = cfg.bench / "serial.log"
-        if serial.exists():
-            serial.unlink()
+        serial_path.parent.mkdir(parents=True, exist_ok=True)
+        if serial_path.exists():
+            serial_path.unlink()
 
         baseline = sha256(target)
         (cfg.bench / "target.clean.sha256").write_text(

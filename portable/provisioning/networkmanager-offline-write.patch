@@ -1,0 +1,11 @@
+--- a/usr/share/YaST2/modules/Lan.rb
++++ b/usr/share/YaST2/modules/Lan.rb
+@@ -511,7 +511,7 @@
+       update_mta_config if !apply_config
+       Builtins.sleep(sl)
+
+-      ensure_network_running if yast_config.backend?(:network_manager)
++      ensure_network_running if apply_config && yast_config.backend?(:network_manager)
+
+       # Final progress step
+       ProgressNextStage(_("Finished"))

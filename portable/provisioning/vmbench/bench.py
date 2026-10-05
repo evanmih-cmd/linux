@@ -1,50 +1,68 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import sys
 
-from workflow import (
-    fill,
-    logs,
-    prepare,
-    shot,
-    start,
-    status,
-    stop,
-)
+from runner import run, verify_installed_boot
+from audit import audit_installed
+from media import build_release_oemdrv
+from software import prepare_software_payload, verify_offline_software_tree
+from workflow import static_check, status
 
 
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("prepare")
-    sub.add_parser("start")
-    sub.add_parser("logs")
+    sub.add_parser("check")
+    release = sub.add_parser("build-release")
+    release.add_argument("--target-device", required=True)
+    software = sub.add_parser("build-software-payload")
+    software.add_argument("--force", action="store_true")
+    software_verify = sub.add_parser("verify-software-tree")
+    software_verify.add_argument("path")
+    sub.add_parser("run")
+    sub.add_parser("verify-installed-boot")
+    sub.add_parser("audit-installed")
     sub.add_parser("status")
-    sub.add_parser("stop")
-
-    p_fill = sub.add_parser("fill")
-    p_fill.add_argument("name", choices=("recovery", "pin", "root"))
-
-    p_shot = sub.add_parser("shot")
-    p_shot.add_argument("name", nargs="?", default="latest")
-
     args = parser.parse_args()
 
-    if args.command == "prepare":
-        print(json.dumps(prepare(), indent=2))
-    elif args.command == "start":
-        start()
-    elif args.command == "fill":
-        print(fill(args.name))
-    elif args.command == "logs":
-        print(logs())
-    elif args.command == "shot":
-        print(shot(args.name))
+    if args.command == "check":
+        print(json.dumps(static_check(), indent=2))
+    elif args.command == "build-release":
+        print(json.dumps(
+            build_release_oemdrv(args.target_device),
+            indent=2,
+            default=str,
+        ))
+    elif args.command == "build-software-payload":
+        print(json.dumps(
+            prepare_software_payload(force=args.force),
+            indent=2,
+            default=str,
+        ))
+    elif args.command == "verify-software-tree":
+        print(json.dumps(
+            verify_offline_software_tree(args.path),
+            indent=2,
+            default=str,
+        ))
+    elif args.command == "run":
+        result = run()
+        print(json.dumps(result, indent=2))
+        if result.get("status") != "PASS":
+            sys.exit(1)
+    elif args.command == "verify-installed-boot":
+        result = verify_installed_boot()
+        print(json.dumps(result, indent=2))
+        if result.get("status") != "PASS":
+            sys.exit(1)
+    elif args.command == "audit-installed":
+        result = audit_installed()
+        print(json.dumps(result, indent=2))
+        if result.get("status") != "PASS":
+            sys.exit(1)
     elif args.command == "status":
         print(json.dumps(status(), indent=2))
-    elif args.command == "stop":
-        print(stop())
 
 
 if __name__ == "__main__":

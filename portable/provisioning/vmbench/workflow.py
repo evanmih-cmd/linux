@@ -1,97 +1,281 @@
-import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import subprocess
+import xml.etree.ElementTree as ET
 
-from boot import boot_installer
-from capture import screenshot, serial_text
 from config import Config
-from keyboard import Keyboard
-from logstream import enable_y2log
-from machine import reset_vm
-from media import build_oemdrv, sha256
+from invariants import (
+    validate_profile_storage,
+    validate_proven_profile_except_software,
+    validate_source_tree,
+)
+from media import (
+    load_credentials,
+    render_runtime_profile,
+    sha256,
+    verify_patchset_against_snapshot,
+)
+from rawserial import clean_text
+from runner import classify_boot_unlock
+from software import validate_software_profile
 from vbox import VBox
 
 
-def prepare(cfg=None):
-    cfg = cfg or Config()
-    built = build_oemdrv(cfg)
-    reset = reset_vm(built["iso"], cfg)
+YAST_NS = "http://www.suse.com/1.0/yast2ns"
+
+
+def latest_serial_path(cfg):
+    runs = [p for p in cfg.runs.iterdir() if p.is_dir()] if cfg.runs.exists() else []
+    runs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    for run in runs:
+        path = run / "serial.log"
+        if path.exists():
+            return path
+    return None
+
+
+def _validate_relaxng(cfg, profile_path):
+    if not cfg.xmllint.is_file():
+        raise RuntimeError(f"xmllint is missing: {cfg.xmllint}")
+    if not cfg.autoyast_schema.is_file():
+        raise RuntimeError(f"AutoYaST Relax NG schema is missing: {cfg.autoyast_schema}")
+
+    proc = subprocess.run(
+        [
+            str(cfg.xmllint),
+            "--noout",
+            "--relaxng", str(cfg.autoyast_schema),
+            str(profile_path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"AutoYaST Relax NG validation failed for {profile_path}:\n"
+            + proc.stdout
+        )
+
+
+def _runtime_credential_state(profile_path):
+    ns = {"y": YAST_NS}
+    root = ET.parse(profile_path).getroot()
+
+    asks = root.find("y:general/y:ask-list", ns)
+    remaining = []
+    if asks is not None:
+        for ask in list(asks):
+            title = ask.find("y:title", ns)
+            path = ask.find("y:path", ns)
+            title_text = "" if title is None else (title.text or "")
+            path_text = "" if path is None else (path.text or "")
+            if path_text == "partitioning,0,partitions,1,crypt_key":
+                remaining.append("recovery")
+            elif path_text == "users,0,user_password":
+                remaining.append("root")
+            elif path_text == "users,1,user_password":
+                remaining.append("desktop")
+            elif title_text == "Portable workstation TPM credential":
+                remaining.append("pin")
+            else:
+                raise RuntimeError(
+                    "unexpected AutoYaST ask remains in runtime profile: "
+                    f"title={title_text!r} path={path_text!r}"
+                )
+
+    crypt_key = root.find(
+        "y:partitioning/y:drive/y:partitions/y:partition[2]/y:crypt_key",
+        ns,
+    )
+    user_nodes = root.findall("y:users/y:user", ns)
+    root_password = user_nodes[0].find("y:user_password", ns)
+    desktop_password = user_nodes[1].find("y:user_password", ns)
+    pre_source = root.find("y:scripts/y:pre-scripts/y:script/y:source", ns)
+
     return {
-        "build": {
-            "id": built["id"],
-            "iso": str(built["iso"]),
-            "profile_sha": built["profile_sha"],
-            "patch_sha": built["patch_sha"],
-        },
-        "reset": {
-            "target": str(reset["target"]),
-            "baseline_sha256": reset["baseline_sha256"],
-            "oem": str(reset["oem"]),
-        },
+        "remaining": remaining,
+        "recovery_placeholder": (
+            crypt_key is None or (crypt_key.text or "") == "__ASK__"
+        ),
+        "root_placeholder": (
+            root_password is None or (root_password.text or "") == "__ASK__"
+        ),
+        "desktop_placeholder": (
+            desktop_password is None or (desktop_password.text or "") == "__ASK__"
+        ),
+        "pin_file_reference": "/etc/desktop-linux-tpm2-pin" in Path(profile_path).read_text(),
+        "profile_ready_marker": (
+            pre_source is not None
+            and "VMBENCH_PROFILE_READY" in (pre_source.text or "")
+        ),
     }
 
 
-def start(cfg=None):
+def _check_runtime_profile(cfg, credentials):
+    expected_missing = [
+        key for key in ("recovery", "pin", "root", "desktop") if key not in credentials
+    ]
+    with TemporaryDirectory() as td:
+        runtime = Path(td) / "autoinst.xml"
+        mode = render_runtime_profile(cfg, runtime, credentials)
+        _validate_relaxng(cfg, runtime)
+        state = _runtime_credential_state(runtime)
+
+    if sorted(mode["missing"]) != sorted(expected_missing):
+        raise RuntimeError(
+            f"credential mode mismatch: {mode['missing']} != {expected_missing}"
+        )
+    if sorted(state["remaining"]) != sorted(expected_missing):
+        raise RuntimeError(
+            f"runtime prompts mismatch: {state['remaining']} != {expected_missing}"
+        )
+
+    if ("recovery" in credentials) == state["recovery_placeholder"]:
+        raise RuntimeError("runtime recovery credential embedding mismatch")
+    if ("root" in credentials) == state["root_placeholder"]:
+        raise RuntimeError("runtime root credential embedding mismatch")
+    if ("desktop" in credentials) == state["desktop_placeholder"]:
+        raise RuntimeError("runtime desktop credential embedding mismatch")
+    if not state["profile_ready_marker"]:
+        raise RuntimeError("runtime profile-ready marker missing")
+    expected_pin_reference = "pin" not in credentials
+    if state["pin_file_reference"] != expected_pin_reference:
+        raise RuntimeError(
+            "runtime TPM PIN handoff mismatch: interactive ask must write the "
+            "installation-system path, embedded DUD mode must not need a pre-script bridge"
+        )
+
+    return mode
+
+
+def _check_boot_unlock_classifier():
+    cases = [
+        ("Please enter TPM2 PIN:", False, "pin-prompt"),
+        ("Switching root.", True, "unlocked"),
+        (
+            "TPM2 PIN unlock failed, falling back to traditional unlocking.",
+            True,
+            "fallback",
+        ),
+        (
+            "Please enter passphrase for disk PORTABLE_WORKSTATION_SSD",
+            False,
+            "fallback",
+        ),
+        ("Please enter TPM2 PIN:", True, "pin-reprompt"),
+        ("Please enter TPM2 PIN:\nSwitching root.", True, "unlocked"),
+        (
+            "Switching root.\nPlease enter passphrase for disk unexpected",
+            True,
+            "fallback",
+        ),
+    ]
+    for text, submitted, expected in cases:
+        actual = classify_boot_unlock(text, pin_submitted=submitted)
+        if actual != expected:
+            raise RuntimeError(
+                "boot unlock classifier mismatch: "
+                f"{actual!r} != {expected!r} for {text!r}"
+            )
+
+
+def _validate_vm_graphics_contract(cfg):
+    if cfg.vm_graphics_controller != "VMSVGA":
+        raise RuntimeError(
+            "Linux VM graphics controller must be VMSVGA, got "
+            f"{cfg.vm_graphics_controller!r}"
+        )
+    if cfg.vm_vram_mib < 64:
+        raise RuntimeError(
+            f"Linux VM VRAM must be at least 64 MiB, got {cfg.vm_vram_mib}"
+        )
+    return {
+        "controller": cfg.vm_graphics_controller,
+        "vram_mib": cfg.vm_vram_mib,
+        "accel3d": cfg.vm_accel3d,
+    }
+
+
+def static_check(cfg=None):
     cfg = cfg or Config()
-    box = VBox(cfg)
-    session = None
-    try:
-        session = boot_installer(box)
-        print("BOOTED_INSTALLER", flush=True)
-        while box.state() == "Running":
-            time.sleep(2)
-        print("VM_STATE", box.state(), flush=True)
-    finally:
-        if session:
-            try:
-                box.unlock(session)
-            except Exception:
-                pass
-        box.logoff()
+    harness_root = Path(__file__).resolve().parent
+    validate_source_tree(harness_root)
+    validate_proven_profile_except_software(cfg.profile)
+    validate_profile_storage(cfg.profile)
+    validate_software_profile(cfg.profile, cfg)
+    graphics_contract = _validate_vm_graphics_contract(cfg)
+    _check_boot_unlock_classifier()
+    _validate_relaxng(cfg, cfg.profile)
+    patch_proof = verify_patchset_against_snapshot(cfg)
 
+    actual = load_credentials(cfg)
+    actual_mode = _check_runtime_profile(cfg, actual)
 
-def fill(name, cfg=None):
-    cfg = cfg or Config()
-    if name not in ("recovery", "pin", "root"):
-        raise ValueError(name)
-    box = VBox(cfg)
-    try:
-        Keyboard(box).fill(name, cfg)
-        time.sleep(1)
-        path = cfg.bench / f"after-{name}.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
+    dummy = {
+        "recovery": "vmbench-recovery-test-only",
+        "pin": "123456",
+        "root": "vmbench-root-test-only",
+        "desktop": "vmbench-desktop-test-only",
+    }
+    with TemporaryDirectory() as td:
+        release_runtime = Path(td) / "release-autoinst.xml"
+        render_runtime_profile(
+            cfg,
+            release_runtime,
+            {},
+            vm_observability=False,
+            target_device="/dev/disk/by-id/usb-DESKTOP_LINUX_RELEASE_SCHEMA_PROOF",
+        )
+        _validate_relaxng(cfg, release_runtime)
 
+    keys = ("recovery", "pin", "root", "desktop")
+    matrix = []
+    for mask in range(1 << len(keys)):
+        creds = {
+            key: dummy[key]
+            for bit, key in enumerate(keys)
+            if mask & (1 << bit)
+        }
+        mode = _check_runtime_profile(cfg, creds)
+        matrix.append(
+            {
+                "embedded": mode["embedded"],
+                "missing": mode["missing"],
+            }
+        )
 
-def logs(cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        enable_y2log(box)
-        time.sleep(1)
-        path = cfg.bench / "after-y2log.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
-
-
-def shot(name="latest", cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        path = cfg.bench / f"{name}.png"
-        screenshot(box, path)
-        return str(path)
-    finally:
-        box.logoff()
+    return {
+        "status": "PASS",
+        "vm_touched": False,
+        "profile_sha256": sha256(cfg.profile),
+        "actual_credentials": {
+            "embedded": actual_mode["embedded"],
+            "missing": actual_mode["missing"],
+        },
+        "credential_matrix_cases": len(matrix),
+        "source_invariants": "PASS",
+        "proven_profile_except_software": "PASS",
+        "storage_profile_invariant": "PASS",
+        "software_profile_contract": "PASS",
+        "patchset_applicability": "PASS",
+        "relaxng_validation": "PASS",
+        "boot_unlock_classifier": "PASS",
+        "vm_graphics_contract": graphics_contract,
+        "patches": patch_proof["patches"],
+        "post_patch_hashes": patch_proof["post_patch_hashes"],
+    }
 
 
 def status(cfg=None):
     cfg = cfg or Config()
     box = VBox(cfg)
     try:
-        target = cfg.bench / "target.vdi"
+        target = cfg.vm_target_vdi
+        serial = latest_serial_path(cfg)
+        serial_tail = ""
+        if serial and serial.exists():
+            serial_tail = clean_text(serial.read_bytes())[-40000:]
         result = {
             "vm_state": box.state(),
             "session_state": box.session_state(),
@@ -101,23 +285,15 @@ def status(cfg=None):
             ),
             "target_sha256": sha256(target) if target.exists() else None,
             "baseline_sha256": None,
-            "serial_tail": "\n".join(
-                serial_text(cfg).splitlines()[-40:]
-            ),
+            "vbox_log_folder": box.log_folder(),
+            "graphics_config": box.graphics_config(),
+            "serial_config": box.serial_config(),
+            "serial_path": str(serial) if serial else None,
+            "serial_tail": "\n".join(serial_tail.splitlines()[-80:]),
         }
         baseline = cfg.bench / "target.clean.sha256"
         if baseline.exists():
             result["baseline_sha256"] = baseline.read_text().split()[0]
         return result
-    finally:
-        box.logoff()
-
-
-def stop(cfg=None):
-    cfg = cfg or Config()
-    box = VBox(cfg)
-    try:
-        box.poweroff()
-        return box.state()
     finally:
         box.logoff()

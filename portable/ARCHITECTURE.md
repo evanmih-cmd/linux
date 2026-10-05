@@ -2,31 +2,80 @@
 
 ## Status and authority
 
-This document defines the selected technical architecture for the portable
+This document defines the current technical architecture for the portable
 workstation.
 
-The authoritative requirements are in
-[`BUSINESS_REQUIREMENTS.md`](BUSINESS_REQUIREMENTS.md). Requirements win over
-this document.
+The authoritative product requirements are in
+[`BUSINESS_REQUIREMENTS.md`](BUSINESS_REQUIREMENTS.md). If this architecture
+conflicts with a business requirement, the requirement wins and the architecture
+must change.
 
-**Product selection is complete: openSUSE Tumbleweed is selected.** Remaining
-work is implementation/proof. Reopen product selection only if a residual gate
-cannot be satisfied with supported openSUSE mechanisms and the only workaround
-would be owner-maintained security-sensitive infrastructure.
+The architecture is intentionally product-first and economy-first:
 
-The architecture follows two ordering rules:
+- **Product First** is an ordering rule, not a ban on custom work. Evaluate and
+  exhaust supported production product mechanisms before designing an
+  owner-built substitute. Prefer distribution defaults when they satisfy the
+  requirements, because they usually reduce lifecycle cost and uncertainty.
+- **Economy First** is a cost rule, not a component-count rule. Among solutions
+  that satisfy the authoritative requirements, compare total lifecycle cost:
+  implementation effort, recurring administration, maintenance/debugging,
+  infrastructure/capital cost, upgrade burden, recovery burden and expected
+  operational loss from failure. Fewer components or less custom code matter
+  only insofar as they reduce that total cost.
+- Custom code, patches, image customization or additional components are
+  legitimate candidates when their total lifecycle cost is lower than the
+  available product alternatives while still satisfying the requirements.
+- A product mechanism does not win merely because it is built in; product
+  mechanisms get evaluated first. Conversely, a custom mechanism is not
+  rejected merely because it is custom.
+- beta, preview, RC, experimental, or test-only features are not part of the
+  production critical path unless the business requirements are explicitly
+  changed to accept that risk/cost.
 
-- **Product First:** exhaust supported production mechanisms before owner-built
-  substitutes.
-- **Economy First:** among requirement-satisfying outcomes, minimize total
-  lifecycle cost: implementation, routine administration, update/recovery
-  burden, debugging, capital cost and expected loss from failure. For the target
-  workload, a path that can silently capture an owner secret is vastly more
-  expensive than a fail-closed path that occasionally requires recovery.
+The current design is ready for implementation validation in a VM. Hardware-
+specific behavior is called out explicitly where it still requires proof on the
+primary ASUS host.
 
-RC/preview/test-only product paths are excluded. An upstream “experimental”
-interface label is not automatically a security failure; the concrete failure
-mode, distro integration and recurring ownership cost are evaluated instead.
+## Architecture freeze
+
+**Frozen baseline: 2026-10-02.**
+
+The choices in this document are implementation constraints, not suggestions.
+A VM result, installer default, convenience argument, or alternative that is
+merely easier to test does **not** silently replace them.
+
+In particular, the frozen critical-path choices are:
+
+- platform: openSUSE Tumbleweed;
+- boot: Secure Boot through the supported shim + systemd-boot/BLS/sdbootutil
+  path, with removable fallback boot artifacts and no persistent host boot-order
+  dependency;
+- storage: GPT with an unencrypted EFI System Partition plus one outer LUKS2
+  container;
+- encrypted payload: **LUKS2 -> LVM VG `system`**;
+- root LV: **Btrfs + Snapper**; Btrfs remains the snapshot/rollback layer;
+- home LV: persistent `/home` state, currently XFS in the proof profile;
+- swap LV: disk-backed swap inside the same outer encrypted container;
+- system-update transaction layer: **transactional-update on Btrfs snapshots**;
+- provisioning: verified official Offline ISO plus a separately verifiable
+  Desktop-Linux OEMDRV/AutoYaST layer;
+- target selection: exact persistent target identity and fail-closed behavior;
+- no nested per-LV LUKS containers, LVM-thin snapshot layer, ZFS, mdraid, or
+  second rollback abstraction.
+
+A frozen choice may be changed only when:
+
+1. a business requirement changes, or live evidence proves the frozen design
+   cannot satisfy an existing requirement;
+2. the conflict and alternatives are recorded in GitHub issue #1;
+3. Product First and Economy First are re-evaluated against the concrete
+   evidence;
+4. `ARCHITECTURE.md` is changed in a dedicated architecture-decision commit
+   **before** implementation proceeds on the replacement design.
+
+Until such a commit exists, test failures are implementation/provisioning
+problems to solve within this architecture, not permission to substitute a
+different storage or boot stack.
 
 ## Hardware and workload baseline
 
@@ -36,348 +85,582 @@ Primary host:
 - AMD Ryzen AI Max+ 392;
 - Radeon 8060S / gfx1151;
 - 64 GB RAM;
-- removable SSD containing the workstation;
-- host Windows/internal storage outside workstation authority.
+- removable SSD containing the complete portable workstation;
+- Windows/internal storage and host firmware configuration remain outside the
+  workstation's authority.
 
-Target workload:
+The workload is intentionally narrow:
 
-- Google Chrome with the required wallet/browser extensions;
-- browser-centric sensitive operations and irreversible high-value actions;
-- Ledger hardware wallet through the supported Chrome/WebHID/udev path;
+- browser-centric sensitive operations;
+- persistent browser profile and required extensions/application state;
+- potentially irreversible high-value actions;
+- external owner-controlled USB/HID authorization device;
 - no requirement to optimize for unrelated desktop applications.
 
-## Product-selection conclusion
+The workstation is expected to run normally on the primary host. Portability to
+another compatible host is an emergency recovery capability, not a routine
+daily host-switching workflow.
 
-The realistic first-class workload universe was reduced to Windows, macOS and
-the Linux families for which Google publishes supported Chrome desktop packages:
-Ubuntu/Debian, openSUSE and Fedora. Ledger support was checked separately.
+## Selected platform
 
-Tumbleweed wins because it is the lowest-cost GA path found that combines:
+The selected platform is **openSUSE Tumbleweed**.
 
-- Chrome/Ledger workload fitness;
-- Secure Boot plus an authenticated early-boot path;
-- TPM2+PIN plus an independent owner recovery credential;
-- offline installation;
-- exact-target declarative provisioning;
-- portable/no-variable boot support;
-- independent system and persistent-data lifecycles;
-- bootable system rollback;
-- current AMD support.
+Reasons:
 
-Closest competitor Ubuntu 26.04.1 has a strong Canonical-managed UKI TPM-FDE
-stack and credible snap/APT rollback. It loses because no supported GA stock
-TPM-FDE path was found that replaces the system layer while preserving a
-separately managed persistent browser/user/application state. Building that
-separation around Canonical's hybrid FDE would transfer integration ownership
-back to this project.
+- current production kernel/userspace appropriate for the new AMD platform;
+- native desktop/browser workload without VM or USB-forwarding layers;
+- LUKS2, Btrfs and Snapper are normal distribution mechanisms;
+- current Tumbleweed EFI installations use the BLS/systemd-boot stack managed
+  by `sdbootutil`;
+- TPM2 measured-FDE integration is distribution-supported;
+- `transactional-update` provides atomic snapshot-based system updates;
+- the provisioning mechanism remains an explicit open gate: the final path must be offline, declarative, non-destructive to the host, NVRAM-safe, and compatible with the selected Secure Boot / measured-unlock architecture;
+- the design does not require enterprise management infrastructure or
+  additional specialized hardware.
 
-Debian and Fedora remain technically capable but require more owner/cross-project
-UKI/FDE integration. Leap 16.1 and Aeon are not GA at this checkpoint; Leap 16.0
-does not expose the complete current Tumbleweed path. Slowroll intentionally
-delays changes relative to Tumbleweed and is not preferred for this
-security-sensitive workload. Windows has no current supported Windows-To-Go
-replacement; macOS is not a supported ASUS product; ChromeOS Flex, Qubes and
-other families fail other hard gates recorded in issue #1.
+Rejected alternatives and the research history are kept in GitHub issue #1;
+they are not repeated here.
 
 ## Trust and boot model
 
 ### Normal primary-host path
 
-Target path:
+The normal boot path is:
 
 ```text
-UEFI firmware
-    ↓
+ASUS UEFI firmware
+        ↓
 Secure Boot
-    ↓
-shim / stock openSUSE boot chain
-    ↓
-official vendor-signed UKI path
-    ↓
-authenticated embedded early userspace
-    ↓
-TPM policy + short owner TPM2 PIN
-    ↓
-outer LUKS2 unlock
-    ↓
-system + persistent volumes
+        ↓
+shim
+        ↓
+systemd-boot / BLS path managed by sdbootutil
+        ↓
+measured kernel + initrd + command-line state
+        ↓
+TPM2 policy + owner PIN
+        ↓
+LUKS2 unlock
+        ↓
+Btrfs system
+        ↓
+startup maintenance gate
+        ↓
+sensitive workload
 ```
 
-The exact shim/systemd-boot/UKI handoff is an implementation proof gate. The
-critical invariant is that the code which renders the normal secret prompt is
-authenticated before the user types the TPM PIN. A modified ESP, BLS entry,
-kernel command line or other pre-unlock state must not be able to present a
-convincing secret-stealing prompt and continue as trusted.
+The TPM-bound path is the accepted normal unlock mechanism on the primary host.
 
-The official Tumbleweed `uki-default` is the selected UKI candidate. Current
-Factory packaging signs it with an openSUSE Secure Boot signing certificate
-which is not in the generic stock host trust chain; the primary host therefore
-enrolls that **public vendor signing certificate** through MOK.
+If pre-unlock state covered by the TPM policy changes unexpectedly, normal TPM
+unlock must fail. An unexpected plain LUKS passphrase prompt on the primary
+host is not part of the trusted normal workflow.
 
-Accepted MOK scope:
+### Single-credential unlock invariant
 
-- one-time primary-host trust enrollment is acceptable;
-- the project does not generate or retain a private signing key;
-- the project does not re-sign every kernel/UKI;
-- recurring MOK enrollment after normal updates is not acceptable;
-- the exact certificate scope and revocation/update behavior remain proof items.
+The workstation has one encrypted payload boundary: the outer LUKS2 container.
+The owner authenticates that container once per boot path.
 
-### TPM policy
+Required behavior:
 
-Tumbleweed/openSUSE currently integrates `sdbootutil` and
-`systemd-pcrlock`/NVIndex for TPM-bound FDE.
+- normal primary-host boot asks for the TPM2 PIN once and unlocks the outer
+  LUKS2 container;
+- emergency/recovery boot asks for the owner recovery passphrase once and
+  unlocks the same outer LUKS2 container;
+- after that unlock, the LVM PV/VG and root, home and swap LVs require no
+  additional cryptographic credential;
+- an additional passphrase/PIN prompt for root, home or swap is a boot failure.
 
-Upstream still describes parts of the pcrlock interface as experimental.
-openSUSE nevertheless deliberately moved to this mechanism to avoid the
-rollback weakness of the older signed-PCR-policy design. Treat the remaining
-risk as interface/lifecycle maturity that must be tested across updates, not as
-evidence that the cryptographic property is weaker.
+Credential handling follows the single outer encryption boundary; individual
+LVs do not create independent unlock paths.
 
-### Credential model
+### Emergency portability path
 
-Normal and recovery credentials are distinct by design.
+The removable SSD also retains an ordinary owner-held LUKS passphrase.
 
-**Normal boot credential**
-
-- short TPM2 PIN, e.g. a human-usable numeric PIN;
-- protected by the TPM-bound authorization path;
-- entered on every normal boot.
-
-**Recovery credential**
-
-- separate strong LUKS passphrase;
-- sized for resistance to offline guessing if the SSD is stolen;
-- stored/remembered by the owner independently of the machine;
-- usable when the original TPM or host is unavailable.
-
-The short TPM PIN must never become the only independent LUKS recovery
-credential.
-
-Current `sdbootutil` supports a dedicated TPM PIN source:
-`%user:sdbootutil-tpm2-pin`. If the selected YaST/Offline Image still maps the
-storage password to the legacy generic secret, AutoYaST may ask for the TPM PIN
-separately and place it only in that short-lived installer keyring entry. This
-is accepted as a small installer-only integration delta; no clear-text PIN is
-embedded in installation media or persisted as configuration.
-
-### Emergency/new-host recovery
+Its purpose is emergency recovery when the primary host is unavailable:
 
 ```text
-trusted official owner-controlled recovery/install media
-    ↓
-owner enters strong LUKS recovery passphrase
-    ↓
-persistent state becomes accessible
-    ↓
-repair if cheap, otherwise replace system/root
-    ↓
-establish fresh host-specific MOK/TPM state
+compatible replacement host
+        ↓
+boot removable SSD explicitly
+        ↓
+primary-host TPM policy unavailable
+        ↓
+owner LUKS passphrase
+        ↓
+same encrypted workstation state
 ```
 
-Recovery is intentionally exceptional. In-place repair of the previous TPM
-relationship is not a requirement; clean system replacement is acceptable.
+The passphrase is the portability credential. TPM recovery material does not
+replace it.
 
-## Removable boot and host isolation
+This emergency path has a deliberately lower pre-unlock assurance level than
+the enrolled primary-host TPM path because the replacement host has no
+pre-existing measured policy for this workstation. That reduction is accepted
+as an emergency-recovery compromise rather than treated as a normal operating
+mode.
 
-Required invariants:
+### Removable boot and host isolation
 
-- all required workstation state is on the removable SSD;
-- the internal ASUS disk and ESP are never targets;
-- the user enters through a one-time firmware boot choice;
-- the external ESP contains the standard removable fallback path;
+The workstation must be self-contained on the removable SSD.
+
+Required behavior:
+
+- user explicitly selects the removable SSD from the firmware one-time boot
+  menu;
+- the external ESP carries the standard removable fallback entry:
+  `EFI/BOOT/BOOTX64.EFI`;
+- no internal disk or internal ESP is part of the portable storage graph;
 - no persistent UEFI boot entry is required;
-- provisioning/runtime use the supported no-variable/no-NVRAM behavior;
-- `BootOrder` and `BootNext` are not used to make the workstation sticky;
-- with the SSD removed, the host resumes normal Windows boot with no repair.
+- installer/runtime configuration uses `updateNvram=false` /
+  `UPDATE_NVRAM=no`;
+- `BootOrder` and `BootNext` are not used as a convenience mechanism.
 
-Current `sdbootutil` exposes `--portable` and `--no-variables`; the final
-proof must show that the selected installer path actually produces the required
-fallback artifacts and leaves NVRAM unchanged.
+When the removable SSD is absent, the host follows its normal Windows boot
+behavior without repair or restoration.
 
 ## Storage and state model
 
-Selected topology:
+### Frozen storage graph
+
+The selected storage model is:
 
 ```text
 removable SSD
-├── GPT
-├── EFI System Partition
-└── LUKS2
-    └── LVM PV / VG
-        ├── root LV  → Btrfs system root + Snapper
-        ├── home LV  → persistent user/browser/application state
-        └── swap LV  → real disk-backed swap
+└── GPT
+    ├── EFI System Partition
+    │   └── shim / systemd-boot / BLS removable boot artifacts
+    └── outer LUKS2 container
+        └── LVM VG system
+            ├── root LV
+            │   └── Btrfs
+            │       └── Snapper + transactional-update snapshots
+            ├── home LV
+            │   └── persistent /home state
+            └── swap LV
+                └── disk-backed swap
 ```
 
-Why LVM is present:
+LVM is an intentional part of the architecture. Its job is volume separation
+and sizing **inside one encrypted container**. It is not the snapshot layer.
+Root recovery and transactional updates remain Btrfs/Snapper operations.
 
-- Btrfs itself is not a requirement.
-- Requirements 13 and 15 require a destructive system replacement to have a
-  clear boundary that preserves current user/application state.
-- A separate root LV and persistent LV make that boundary declarative and easy
-  to prove.
-- The swap LV is inside the already-unlocked LUKS boundary, so it does not
-  require a second boot secret or second TPM enrollment.
+The outer LUKS2 container carries both supported unlock paths: TPM2+PIN for the
+normal enrolled host and the owner recovery passphrase for emergency
+portability. Root, home and swap therefore share one encryption boundary and do
+not create independent credential prompts.
 
-Hibernation is disabled. Swap is for normal memory pressure only.
+The current AutoYaST profile uses a Btrfs root LV, an XFS home LV and a swap LV.
+Those roles are explicit provisioning inputs; the installer must not silently
+substitute a different storage topology.
 
-Root uses Btrfs/Snapper because it is the cheapest native openSUSE mechanism for
-a usable pre-update rollback point and bootable recovery. Persistent state is
-not part of root rollback.
+Required invariants:
 
-Normal persistent state belongs on the preserved `/home` LV unless a specific
-application proves it needs another preserved path. Do not create a custom
-persistence framework without such evidence.
+- only the removable SSD contains required workstation state;
+- the ESP is outside encryption so firmware can reach the removable Secure Boot
+  path;
+- all non-ESP workstation state is inside one outer LUKS2 container;
+- LVM is inside LUKS2, never outside it;
+- root/system state uses Btrfs snapshots for recovery;
+- persistent `/home` state does not roll back with normal root rollback;
+- swap is an LV inside the same encrypted container, not a second LUKS device;
+- LVM snapshots/LVM-thin, nested LUKS, ZFS and mdraid are not part of the
+  architecture unless explicitly approved later.
 
 ## Provisioning
 
-### Selected production direction
+### Two-layer installation medium
 
-Use the official Tumbleweed **Offline Image** plus **AutoYaST**.
+The production provisioning model is a **verified upstream base plus a
+separately verifiable Desktop-Linux layer**.
 
-The final media must:
+The two logical layers are:
 
-- install with networking disabled;
-- carry its unattended profile and all baseline packages locally;
-- identify the removable SSD by a stable persistent identity and fail if it is
-  absent;
-- leave the internal disk/ESP untouched;
-- preserve Secure Boot;
-- create the final LUKS2 → LVM topology;
-- install the strong recovery passphrase without exposing it in the media;
-- obtain the short TPM PIN interactively or through an equally safe supported
-  secret channel;
-- leave host NVRAM/boot order unchanged;
-- create the removable fallback EFI path;
-- be reproducibly built from a verified official image.
+```text
+Layer 1 — immutable upstream base
+  official openSUSE Tumbleweed Snapshot20260930 Offline Image
+  verified before deployment from openSUSE-signed checksum metadata
+  expected ISO SHA-256:
+  0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
 
-### Accepted installer-only deltas
+Layer 2 — Desktop-Linux provisioning delta
+  AutoYaST profile
+  installer-only files required by the profile
+  minimal version-specific YaST correction, while upstream requires it
+  complete manifest containing hashes of every owned file
+```
 
-Two current product-integration gaps are allowed only as small,
-installer-scoped deltas and should be deleted when upstream no longer needs
-them:
+The upstream ISO is not rebuilt merely to carry Desktop-Linux configuration.
+Its cryptographic identity is established on the downloaded ISO before it is
+written to installation media.
 
-1. **No-NVRAM AutoYaST import.** If the exact Offline Image still has the
-   YaST serialization omission where systemd-boot/BLS runtime supports
-   `update_nvram` but AutoYaST does not import it, use the smallest YaST
-   installer overlay/driver update that imports the existing product property.
-   Do not fork the installed bootloader.
-2. **Separate TPM PIN delivery.** If YaST still feeds the LUKS password through
-   the legacy generic `sdbootutil` secret, use an AutoYaST ask/script hook to
-   put the separately entered short PIN only in
-   `%user:sdbootutil-tpm2-pin`. The installed system receives TPM enrollment,
-   not a clear-text PIN file.
+For VM development and validation the two logical layers are deliberately
+presented as two media:
 
-These deltas are acceptable only because they adapt installer plumbing to
-existing supported product capabilities. They must not implement cryptography,
-boot verification, package management or TPM policy themselves.
+```text
+VirtualBox optical medium
+  verified official Snapshot20260930 ISO
+        +
+small Desktop-Linux layer medium
+  mutable during development
+```
 
-Agama development/test media are not a production path because baseline
-installation must be offline and GA.
+This avoids repeatedly rebuilding and hashing a 4.4 GiB derived ISO when only
+the Desktop-Linux profile or installer delta changed.
 
-## System replacement and rollback
+The production physical medium is one writable USB device. Deployment is:
 
-### Normal failed-update recovery
+1. verify the official ISO cryptographically;
+2. write that verified ISO to the USB device with a normal image-writing tool
+   such as Rufus;
+3. add the independently constructed and verified Desktop-Linux layer to the
+   same writable USB device;
+4. verify the Desktop-Linux layer from its manifest.
 
-Use openSUSE's supported system rollback mechanisms. Root rollback must not roll
-back the persistent `/home` LV.
+Physical co-location does not collapse the trust boundaries. The base is
+identified by the verified upstream ISO; the custom layer is identified by its
+complete manifest. A whole-device hash after adding the custom layer is not a
+substitute for those two independent identities.
 
-A usable recovery point must exist before managed system changes. A previous
-known-good root must be bootable/recoverable without first making the broken
-userspace fully operational.
+### Provisioning requirements must be satisfied together
 
-### Clean system replacement
+The combined physical installation medium must simultaneously provide:
 
-Reinstall is a first-class hard fallback, not an exceptional data-migration
-project.
+- a supported production/GA Tumbleweed installation base;
+- all baseline packages on the upstream Offline Image, so provisioning and
+  bare-metal recovery work with networking unavailable;
+- the declarative unattended profile on the same physical USB medium;
+- unambiguous persistent identity of the removable target;
+- fail-closed behavior when that exact target is absent;
+- no writes to the host internal disk or ESP;
+- no persistent host NVRAM/BootOrder mutation;
+- the selected Secure Boot + BLS boot architecture;
+- LUKS2 with owner recovery passphrase and TPM2+PIN primary-host unlock;
+- a complete manifest of the Desktop-Linux layer;
+- repeatable independent verification of both logical layers.
 
-The reinstall profile must:
+A candidate that misses any one of these is not the production provisioning
+path.
 
-1. identify the same removable SSD fail-closed;
-2. unlock the existing outer LUKS2 with the strong owner recovery credential;
-3. preserve the persistent LV and its filesystem;
-4. destroy/recreate or reformat only replaceable system/root state;
-5. recreate swap if desired;
-6. install a known-good Tumbleweed system;
-7. recreate boot artifacts on the external ESP;
-8. establish fresh host-specific TPM/MOK state when required.
+### Tumbleweed Offline Image + AutoYaST
 
-The old system instance need not survive.
+The official Tumbleweed Offline Image is the immutable upstream base. YaST /
+AutoYaST is the provisioning mechanism.
 
-AutoYaST/LVM preservation controls such as reusing existing volumes and
-`keep_unknown_lv`/equivalent current product semantics must be proven against
-the exact selected packages before this gate passes.
+The canonical Desktop-Linux profile owns the complete storage topology for the
+exact removable target: GPT, ESP, one outer `systemd_fde` LUKS2 container,
+LVM VG `system`, Btrfs root LV, persistent home LV and swap LV. The profile
+owns this topology explicitly and the installer must reproduce it exactly.
 
-## Maintenance policy
+Snapshot20260930 product components remain the implementation basis:
+LUKS2/systemd-FDE, LVM, Btrfs, Snapper, systemd-boot/BLS and sdbootutil.
+Custom installer changes are limited to concrete composition gaps:
 
-The requirement is the outcome, not a particular updater.
+- the AutoYaST bootloader importer is corrected to retain
+  `global/update_nvram=false`;
+- the explicit-drive planner is corrected to propagate the selected
+  `systemd_fde` authentication mode into the planned encrypted device;
+- the offline NetworkManager target-write path is corrected so it does not
+  require a live network when only writing target configuration;
+- the bootloader path requests stock sdbootutil portable/removable mode when
+  `update_nvram=false`.
 
-Before sensitive work:
+No target-system package is forked or replaced. The target receives stock
+`keyutils`/libkeyutils through normal product package resolution; YaST BLS uses
+that target-side `keyctl` through `Yast::Execute.on_target!`, so no keyutils
+binary or library is carried in the DUD installation-system overlay. Every
+installer-only correction is version-bound and should be deleted when the
+supported upstream product can express the required behavior directly.
 
-- managed system state must be current under the selected policy;
-- a usable previous-system recovery point must exist;
-- update failure keeps recovery/admin access but blocks sensitive work;
-- after successful update, stale executable mappings must not survive into the
-  sensitive session;
-- the user receives an explicit current/success/failure result.
+### Development and release workflow
 
-Prefer the native Tumbleweed update stack. Current candidates are the distro
-`os-update`/`zypper dup` path with native Snapper integration or
-`transactional-update` if it materially lowers failure cost. Select between
-them by proof of requirements 16–19, not by preserving a previous design.
+Routine development iterations rebuild only the small Desktop-Linux layer:
 
-Do not implement a package manager, snapshot engine or boot manager in project
-code. Project-owned maintenance code may only orchestrate product mechanisms
-and gate the sensitive workload.
+```text
+edit profile / installer delta
+        ↓
+rebuild small layer
+        ↓
+verify layer manifest
+        ↓
+boot verified official ISO + layer in VirtualBox
+        ↓
+run provisioning gates
+```
 
-kexec is not accepted as equivalent to a fresh Secure Boot/measured-boot path
-for transitions that require a platform reboot.
+A monolithic derived ISO may still be built as a diagnostic or archival
+artifact, but it is not the source of truth and is not required for each
+iteration.
 
-## Browser and Ledger
+The release source of truth is the exact upstream ISO identity plus the exact
+Desktop-Linux layer manifest and its source-controlled inputs. This is both the
+VM proof model and the physical-USB model; only physical placement differs.
 
-Use vendor Google Chrome, because Chrome support is part of the workload gate.
-Baseline offline media must include the Chrome RPM and required local
-dependencies/udev configuration. Once networking is available, Chrome should
-remain inside the same mandatory maintenance session even if its RPM repository
-is vendor-owned rather than openSUSE-owned.
+The runtime rendering is intentionally different only for proof plumbing:
 
-Ledger uses the supported Chrome/WebHID path and vendor-published Linux udev
-rules. Avoid VM forwarding or custom USB middleware.
+- VM builds may embed throwaway local proof credentials and add the COM1/y2log
+  observability pre-script used by the autonomous harness;
+- physical release builds never read the VM credential file, retain all four
+  native AutoYaST credential questions, carry only an empty `0600` TPM-PIN
+  `inst-sys` placeholder, and contain no `VMBENCH_*` or `/dev/ttyS0` logic.
+
+The canonical AutoYaST source profile itself is production-clean; VM-only
+observability is injected only while rendering the VM artifact. Its destructive
+physical target is stored as `__TARGET_DEVICE__`, not as the VM disk identity.
+The VM renderer substitutes the deterministic proof-disk by-id; the physical
+release renderer requires an explicit persistent `/dev/disk/by-id/...` target
+and refuses both the VM proof identifier and non-persistent `/dev/sdX` paths.
+
+### Agama status
+
+Agama remains useful research history, but the public Agama Live ISO previously
+evaluated is a development/testing image and does not provide the required
+complete offline product repository. It is not the current production path.
+
+### Declarative preference
+
+The validated AutoYaST profile is the authoritative provisioning input.
+Custom installer-time logic is limited to irreducible product gaps and must be
+small, manifestable, version-bound and independently verifiable.
+
+The obsolete Ubuntu/Subiquity LVM/ext4 installer profiles have been removed
+from the current tree. Their history remains available in git, but they are not
+implementation artifacts for this architecture.
+
+## System update model
+
+### Mandatory startup maintenance gate
+
+Sensitive work is never released directly after boot.
+
+Every startup enters the maintenance policy first:
+
+```text
+boot and unlock
+        ↓
+network available
+        ↓
+transactional-update dup
+        ↓
+transaction successful?
+   ├── no  → recovery/admin available; sensitive workload blocked
+   └── yes
+        ↓
+activate updated snapshot using the minimum trusted restart level
+        ↓
+validate the running state
+        ↓
+report explicit maintenance result
+        ↓
+release sensitive workload
+```
+
+The user must receive a clear outcome:
+
+- already current;
+- updated successfully;
+- update failed.
+
+Admin/recovery access may remain available after failure. Only the sensitive
+workload is gated.
+
+### Why transactional-update
+
+`transactional-update` is preferred over live in-place package replacement for
+the mandatory startup cycle because it:
+
+- performs the update in a new Btrfs snapshot;
+- leaves the currently running root untouched during the transaction;
+- discards a failed transaction snapshot;
+- uses `zypper dup` for Tumbleweed;
+- provides a deterministic rollback boundary before the new state is activated.
+
+The usual warning that changes made to the old running root after creating the
+transaction snapshot can be lost is acceptable here because the startup gate
+does not release the working session between update creation and activation.
+
+Do not run multiple independent transactional updates before activation unless
+the product-supported continuation semantics are explicitly used.
+
+## Restart policy
+
+### Initial production activation path
+
+Use a normal `systemd` reboot after a successful transactional update.
+
+This is intentionally conservative for the initial production implementation:
+the new root snapshot is activated only after a fresh kernel/userspace boot
+through the normal removable Secure Boot path. It also guarantees that stale
+executables and mappings from the previous root are gone before sensitive work
+is released.
+
+`REBOOT_METHOD=systemd` is the selected initial `transactional-update`/tukit
+policy.
+
+### Soft reboot
+
+Systemd soft reboot is a possible later optimization for updates that provably
+do not require a new kernel/platform boot. It is **not** part of the initial
+production gate. Do not enable it until its interaction with the selected
+snapshot activation, security state and sensitive-workload gate has been
+separately demonstrated.
+
+### kexec
+
+**kexec is disabled.**
+
+It does not reproduce the complete firmware -> shim -> bootloader
+Secure-Boot/measured-boot chain. Kernel signature enforcement under lockdown is
+not treated as equivalent to a fresh platform boot for this workstation.
+
+Configure transactional-update/tukit so that kexec is not an allowed restart
+method.
+
+### Full reboot and removable re-entry
+
+Do not use `BootNext`, `BootOrder` or another persistent host-firmware
+mutation to force re-entry into the removable workstation.
+
+Whether the ASUS FA401EA naturally returns to the selected removable device on
+a warm/full reboot after one-time boot selection is a hardware validation item.
+If it does not, manual one-time boot selection is the acceptable fallback
+unless a supported non-persistent firmware mechanism is proven.
+
+## Rollback and system replacement
+
+Btrfs/Snapper is the supported recovery mechanism for normal system failure.
+
+A failed update or broken system state must be recoverable by selecting or
+rolling back to a known-good root snapshot without rolling normal user/browser
+state back with it.
+
+This satisfies the business requirement to replace system state with a
+known-good state. A reinstall is not the normal recovery primitive.
+
+A clean redeployment remains an emergency option when snapshots themselves are
+unavailable or no longer trusted. That operation must preserve required
+persistent user/application state, but no separate owner-built reinstall
+framework is part of the baseline architecture.
+
+## Browser and external authorization device
+
+Browser roles are deliberately separated:
+
+- Firefox is the normal/general-purpose browser;
+- vendor Google Chrome is reserved for the sensitive crypto/wallet workload and
+  the Ledger WebHID path.
+
+Both are managed as RPM packages. Chrome is supplied offline from the pinned
+vendor package/repository input and then maintained through its normal vendor
+RPM repository as part of the startup maintenance policy. Ledger uses the
+vendor-published udev rule and native WebHID path.
+
+Do not introduce Flatpak, VM device forwarding, or custom USB middleware unless
+the real device proves it necessary.
+
+## Maintenance policy state
+
+The startup gate is policy glue, not a new updater.
+
+Its responsibilities are limited to:
+
+- trigger the supported transactional update;
+- record the result for the current boot/update generation;
+- prevent the sensitive workload target from starting until success is proven;
+- keep a recovery/admin path available on failure;
+- expose a clear success/current/failure result;
+- allow the native update stack to perform soft or full reboot as configured;
+- after restart, verify that the running snapshot is the successfully validated
+  one before releasing the workload.
+
+It must not duplicate package management, snapshot implementation, bootloader
+management or TPM policy logic.
+
+## Validation methodology
+
+Validation follows the same product-first rule as the architecture itself.
+
+Two different kinds of claims must be tested differently:
+
+- **configuration invariants** are verified by reading the effective system
+  configuration/state and proving that the required value is actually set;
+- **behavioral invariants** are verified by exercising the live system and
+  observing the required outcome.
+
+A configuration assertion is not accepted as proof of runtime behavior, and a
+self-referential test that only compares an expected value with the value used
+to construct the test is not evidence.
+
+Examples:
+
+- bootloader selection, NVRAM-update policy, kexec enablement, filesystem
+  layout, active systemd dependencies and TPM enrollment state are
+  configuration/state checks;
+- successful boot, failed-unlock behavior, snapshot rollback, update failure,
+  soft reboot activation, workload blocking/release and persistence across
+  restart are live behavioral tests.
+
+Where a requirement has both a configuration and a behavioral dimension, both
+must be checked independently.
 
 ## Validation gates
 
-### Residual go/no-go gates before implementation is accepted
+### VM proof required before implementation is considered proven
 
-1. Prove that the official vendor-signed UKI path is the code path that renders
-   the normal TPM-PIN prompt and that mutable external early-boot state cannot
-   steal the PIN while appearing trusted.
-2. Prove normal UKI/kernel/PCR-policy updates require neither owner signing nor
-   recurring MOK enrollment.
-3. Prove root snapshot rollback remains bootable and compatible with the
-   authenticated UKI/PCR lifecycle.
-4. Prove AutoYaST fresh install and reinstall: exact target, final LUKS2→LVM
-   topology, separate short TPM PIN + strong recovery passphrase, root
-   replacement and persistent-LV preservation.
-5. Repeat offline installation, internal-disk sentinel preservation, removable
-   fallback and unchanged NVRAM on the final topology.
-6. Validate the ASUS FA401EA hardware path and real Chrome + Ledger workload.
+Using Oracle VirtualBox, validate the final selected provisioning path only after
+it clears the product-level gates above:
 
-If any gate can be closed only with owner-maintained security-sensitive boot
-code, private signing infrastructure or a custom FDE implementation, stop and
-reopen product selection.
+1. baseline installation succeeds with VM networking disabled;
+2. the installation medium itself supplies the unattended profile;
+3. disk 0 models the ASUS internal disk and contains sentinel state; disk 1
+   models the portable target; installation changes disk 1 and leaves disk 0
+   unchanged;
+4. no persistent firmware/NVRAM entry is created by provisioning;
+5. UEFI Secure Boot works through the selected supported Tumbleweed boot path;
+6. LUKS2 owner passphrase and TPM2+PIN primary unlock behave as designed;
+7. Btrfs/Snapper snapshot and rollback semantics work;
+8. transactional `dup` success and failure behavior works;
+9. soft reboot activates qualifying userspace-only updates;
+10. kexec remains disabled;
+11. sensitive workload remains blocked until maintenance success while
+    recovery/admin access remains available on failure.
+
+VirtualBox cannot prove physical ASUS firmware behavior or real external-device
+compatibility.
+
+### Physical-host validation still required
+
+On the ASUS TUF A14 FA401EA validate:
+
+- Secure Boot + TPM2+PIN measured unlock;
+- no internal disk/ESP/NVRAM mutation during real provisioning;
+- removable `EFI/BOOT/BOOTX64.EFI` boot;
+- behavior after a full reboot from a one-time external boot;
+- the actual external USB/HID authorization device and selected browser;
+- emergency passphrase access on another compatible physical host when
+  practical.
 
 ## Accepted compromises
 
-The selected product consciously accepts:
+The architecture consciously accepts:
 
-- one-time primary-host MOK enrollment of an openSUSE vendor public signing
-  certificate;
-- upstream pcrlock interface-maturity risk because openSUSE owns the integrated
-  lifecycle and the mechanism improves rollback resistance;
-- higher update volume from a rolling distribution, offset by native rollback;
-- two owner credentials with different purposes: a short TPM PIN and a strong
-  recovery passphrase;
-- possible manual one-time boot-menu selection after a full firmware reboot.
+- emergency passphrase recovery on a non-enrolled host has lower pre-unlock
+  assurance than normal TPM2+PIN operation on the primary host;
+- a genuine firmware reboot may require manually selecting the removable SSD
+  again if the ASUS firmware does not preserve the one-time selection;
+- browser choice remains workload/device-driven until the actual authorization
+  device is validated.
 
-These are narrower and cheaper than owner-managed PKI, bespoke boot code,
-enterprise key infrastructure or custom FDE/update engines.
+These are narrower compromises than introducing custom boot/signing,
+firmware-mutation, enterprise-management or bespoke update infrastructure.
+
+## Implementation order
+
+1. Resolve the production provisioning gate without relaxing offline, host-isolation, measured-unlock or declarative requirements.
+2. Prove that selected path in VirtualBox with networking disabled and an internal guard disk present.
+3. Implement only the minimal systemd maintenance gate required to bind
+   transactional-update to the sensitive workload target.
+4. Validate the same artifacts on the physical removable SSD/FA401EA.
+5. Validate the real browser + external authorization device.
+6. Treat the architecture as production-ready only after the physical checks
+   above pass.

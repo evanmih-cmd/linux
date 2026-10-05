@@ -1,0 +1,83 @@
+Packaging model:
+- immutable base: verified official openSUSE Tumbleweed Snapshot20260930 Offline ISO
+- custom unit: separately verifiable Desktop-Linux OEMDRV layer
+- VirtualBox: base ISO + OEMDRV as separate media
+- physical release: same logical layers co-located on one writable USB device
+
+Input ISO SHA-256:
+0ae329f1727aa4ca953b6f20f4b68906de55b66859a76a5d798e60f473f9db99
+
+Canonical source-controlled installer inputs:
+
+1. autoinst-vm-proof.xml
+   SHA-256:
+   ab931907b44dcdf88825c67ed7abf2228e5a508cd9785b6c2fcf139341d1e506
+   Destination: /autoinst.xml
+   Storage graph:
+   GPT -> ESP + outer LUKS2 -> LVM VG system -> root/home/swap
+
+2. systemd-fde-autoyast-authentication.patch
+   SHA-256:
+   ed0096bd237fa253f6124c8a452a7fec0d28176d61bcafd59041c9e0a582dd3d
+   Purpose:
+   set TPM2+PIN authentication for the explicit systemd-FDE target, add
+   tpm2-device=auto to its crypttab options, and pass distinct recovery and
+   TPM2 PIN secrets to current sdbootutil key names.
+
+3. systemd-boot-update-nvram.patch
+   SHA-256:
+   931e7ef8f3f4c877ef6e192c7fccb949209fefba0c23ce6dcf55de40f04b4c9f
+   Purpose:
+   retain AutoYaST global/update_nvram=false.
+
+4. networkmanager-offline-write.patch
+   SHA-256:
+   590c9e0bb9672e973416b2aed5ecafd3ff65822fd9cd012645d4c1db147f53b2
+   Purpose:
+   write NetworkManager target configuration offline without requiring a live
+   installer network connection.
+
+
+Builder source model:
+- clean exact Snapshot20260930 installer files are verified before use;
+- pinned stock source SHA-256 identities:
+  - autoyast_converter.rb: 32e1f4c5138b849333788019444b097c72fe75b5fb15d5d1fe26e31ced8d86c3
+  - bls.rb: 8e3fe14b84a645ef33352586baaefc02561e78a7e2a0e05e171b5ee977ea4743
+  - systemdboot.rb: 331c55a9575f86bf610c12e7e4dda9348b010b1cfda0264d5f9f4eb9b8bc5d58
+  - autoinst_drive_planner.rb: fbad3863a854b608016f9e9676a1d8b9226fe8ea4458cad347c4bda2136013b5
+  - encryption.rb: 32bf1c4f77a1937f20fb72a9895ec90e84839f001657ffeafd86850114bbe036
+  - Lan.rb: 21147713babda7100843df42b8c8685156f3385bb65eaa00a280fbae19e1c429
+- all three source-controlled patches are applied during every build;
+- no prepatched OEMDRV/cache tree is consumed;
+- if the clean source cache is missing or inconsistent, the builder verifies the
+  official Snapshot20260930 ISO hash and reconstructs these stock inputs from
+  three pinned YaST RPM paths on that ISO before patching.
+
+The DUD carries no keyctl/libkeyutils payload. The target system receives stock
+`keyutils`/libkeyutils through normal product package resolution, and YaST BLS
+uses target-side `keyctl` via `Yast::Execute.on_target!`. No target-system
+package is replaced.
+
+Release isolation:
+- VM artifacts may embed throwaway local proof credentials and VM COM1
+  observability;
+- `bench.py build-release --target-device /dev/disk/by-id/...` requires an
+  explicit persistent release target, rejects the VM proof target and non-by-id
+  device paths, forces an empty credential set, retains the three native
+  AutoYaST credential asks, contains no VM observability scripts, and writes
+  release metadata/artifacts under a separate cache directory.
+
+Artifact verification:
+- SOURCE-IDENTITY.txt records the official ISO identity, pinned RPM paths,
+  pinned stock source hashes and all patch hashes;
+- SHA256SUMS covers every regular file in the generated layer except itself;
+- SYMLINKS records the complete symlink inventory;
+- after ISO creation the builder extracts the ISO again and verifies both
+  manifests before publishing the artifact;
+- current-build.txt records the external ISO SHA-256.
+
+Observability:
+- VirtualBox COM1 host mode is RawFile only.
+- Each autonomous VM run writes COM1 directly to runs/<run-id>/serial.log.
+- AutoYaST streams complete YaST y2log into COM1 from its pre-script.
+- Screenshots are not evidence and are not part of the harness.
