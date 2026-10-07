@@ -376,6 +376,43 @@ in doubt.
 Recovery material must not be emitted into automated logs, Git, issue comments
 or VM run artifacts.
 
+### Post-compromise BitLocker rule
+
+BitLocker is an **offline/boot confidentiality boundary**, not a security
+boundary against an already-hostile Windows VTL0.
+
+An attacker with administrator/SYSTEM or kernel-level authority in the running
+OS must be assumed able to inspect and modify the BitLocker protector set,
+including obtaining an existing numerical recovery password when such a
+protector is present or adding a new recovery protector under attacker control.
+
+Therefore any credible administrator/SYSTEM/kernel compromise invalidates trust
+in the current BitLocker protector set. A later clean-looking reboot with
+TPM + startup PIN does **not** re-establish trust in that encrypted volume.
+
+Recovery from such a compromise requires a cryptographic reset of the OS volume:
+
+```text
+suspected hostile VTL0
+        ↓
+boot trusted external installation/recovery media
+        ↓
+wipe/recreate the Windows OS volume
+        ↓
+create a new BitLocker volume/master-key state
+        ↓
+create fresh protectors and re-enroll TPM + startup PIN
+        ↓
+fully update, configure and audit
+```
+
+Rotating only the recovery password, removing malware, or reinstalling Windows
+over the existing encrypted volume is not sufficient for this threat model.
+
+Offline copies of BitLocker recovery material remain useful for availability
+and ordinary recovery, but they are **not** an independent secret domain
+protected from hostile VTL0.
+
 ### Separate Hello PIN
 
 The Windows Hello PIN remains available as fallback when biometric login is
@@ -1149,6 +1186,12 @@ resume sensitive work only after audit passes
 ```
 
 There is no requirement to preserve a compromised Windows system instance.
+
+For administrator/SYSTEM/kernel compromise, "rebuild" specifically means
+recreating the encrypted OS volume and its BitLocker key/protector state, not
+merely reinstalling into or cleaning the existing BitLocker volume. This makes
+any recovery credential or protector state captured by the compromised OS
+irrelevant to the newly created volume.
 
 The design favors clean supported rebuild over elaborate attempts to salvage a
 security-compromised OS.
