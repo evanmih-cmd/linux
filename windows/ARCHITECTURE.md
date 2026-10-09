@@ -1770,10 +1770,14 @@ After the clean unattended install reaches a usable desktop, ordinary
 configuration iteration should happen from snapshots rather than by repeating
 the complete Windows installation.
 
-The preferred post-install mechanism is supported **WinGet Configuration / DSC**
-desired state where the required resource exists. PowerShell is a supported
-implementation/interface tool, but it is not a license to turn the
-configuration into one giant imperative bootstrap script.
+The preferred post-install mechanism is supported **Microsoft DSC v3 and
+WinGet DSC package resources** using one canonical YAML document. The existing
+VM proved native, SHA-256-pinned Microsoft DSC 3.3.0 `dsc config set` is the
+supported working invocation; WinGet Configuration's hosted processor returned
+internal `0x80131500` on registry resources. PowerShell may invoke the stock
+processor, but is not a license to turn configuration into a giant imperative
+bootstrap script. This distinction changes the launcher, **not** the desired
+state contract shared by VM and physical ASUS.
 
 Specific rules:
 
@@ -1802,9 +1806,9 @@ clean reproducible Windows desktop
         ↓
 snapshot
         ↓
-WinGet Configuration / DSC desired state
+Microsoft DSC v3 + WinGet package desired state
         ↓
-audit
+independent native Windows audit
 ```
 
 Install/boot-path changes require rebuilding from the first boundary.

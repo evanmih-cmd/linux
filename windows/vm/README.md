@@ -139,7 +139,7 @@ Post-install work is a separate boundary:
 installed-clean
 → enable post-install network
 → interactive bootstrap profile available
-→ WinGet Configuration / DSC desired state (configure)
+→ Microsoft DSC v3 desired state (direct dsc config set)
 → structured audit
 → later post-install snapshots
 ```
@@ -215,11 +215,14 @@ The following are always kept separate as physical ASUS gates:
 ## Post-install desired state and payload
 
 `../../configuration/workstation.winget` is the canonical post-install
-desired-state document.  `../payload/apply-configuration.ps1` is transport
-glue only: it resolves the installed Microsoft App Installer/WinGet executable,
-validates the configuration, and invokes WinGet Configuration.  It does not
-encode a second package-management policy or manually download application
-installers.
+desired-state document. `../payload/apply-configuration.ps1` is transport
+glue only: it verifies the SHA-256-pinned official Microsoft DSC 3.3.0
+Windows ZIP beside that document, extracts the signed upstream tools, and runs
+the supported `dsc config set --file workstation.winget --output-format json`.
+The native `Microsoft.WinGet/Package` resource still delegates the five package
+installations to Microsoft's Windows Package Manager; registry and optional
+feature resources are also first-party DSC. No second package baseline,
+custom in-guest DSC implementation, or manual MSI downloader exists.
 
 The exploratory `../payload/user-locale.ps1` is VM-only test history, **not**
 an approved production desired-state resource. User locale requires a supported
@@ -275,49 +278,50 @@ Useful variables:
 
 Activation is not required for the VM configuration proof.
 
-### Observed WinGet/DSC outcome on the existing two-disk VM (2026-10-09)
+### Verified native Microsoft DSC post-install result (2026-10-09)
 
-Live Windows-native audit `20261009-212055-a68a2e2c96b8` yielded
-**25 PASS / 4 FAIL / 8 NOT_PROVABLE_IN_VM**. This is a post-install
-observation on the *existing* `Desktop-Windows-11-Pro-TwoDisk`, not a
-release acceptance or proof for physical ASUS.
+**The earlier processor compatibility blocker is resolved.** On the existing
+`Desktop-Windows-11-Pro-TwoDisk`, WinGet Configuration's AppX DSC 3.2.3
+cannot invoke its bundled optional-feature resource, while WinGet Configuration
+with external DSC 3.3.0 returned internal `0x80131500` for registry resources.
+Direct first-party Microsoft `dsc.exe config set` works with the same canonical
+`workstation.winget`; no alternate VM-specific configuration was introduced.
 
-Verified inside Windows: all five applications (PowerShell 7, Chrome, Edge,
-KeePass 2, Ledger Wallet), Chrome Enterprise policy and the actual six
-Web-Store wallet extensions in the local owner profile, English UI, German
-formats, precisely US and Russian input layouts, Windows Sandbox feature
-Enabled, and the earlier installation/WinRE/Secure Boot checks. Chrome did
-not require Google-account sign-in and was not made the default browser.
+The common YAML now uses Microsoft `Microsoft.Windows/RegistryList` v3.3,
+`Microsoft.Windows/OptionalFeatureList`, and `Microsoft.WinGet/Package`,
+with native DSC `[resourceId('Microsoft.Windows/RegistryList', 'Name')]`
+dependency expressions. Official DSC Windows ZIP SHA-256 is pinned as
+`3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f`.
+The ASUS-only `security-hardware.winget` UEFI Lock overlay was updated to the
+same official `RegistryList` type but **was not applied on the VM**; the
+production guard still rejects attempts to alter UEFI Lock through the common
+configuration.
 
-Exactly four failed checks remain: `bitlocker-tpm-immediate-protection`,
-`bitlocker-vm-flow` (owner-deferred physical setup), `vbs-boot-policy`
-and `hvci-boot-policy` (stock Windows security policy, not demonstrated
-in this NEM guest). No policy FAIL has been re-labelled to PASS.
+**Live configuration run #1** `20261009-220702-53aa9b1c9d54`:
+`CONFIGURATION=PASS`, `dsc.exe exit=0`, `hadErrors=false`, all 21 resources.
+New VBS, HVCI and prerequisite registry policy keys were created as intended.
 
-**Processor incompatibility remains an actual release blocker:**
+**Live configuration run #2** `20261009-220809-27ef0fa1ca4b`:
+`CONFIGURATION=PASS`, `dsc.exe exit=0`, `hadErrors=false`, all 21 resources.
+Every reported `changedProperties` collection was empty, proving
+idempotent repeat application of the current state. Each run took about 48 s.
 
-- AppX-installed Microsoft DSC + canonical `workstation.winget` applies
-  the five packages and `Microsoft.Windows/Registry` values, but reports
-  `dism_dsc: This resource currently is not supported when installed via
-  Appx` for `Microsoft.Windows/OptionalFeatureList`.
-- Official Microsoft standalone DSC v3.3.0, ZIP verified against SHA-256
-  `3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f`,
-  works with WinGet's documented `--processor-path` administrator gate
-  and **successfully applies WindowsSandboxFeature**. However the same
-  processor returns `-2146233088` for every
-  `Microsoft.Windows/Registry` resource. Subsequent VBS/HVCI dependencies
-  therefore cannot be applied. Overall configuration is **FAIL**.
-- Fix the processor/resource compatibility using supported Microsoft
-  mechanisms and re-run the *same* canonical configuration; do **not**
-  construct a separate hand-maintained VM/ASUS manifest or bypass
-  failure checks.
-- The one-time Windows-native `../payload/user-locale.ps1` converged
-  the guest profile, confirmed by a later independent audit, but remains
-  **VM-only exploratory evidence** until a supported production
-  international-settings configuration path is accepted.
+**Independent Windows-native audit** `20261009-220912-5bb44e9077b8`:
+**27 PASS / 2 FAIL / 8 NOT_PROVABLE_IN_VM**. VBS and HVCI **registry policy**
+checks now PASS; this does *not* claim working bare-metal virtualization-based
+security in VirtualBox NEM. Only the two owner-deferred BitLocker protector
+checks remain FAIL. Do not change audit definitions to hide them.
 
-The pre-postinstall snapshot
-`pre-postinstall-20261009-windows11-pro-twodisk` remains available.
-Do not roll back, reset, create another VM or modify the protected Disk 0
-on account of these stock-resource gaps. The original passwordless answer
-ISO was restored to SATA port 4 after the audit.
+Actual installed packages (PowerShell 7, Chrome, Edge, KeePass 2, Ledger Wallet),
+six genuine Chrome Web Store wallets and its extension policy, Windows Sandbox
+feature Enabled, and en-US UI/de-DE regional formats/US+RU keyboard profiles
+were previously checked in the Windows guest, and remain PASS in this audit.
+Native `../payload/user-locale.ps1` fixed the owner profile in a **VM-only
+exploratory step**; continuous production-safe locale convergence is not yet
+a reviewed declarative resource.
+
+Snapshot `pre-postinstall-20261009-windows11-pro-twodisk` remains available.
+The current VM was not reinstalled/reset, and the original passwordless answer
+DVD was restored to SATA port 4. Structural parity and audit proof in a VM
+do not replace the physical ASUS tests, protected SSD1 preservation gate,
+BitLocker owner enrollment, or final hardware-only acceptance.

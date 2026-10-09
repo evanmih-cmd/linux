@@ -138,24 +138,36 @@ def verify_production_files(files, *, cfg=None):
         ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard", "Locked"),
         ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity", "Locked"),
     }
+    def registry_entries(resource):
+        """Flatten Microsoft's native v3.3 RegistryList or legacy Registry input."""
+        resource_type = resource.get("type")
+        props = resource.get("properties") or {}
+        if resource_type == "Microsoft.Windows/RegistryList":
+            return props.get("registryEntries") or []
+        if resource_type == "Microsoft.Windows/Registry":
+            return [props]
+        return []
+
     actual_locks = {
-        (r["properties"]["keyPath"], r["properties"]["valueName"])
-        for r in resource_locks
-        if r.get("type") == "Microsoft.Windows/Registry"
-        and r.get("properties", {}).get("valueData", {}).get("DWord") == 1
-        and r.get("metadata", {}).get("winget", {}).get("securityContext") == "elevated"
+        (entry["keyPath"], entry["valueName"])
+        for resource in resource_locks
+        for entry in registry_entries(resource)
+        if entry.get("valueData", {}).get("DWord") == 1
+        and entry.get("_exist") is True
+        and resource.get("metadata", {}).get("winget", {}).get("securityContext") == "elevated"
     }
-    if len(resource_locks) != 2 or actual_locks != expected_locks:
+    if (len(resource_locks) != 2
+            or any(len(registry_entries(r)) != 1 for r in resource_locks)
+            or actual_locks != expected_locks):
         raise ValueError("production UEFI lock overlay must contain exactly two approved locks")
 
     # Common DSC is applied repeatedly. It must never compete with the
     # separate physical-ASUS-only UEFI lock overlay by resetting Locked=0.
     workstation = yaml.safe_load(text_files["workstation.winget"])
     for resource in workstation.get("resources") or []:
-        props = resource.get("properties") or {}
-        if (resource.get("type") == "Microsoft.Windows/Registry"
-                and (props.get("keyPath"), props.get("valueName")) in expected_locks):
-            raise ValueError("common workstation DSC must not touch ASUS UEFI Lock")
+        for entry in registry_entries(resource):
+            if (entry.get("keyPath"), entry.get("valueName")) in expected_locks:
+                raise ValueError("common workstation DSC must not touch ASUS UEFI Lock")
 
     canonical = cfg.workstation_configuration.read_bytes()
     if files["workstation.winget"] != canonical:

@@ -113,37 +113,47 @@ class HarnessPolicyTests(unittest.TestCase):
         resources = config["resources"]
         named = {r["name"]: r for r in resources}
         self.assertEqual(len(named), len(resources))
+        import re
         for name, resource in named.items():
             for dependency in resource.get("dependsOn", []):
-                self.assertIn(dependency, named, f"invalid dependency in {name}")
+                matched = re.fullmatch(r"\[resourceId\('([^']+)', '([^']+)'\)\]",dependency)
+                self.assertIsNotNone(matched, f"invalid dependency expression in {name}")
+                type_name, dependency_name = matched.groups()
+                self.assertIn(dependency_name,named)
+                self.assertEqual(named[dependency_name]["type"],type_name)
         self.assertEqual(named["WindowsSandboxFeature"]["type"],
                          "Microsoft.Windows/OptionalFeatureList")
-        self.assertEqual(named["EnableVBS"]["dependsOn"], ["DeviceGuardKey"])
+        self.assertEqual(named["EnableVBS"]["dependsOn"], ["[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardKey')]"])
         self.assertEqual(named["RequireSecureBootForVBS"]["dependsOn"],
-                         ["DeviceGuardKey"])
-        self.assertEqual(named["EnableHVCI"]["dependsOn"], ["HVCIScenarioKey"])
+                         ["[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardKey')]"])
+        self.assertEqual(named["EnableHVCI"]["dependsOn"], ["[resourceId('Microsoft.Windows/RegistryList', 'HVCIScenarioKey')]"])
         self.assertEqual(
             named["WindowsSandboxFeature"]["properties"]["features"][0]["state"],
             "Installed")
 
-    def test_winget_configuration_opt_in_and_signed_exit_are_handled(self):
+    def test_canonical_security_registry_resources_use_v33_registrylist(self):
+        import yaml
+        cfg=Config()
+        for filename in ("workstation.winget", "security-hardware.winget"):
+            manifest=yaml.safe_load((cfg.repo/"windows/configuration"/filename).read_text())
+            reg=[r for r in manifest["resources"] if r["type"].startswith("Microsoft.Windows/Registry")]
+            self.assertTrue(reg,filename)
+            self.assertTrue(all(r["type"]=="Microsoft.Windows/RegistryList" for r in reg),filename)
+            self.assertTrue(all(len(r["properties"]["registryEntries"])==1 for r in reg),filename)
+            self.assertTrue(all("keyPath" in r["properties"]["registryEntries"][0] for r in reg),filename)
+
+    def test_signed_native_dsc_invocation_is_pinned_and_fail_closed(self):
         script = (Config().payload / "apply-configuration.ps1").read_text()
-        self.assertIn("'configure','--enable'", script)
-        self.assertIn("if ($code -eq -1978335127)", script)
-        self.assertIn("Invoke-WinGetConfiguration 'retry-apply'", script)
-        self.assertIn("CONFIGURATION=FAIL:", script)
-        self.assertNotIn("[uint32]$proc.ExitCode", script)
-        self.assertIn("3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f", script)
-        self.assertIn("'--processor-path',$ProcessorPath", script)
-        self.assertIn("'settings','--enable','ConfigurationProcessorPath'", script)
-        self.assertIn("'settings','--disable','ConfigurationProcessorPath'", script)
-        self.assertIn("CONFIGURATION=FAIL_SECURITY_RESTORE", script)
-        self.assertIn("finally {", script)
-        self.assertEqual(script.count("'settings','--enable','ConfigurationProcessorPath'"), 1)
-        self.assertNotIn("processor-path-gate", script)
-        self.assertIn("-NoNewWindow", script)
-        self.assertIn("'configure','show','-f',$ConfigurationPath,'--processor-path',$ProcessorPath,'--nowarn'", script)
-        self.assertNotIn("-WindowStyle Hidden", script)
+        self.assertIn("3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f",script)
+        self.assertIn("Get-FileHash",script)
+        self.assertIn("'config','set','--file'",script)
+        self.assertIn("'--output-format','json'",script)
+        self.assertIn("Microsoft.Windows/RegistryList",script)
+        self.assertIn("CONFIGURATION=PASS",script)
+        self.assertIn("CONFIGURATION=FAIL:",script)
+        self.assertNotIn("[uint32]$proc.ExitCode",script)
+        self.assertNotIn("Invoke-WebRequest",script)
+        self.assertNotIn("RunCommandOnSet",script)
 
     def test_post_install_uses_canonical_declarative_configuration(self):
         root = Path(__file__).resolve().parent

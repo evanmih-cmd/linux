@@ -4,7 +4,8 @@
 
 Rules:
 
-- WinGet Configuration v3 / DSC v3 is the primary mechanism.
+- Official Microsoft DSC v3 is the primary declarative engine; the canonical
+  YAML uses WinGet package resources and native Windows resources.
 - Prefer supported first-party/native resources.
 - Do not hide arbitrary imperative PowerShell inside `Script` or `RunCommandOnSet`
   resources to make imperative configuration look declarative.
@@ -13,6 +14,17 @@ Rules:
 - The VM and bare-metal workstation share this desired-state document where
   the resource semantics are hardware-independent.
 - VM-only transport/bootstrap code is not part of the desired state.
+
+The supported execution path on both the VM and physical ASUS is native
+Microsoft `dsc.exe config set --file workstation.winget --output-format json`
+via `windows/vm/payload/apply-configuration.ps1`. The launcher requires the
+official Microsoft DSC 3.3.0 Windows ZIP alongside the YAML and verifies its
+exact SHA-256 before extracting it. This is not a custom DSC engine.
+WinGet Configuration's hosted processor returned `0x80131500` for native
+registry resources on this bench; direct official DSC applied all 21 resources
+twice without errors and the second run made zero changes. The same canonical
+document and resource definitions are used on the VM and ASUS; physical
+security properties must still pass independent ASUS acceptance.
 
 Current package baseline:
 
@@ -26,7 +38,7 @@ Current package baseline:
   in [`browser-wallets.md`](browser-wallets.md).
 
 The Chrome extension install/update list is a single native
-`Microsoft.Windows/Registry` DSC resource setting Google's supported
+`Microsoft.Windows/RegistryList` DSC resource setting Google's supported
 `ExtensionSettings` enterprise policy (`normal_installed` for each vetted ID;
 block other user extensions). No CRX sideloading, custom scripts, or wallet
 account creation. The audit verifies the **actual** Chrome Secure Preferences,

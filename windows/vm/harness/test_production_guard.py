@@ -119,20 +119,23 @@ class ProductionGuardTests(unittest.TestCase):
             (CFG.repo / "windows/configuration/security-hardware.winget").read_text()
         )
         locked = {
-            (r["properties"]["keyPath"], r["properties"]["valueName"])
+            (entry["keyPath"], entry["valueName"])
             for r in overlay["resources"]
+            for entry in r["properties"]["registryEntries"]
         }
         self.assertEqual(len(locked), 2)
         self.assertTrue(all(
-            r["properties"]["valueData"]["DWord"] == 1
+            entry["valueData"]["DWord"] == 1 and entry["_exist"] is True
             for r in overlay["resources"]
+            for entry in r["properties"]["registryEntries"]
         ))
         for resource in base["resources"]:
-            props = resource.get("properties") or {}
-            self.assertNotIn(
-                (props.get("keyPath"), props.get("valueName")), locked,
-                "common DSC must not attempt to reverse UEFI Lock"
-            )
+            entries = (resource.get("properties") or {}).get("registryEntries") or []
+            for entry in entries:
+                self.assertNotIn(
+                    (entry.get("keyPath"), entry.get("valueName")), locked,
+                    "common DSC must not attempt to reverse UEFI Lock"
+                )
 
     def test_refuse_omitted_or_mutated_hardware_uefi_lock(self):
         files = release_files()

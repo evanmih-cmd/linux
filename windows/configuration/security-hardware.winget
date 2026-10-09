@@ -12,27 +12,29 @@ metadata:
       identifier: dscv3
 
 resources:
-  - type: Microsoft.Windows/Registry
+  - type: Microsoft.Windows/RegistryList
     name: RequireVBSUEFILockOnPhysicalASUS
     properties:
-      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
-      valueName: Locked
-      valueData:
-        DWord: 1
-      _exist: true
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+          valueName: Locked
+          valueData:
+            DWord: 1
+          _exist: true
     metadata:
       winget:
         securityContext: elevated
       description: Prevent remote/policy-only VBS disable by locking state to physical UEFI presence.
 
-  - type: Microsoft.Windows/Registry
+  - type: Microsoft.Windows/RegistryList
     name: RequireHVCIUEFILockOnPhysicalASUS
     properties:
-      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
-      valueName: Locked
-      valueData:
-        DWord: 1
-      _exist: true
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+          valueName: Locked
+          valueData:
+            DWord: 1
+          _exist: true
     metadata:
       winget:
         securityContext: elevated

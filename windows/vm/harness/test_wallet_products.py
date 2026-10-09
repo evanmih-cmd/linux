@@ -36,11 +36,13 @@ class WalletProductBaselineTests(unittest.TestCase):
 
     def test_wallet_extension_policy_is_exact_and_vetted(self):
         r = self.resources["ChromeWalletExtensionSettings"]
-        self.assertEqual(r["type"], "Microsoft.Windows/Registry")
-        self.assertEqual(r["properties"]["keyPath"], r"HKLM\SOFTWARE\Policies\Google\Chrome")
-        self.assertEqual(r["properties"]["valueName"], "ExtensionSettings")
+        self.assertEqual(r["type"], "Microsoft.Windows/RegistryList")
+        self.assertEqual(len(r["properties"]["registryEntries"]), 1)
+        entry = r["properties"]["registryEntries"][0]
+        self.assertEqual(entry["keyPath"], r"HKLM\SOFTWARE\Policies\Google\Chrome")
+        self.assertEqual(entry["valueName"], "ExtensionSettings")
         self.assertEqual(r["metadata"]["winget"]["securityContext"], "elevated")
-        policy = json.loads(r["properties"]["valueData"]["String"])
+        policy = json.loads(entry["valueData"]["String"])
         self.assertEqual(set(policy), set(WALLETS.values()) | {"*"})
         self.assertEqual(policy["*"], {"installation_mode": "blocked"})
         for identifier in WALLETS.values():
@@ -55,7 +57,7 @@ class WalletProductBaselineTests(unittest.TestCase):
         self.assertNotIn("http://", config)
         self.assertNotIn("force_installed", yaml.safe_load(CONFIG.read_text())["resources"][
             next(i for i, r in enumerate(self.manifest["resources"]) if r["name"] == "ChromeWalletExtensionSettings")
-        ]["properties"]["valueData"]["String"])
+        ]["properties"]["registryEntries"][0]["valueData"]["String"])
         self.assertNotIn("RunCommandOnSet", config)
         self.assertNotIn("Invoke-WebRequest", config)
 
