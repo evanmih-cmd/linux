@@ -23,7 +23,7 @@ class HarnessPolicyTests(unittest.TestCase):
                     violations.append((path.name, token))
         self.assertEqual(violations, [])
 
-    def test_soap_keyboard_is_boot_handshake_only(self):
+    def test_soap_keyboard_is_bounded_boot_or_one_line_audit(self):
         root = Path(__file__).resolve().parent
         uses = []
         for path in root.glob("*.py"):
@@ -32,7 +32,13 @@ class HarnessPolicyTests(unittest.TestCase):
             count = path.read_text().count("IKeyboard_putScancodes")
             if count:
                 uses.append((path.name, count))
-        self.assertEqual(uses, [("vbox.py", 1)])
+        # User-approved addition: one short CMD launcher for the installed OS
+        # audit, never bulk keyboard transport of scripts/configuration.
+        self.assertEqual(uses, [("vbox.py", 1), ("live_audit.py", 2)])
+        launcher = (root / "live_audit.py").read_text()
+        self.assertIn('command = f"{drive}:\\\\RUN.CMD"', launcher)
+        self.assertIn('for char in command:', launcher)
+        self.assertNotIn('keyboard_payload', launcher)
         vbox = (root / "vbox.py").read_text()
         self.assertIn("def accept_optical_boot_prompt", vbox)
         self.assertIn("one-line optical-boot prompt only", vbox)
