@@ -107,6 +107,14 @@ class HarnessPolicyTests(unittest.TestCase):
         self.assertNotIn('"IGuestProcess_waitForArray"', guest)
         self.assertNotIn('"IGuestProcess_getExitCode"', guest)
 
+    def test_winget_configuration_opt_in_and_signed_exit_are_handled(self):
+        script = (Config().payload / "apply-configuration.ps1").read_text()
+        self.assertIn("'configure','--enable','--disable-interactivity'", script)
+        self.assertIn("if ($code -eq -1978335127)", script)
+        self.assertIn("Invoke-WinGetConfiguration 'retry-apply'", script)
+        self.assertIn("CONFIGURATION=FAIL:", script)
+        self.assertNotIn("[uint32]$proc.ExitCode", script)
+
     def test_post_install_uses_canonical_declarative_configuration(self):
         root = Path(__file__).resolve().parent
         cfg = Config()
