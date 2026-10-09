@@ -189,8 +189,10 @@ resources:
         securityContext: elevated
       description: Require minimum eight characters for owner-chosen numeric startup PIN.
 
-  # Windows Sandbox optional feature: supported built-in DSC v3 DISM resource.
-  # On a virtualized/NEM bench, do not confuse Installed with working nested VM.
+  # Built-in native DSC resource, run by official standalone DSC 3.3.0.
+  # The Store AppX DSC package rejects this native DISM resource; never
+  # downgrade to an ad hoc DISM script. Feature Installed is not proof of
+  # successful nested Sandbox runtime in a virtual machine.
   - type: Microsoft.Windows/OptionalFeatureList
     name: WindowsSandboxFeature
     properties:
@@ -200,10 +202,48 @@ resources:
     metadata:
       winget:
         securityContext: elevated
-      description: Enable first-party Windows Sandbox optional feature on Windows 11 Pro.
+      description: Enable first-party Windows Sandbox optional feature via DSC.
+
+  # Explicit key existence and ordering for a fresh Windows installation.
+  # Native DSC registry value writes previously failed with ERROR_FILE_NOT_FOUND.
+  - type: Microsoft.Windows/Registry
+    name: DeviceGuardKey
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Device Guard policy parent key exists.
+
+  - type: Microsoft.Windows/Registry
+    name: DeviceGuardScenariosKey
+    dependsOn:
+      - DeviceGuardKey
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Device Guard Scenarios parent key exists.
+
+  - type: Microsoft.Windows/Registry
+    name: HVCIScenarioKey
+    dependsOn:
+      - DeviceGuardScenariosKey
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure HVCI policy key exists.
 
   - type: Microsoft.Windows/Registry
     name: EnableVBS
+    dependsOn:
+      - DeviceGuardKey
     properties:
       keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
       valueName: EnableVirtualizationBasedSecurity
@@ -217,6 +257,8 @@ resources:
 
   - type: Microsoft.Windows/Registry
     name: RequireSecureBootForVBS
+    dependsOn:
+      - DeviceGuardKey
     properties:
       keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
       valueName: RequirePlatformSecurityFeatures
@@ -230,6 +272,8 @@ resources:
 
   - type: Microsoft.Windows/Registry
     name: EnableHVCI
+    dependsOn:
+      - HVCIScenarioKey
     properties:
       keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
       valueName: Enabled

@@ -274,3 +274,50 @@ Useful variables:
 - `VBOX_WS_URL`
 
 Activation is not required for the VM configuration proof.
+
+### Observed WinGet/DSC outcome on the existing two-disk VM (2026-10-09)
+
+Live Windows-native audit `20261009-212055-a68a2e2c96b8` yielded
+**25 PASS / 4 FAIL / 8 NOT_PROVABLE_IN_VM**. This is a post-install
+observation on the *existing* `Desktop-Windows-11-Pro-TwoDisk`, not a
+release acceptance or proof for physical ASUS.
+
+Verified inside Windows: all five applications (PowerShell 7, Chrome, Edge,
+KeePass 2, Ledger Wallet), Chrome Enterprise policy and the actual six
+Web-Store wallet extensions in the local owner profile, English UI, German
+formats, precisely US and Russian input layouts, Windows Sandbox feature
+Enabled, and the earlier installation/WinRE/Secure Boot checks. Chrome did
+not require Google-account sign-in and was not made the default browser.
+
+Exactly four failed checks remain: `bitlocker-tpm-immediate-protection`,
+`bitlocker-vm-flow` (owner-deferred physical setup), `vbs-boot-policy`
+and `hvci-boot-policy` (stock Windows security policy, not demonstrated
+in this NEM guest). No policy FAIL has been re-labelled to PASS.
+
+**Processor incompatibility remains an actual release blocker:**
+
+- AppX-installed Microsoft DSC + canonical `workstation.winget` applies
+  the five packages and `Microsoft.Windows/Registry` values, but reports
+  `dism_dsc: This resource currently is not supported when installed via
+  Appx` for `Microsoft.Windows/OptionalFeatureList`.
+- Official Microsoft standalone DSC v3.3.0, ZIP verified against SHA-256
+  `3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f`,
+  works with WinGet's documented `--processor-path` administrator gate
+  and **successfully applies WindowsSandboxFeature**. However the same
+  processor returns `-2146233088` for every
+  `Microsoft.Windows/Registry` resource. Subsequent VBS/HVCI dependencies
+  therefore cannot be applied. Overall configuration is **FAIL**.
+- Fix the processor/resource compatibility using supported Microsoft
+  mechanisms and re-run the *same* canonical configuration; do **not**
+  construct a separate hand-maintained VM/ASUS manifest or bypass
+  failure checks.
+- The one-time Windows-native `../payload/user-locale.ps1` converged
+  the guest profile, confirmed by a later independent audit, but remains
+  **VM-only exploratory evidence** until a supported production
+  international-settings configuration path is accepted.
+
+The pre-postinstall snapshot
+`pre-postinstall-20261009-windows11-pro-twodisk` remains available.
+Do not roll back, reset, create another VM or modify the protected Disk 0
+on account of these stock-resource gaps. The original passwordless answer
+ISO was restored to SATA port 4 after the audit.

@@ -31,7 +31,8 @@ CHAR_KEYS = dict(zip(
     (30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50, 49, 24, 25,
      16, 19, 31, 20, 22, 47, 17, 45, 21, 44),
 ))
-CHAR_KEYS.update({":": 39, "\\": 43, ".": 52})
+CHAR_KEYS.update({":": 39, "\\": 43, ".": 52, " ": 57, "/": 53})
+CHAR_KEYS.update(dict(zip("1234567890", range(2, 12))))
 
 
 def build_media(cfg, run_dir, run_id):
@@ -102,33 +103,34 @@ def receive_facts(box, run_id, timeout):
     )
 
 
-def type_one_command(box, command):
-    if any(char.lower() not in CHAR_KEYS for char in command):
+def type_one_command(box, command, *, open_run_dialog=False):
+    """Inject only a bounded, single stock Windows command via existing SOAP."""
+    if len(command) > 100 or any(char.lower() not in CHAR_KEYS for char in command):
         raise ValueError("Audit command contains unsupported keyboard character")
     session = box.lock("Shared")
     try:
         console = box.session_console(session)
         keyboard = box._vals("IConsole_getKeyboard", [("_this", console)])[0]
         box.call("IKeyboard_releaseKeys", [("_this", keyboard)])
-        for char in command:
-            code = CHAR_KEYS[char.lower()]
-            codes = (
-                [42, code, code | 128, 170]
-                if char.isupper() or char == ":" else [code, code | 128]
-            )
+        def send(codes):
             accepted = box._vals(
                 "IKeyboard_putScancodes",
                 [("_this", keyboard)] + [("scancodes", str(value)) for value in codes],
             )
             if accepted != [str(len(codes))]:
                 raise RuntimeError("SOAP did not accept full key sequence")
+        if open_run_dialog:
+            send([0xe0, 0x5b, 0x13, 0x93, 0xe0, 0xdb])
+            time.sleep(1)
+        for char in command:
+            code = CHAR_KEYS[char.lower()]
+            codes = (
+                [42, code, code | 128, 170]
+                if char.isupper() or char == ":" else [code, code | 128]
+            )
+            send(codes)
             time.sleep(.12)
-        accepted = box._vals(
-            "IKeyboard_putScancodes",
-            [("_this", keyboard), ("scancodes", "28"), ("scancodes", "156")],
-        )
-        if accepted != ["2"]:
-            raise RuntimeError("SOAP did not accept Enter")
+        send([28, 156])
     finally:
         box.unlock(session)
 
@@ -192,7 +194,7 @@ def run(cfg, *, timeout=240, drive=DRIVE):
             # this disposable VM, as confirmed by an actual console screenshot.
             command = f"{drive}:\\RUN.CMD"
             print("WINDOWS_COMMAND", command, flush=True)
-            type_one_command(box, command)
+            type_one_command(box, command, open_run_dialog=True)
             facts, raw = receive_facts(box, run_id, timeout)
             (run_dir / "facts.json").write_bytes(raw)
             result = evaluate(facts)

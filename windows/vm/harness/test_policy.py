@@ -34,7 +34,7 @@ class HarnessPolicyTests(unittest.TestCase):
                 uses.append((path.name, count))
         # User-approved addition: one short CMD launcher for the installed OS
         # audit, never bulk keyboard transport of scripts/configuration.
-        self.assertEqual(uses, [("vbox.py", 1), ("live_audit.py", 2)])
+        self.assertEqual(uses, [("vbox.py", 1), ("live_audit.py", 1)])
         launcher = (root / "live_audit.py").read_text()
         self.assertIn('command = f"{drive}:\\\\RUN.CMD"', launcher)
         self.assertIn('for char in command:', launcher)
@@ -107,13 +107,43 @@ class HarnessPolicyTests(unittest.TestCase):
         self.assertNotIn('"IGuestProcess_waitForArray"', guest)
         self.assertNotIn('"IGuestProcess_getExitCode"', guest)
 
+    def test_postinstall_single_manifest_dependencies_are_acyclic_and_native(self):
+        import yaml
+        config = yaml.safe_load(Config().workstation_configuration.read_text())
+        resources = config["resources"]
+        named = {r["name"]: r for r in resources}
+        self.assertEqual(len(named), len(resources))
+        for name, resource in named.items():
+            for dependency in resource.get("dependsOn", []):
+                self.assertIn(dependency, named, f"invalid dependency in {name}")
+        self.assertEqual(named["WindowsSandboxFeature"]["type"],
+                         "Microsoft.Windows/OptionalFeatureList")
+        self.assertEqual(named["EnableVBS"]["dependsOn"], ["DeviceGuardKey"])
+        self.assertEqual(named["RequireSecureBootForVBS"]["dependsOn"],
+                         ["DeviceGuardKey"])
+        self.assertEqual(named["EnableHVCI"]["dependsOn"], ["HVCIScenarioKey"])
+        self.assertEqual(
+            named["WindowsSandboxFeature"]["properties"]["features"][0]["state"],
+            "Installed")
+
     def test_winget_configuration_opt_in_and_signed_exit_are_handled(self):
         script = (Config().payload / "apply-configuration.ps1").read_text()
-        self.assertIn("'configure','--enable','--disable-interactivity'", script)
+        self.assertIn("'configure','--enable'", script)
         self.assertIn("if ($code -eq -1978335127)", script)
         self.assertIn("Invoke-WinGetConfiguration 'retry-apply'", script)
         self.assertIn("CONFIGURATION=FAIL:", script)
         self.assertNotIn("[uint32]$proc.ExitCode", script)
+        self.assertIn("3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f", script)
+        self.assertIn("'--processor-path',$ProcessorPath", script)
+        self.assertIn("'settings','--enable','ConfigurationProcessorPath'", script)
+        self.assertIn("'settings','--disable','ConfigurationProcessorPath'", script)
+        self.assertIn("CONFIGURATION=FAIL_SECURITY_RESTORE", script)
+        self.assertIn("finally {", script)
+        self.assertEqual(script.count("'settings','--enable','ConfigurationProcessorPath'"), 1)
+        self.assertNotIn("processor-path-gate", script)
+        self.assertIn("-NoNewWindow", script)
+        self.assertIn("'configure','show','-f',$ConfigurationPath,'--processor-path',$ProcessorPath,'--nowarn'", script)
+        self.assertNotIn("-WindowStyle Hidden", script)
 
     def test_post_install_uses_canonical_declarative_configuration(self):
         root = Path(__file__).resolve().parent
