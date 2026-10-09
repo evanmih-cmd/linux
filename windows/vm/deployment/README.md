@@ -150,3 +150,17 @@ exit
 - [Capture/apply system and recovery](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/capture-and-apply-windows-system-and-recovery-partitions)
 - [BCDBoot](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/bcdboot-command-line-options-techref-di)
 - [REAgentC](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/reagentc-command-line-options)
+
+
+## Независимая приёмка из установочной WinPE
+
+Для приёмки этой ручной процедуры на VirtualBox и физическом ASUS создан
+**[переносимый read-only WinPE-аудитор](../winpe-audit/README.md)** и готовый
+`winpe-audit.exe`. Он ничего не форматирует и не меняет: с выбранными
+оператором номерами физических дисков проверяет четыре GPT-раздела,
+ESP/BCD на *целевом* диске, WinRE ровно 2048 МиБ, Windows-файлы,
+указатель `ReAgent.xml`, совпадение `Panther\Unattend.xml` с единым
+исходным XML, Offline защищённого SSD1. Для фактического независимого
+boot/Secure Boot/WinRE Enabled требуется второй проход после старта Windows.
+Прежние Linux/VDI тесты сохранены; `parity.py` сравнивает
+пересекающиеся факты, не заменяя старые тесты.
