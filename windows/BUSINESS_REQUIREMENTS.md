@@ -163,7 +163,7 @@ The previous portable-Linux requirements remain preserved under `portable/`, but
 
 **Requirement:** Destructive, security-critical, or recovery operations must stop when the required target or security condition cannot be established reliably.
 
-**Example:** Installation or disk-manipulation automation must not guess which physical SSD is safe to erase.
+**Example:** The owner manually identifies the dedicated RAID virtual disk in interactive WinPE DiskPart; SSD1 is taken Offline before destructive partitioning. The XML must not silently wipe a hardcoded DiskID before the owner confirms the target. The disk choice is an intentionally interactive exception to unattended provisioning.
 
 ### 26. Official-source software baseline
 
@@ -182,3 +182,51 @@ The previous portable-Linux requirements remain preserved under `portable/`, but
 **Requirement:** Product security, usability, recovery, cost, and maintenance burden take priority over any previously selected technical mechanism.
 
 **Example:** If a standard Windows mechanism satisfies a requirement better than custom code, use the Windows mechanism even if an earlier design proposed something else.
+
+### 29. Immediate TPM-backed BitLocker; owner-controlled startup PIN
+
+**Requirement:** Encryption without active key protection is not sufficient. Provisioning must activate TPM and independent recovery protectors promptly. The owner selects the startup PIN separately after installation. The final gate requires TPM+PIN and removal of any TPM-only normal-boot bypass.
+
+**Example:** Configure TPM and recovery password protectors, require ProtectionStatus On, and confirm that the owner has recorded the 48-digit recovery password offline before PIN enrollment. No real PIN or recovery secret in media, repository, logs or diagnostics.
+
+### 30. Mandatory Administrator Protection
+
+**Requirement:** The Windows 11 Administrator Protection mode is mandatory, not an optional hardening. It must be operational, not merely present in desired-state configuration.
+
+**Example:** Set TypeOfAdminApprovalMode=2, reboot and confirm Hello-based authorization where supported, including physical ASUS confirmation.
+
+### 31. Firmware-locked production VBS and HVCI
+
+**Requirement:** After actual hardware runtime and recoverability are validated, production VBS/HVCI must use UEFI Lock to prevent remote/policy-only disable. The owner can physically access ASUS firmware. Fail-stop boot is not required.
+
+**Example:** Apply the physical ASUS-only DSC lock overlay after validating live VBS/HVCI and WinRE, then verify effective locked state after reboot. Do not set Mandatory=1 or UEFI lock in the NEM-backed test VM.
+
+### 32. Windows Sandbox profiles with narrow host access
+
+**Requirement:** Offer separate default offline file-triage and network-observation Sandbox modes, with no writable host folder, credentials, device redirection or shared clipboard.
+
+**Example:** Windows Pro optional feature, two reviewed WSB files, one dedicated read-only input folder, Protected Client, restricted vGPU, audio/video and printer redirection.
+
+### 33. Internet-only networking for the observational sandbox
+
+**Requirement:** The networked Sandbox may reach public internet services but may not access the ASUS host, local LAN, non-public/link-local/IPv6-local endpoints or VPN networks. Unfiltered default-switch access is not an accepted implementation.
+
+**Example:** Verify Sandbox-specific host-side Hyper-V firewall or a separate filtered VM network gateway with denied IPv4/IPv6 private/host/VPN routes, working public HTTPS and DNS, and persistent rules after restarting Sandbox.
+
+### 34. Convenient observability and control of suspicious connections
+
+**Requirement:** For behavioral analysis, the user should be able to inspect process identity, attempted destination, block/allow outcome and connection history. Informational guest monitoring is not the same as host-enforced blocking or durable evidence.
+
+**Example:** Resource Monitor for initial per-process TCP observation; a separately isolated and enforced firewall/monitor for actual deny or prompt decisions. No trusted security guarantee can rely solely on malware-controllable software inside the guest.
+
+### 35. Browsing trust-domain separation and official crypto tools
+
+**Requirement:** Everyday browsing and dedicated sensitive/crypto workloads must use separate browsers. All wallet and security software must come through vetted publisher channels. Never provision real wallet secrets as part of the workstation image.
+
+**Example:** Microsoft Edge for normal use, Chrome for sensitive browsing with exactly the six publisher-verified wallet extensions, official KeePass and Ledger Wallet, and hardware signing/Hello checks on ASUS.
+
+### 36. Installation readiness is a distinct, fail-closed release gate
+
+**Requirement:** The owner prepares the bootable USB using the official Microsoft Windows ISO and explicitly selects the Windows target RAID virtual disk in the supported interactive WinPE DiskPart interface. The project does not create USB media, hard-bind SSD2 by NVMe serial, or infer target choice from a disk index. SSD1 must be Offline in WinPE. The first live two-disk Windows Setup attempt proved that SSD1 Offline plus choosing a blank RAID LUN does NOT guarantee a target-local ESP: Setup created only MSR and NTFS and failed boot-file servicing. Therefore this procedure is rejected. The supported installation design must explicitly guarantee target-local ESP/BCD and recovery on the manually selected LUN using documented Microsoft tools, while never modifying the existing SSD1; exact predeclared MiB partition sizes are not a goal by themselves. Boot OS choice must be by selecting the actual boot disk / RAID LUN in the ASUS firmware boot-device menu, NOT by choosing between Windows Boot Manager menu items or two firmware NVRAM Windows Boot Manager entries. The firmware must expose both devices and each must boot independently; prove RAID LUN firmware support on hardware rather than assuming it. When the RAID LUN is enlarged later, the supported rare maintenance sequence is to disable and back up WinRE, delete only its verified partition, extend C: while reserving WinRE space, recreate an appropriately sized WinRE partition after C: and verify boot, recovery and BitLocker; no automatic partition-moving manager is required. The RAID allocation layer is an accepted architecture; proof of RAIDXpert2 hardware feasibility is a separate experiment outside this implementation issue. Installation approval still requires a tested mixed-mode interaction, a reproducible configuration/recovery path and honest audit; XML lint PASS is insufficient.
+
+**Example:** A release report distinguishes verified source ISO, staged configuration files for the owner-prepared USB, VM live evidence, physical SSD preflight, post-install and owner-secret actions, and bare-metal security acceptance. It does not require a USB image generator.

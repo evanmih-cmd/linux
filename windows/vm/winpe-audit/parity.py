@@ -130,27 +130,34 @@ def main():
         f.seek(w["start"]*512);win=f.read(512)
         f.seek(r["start"]*512);re=f.read(512)
         test("target.esp_fat32",esp[82:87]==b"FAT32")
-        test("target.windows_ntfs",win[3:11]==b"NTFS    ")
+        test("target.windows_ntfs_or_fve",win[3:11] in (b"NTFS    ", b"-FVE-FS-"))
         test("target.recovery_ntfs",re[3:11]==b"NTFS    ")
         test("esp.bcd",fat32_has(f,e["start"],"EFI/Microsoft/Boot/BCD"))
         test("esp.bootmgfw",fat32_has(f,e["start"],"EFI/Microsoft/Boot/bootmgfw.efi"))
         test("esp.fallback",fat32_has(f,e["start"],"EFI/Boot/bootx64.efi"))
-        ntfs=ntfs_info(f,w);recovery=ntfs_info(f,r)
-        test("windows.kernel",ntfs_has(ntfs,r"\Windows\System32\ntoskrnl.exe",b"MZ"))
-        test("windows.winload",ntfs_has(ntfs,r"\Windows\System32\winload.efi",b"MZ"))
-        test("windows.registry",ntfs_has(ntfs,r"\Windows\System32\config\SYSTEM",b"regf"))
+        recovery=ntfs_info(f,r)
         test("recovery.winre",ntfs_has(recovery,r"\Recovery\WindowsRE\Winre.wim",b"MSWIM"))
-        xml=ntfs_has(ntfs,r"\Windows\Panther\Unattend.xml")
-        test("windows.canonical_unattend",xml)
-        source=a.bench/"answer-media"/"Autounattend.xml"
-        if xml and source.is_file():
-            installed=ntfs.mft.get(r"\Windows\Panther\Unattend.xml").open().read()
-            test("windows.answer_identity",installed==source.read_bytes())
+        if win[3:11]==b"-FVE-FS-":
+            for key in ("windows.kernel","windows.winload","windows.registry",
+                        "windows.canonical_unattend","windows.answer_identity",
+                        "recovery.reagent_registration"):
+                checks[key]="NOT_PROVABLE_ENCRYPTED"
         else:
-            test("windows.answer_identity",False)
-        reg=ntfs.mft.get(r"\Windows\System32\Recovery\ReAgent.xml").open().read().decode("utf-8-sig")
-        test("recovery.reagent_registration",
-             ("offset=\""+str(r["start"]*512)+"\"") in reg and guid in reg and "\\Recovery\\WindowsRE" in reg)
+            ntfs=ntfs_info(f,w)
+            test("windows.kernel",ntfs_has(ntfs,r"\Windows\System32\ntoskrnl.exe",b"MZ"))
+            test("windows.winload",ntfs_has(ntfs,r"\Windows\System32\winload.efi",b"MZ"))
+            test("windows.registry",ntfs_has(ntfs,r"\Windows\System32\config\SYSTEM",b"regf"))
+            xml=ntfs_has(ntfs,r"\Windows\Panther\Unattend.xml")
+            test("windows.canonical_unattend",xml)
+            source=a.bench/"answer-media"/"Autounattend.xml"
+            if xml and source.is_file():
+                installed=ntfs.mft.get(r"\Windows\Panther\Unattend.xml").open().read()
+                test("windows.answer_identity",installed==source.read_bytes())
+            else:
+                test("windows.answer_identity",False)
+            reg=ntfs.mft.get(r"\Windows\System32\Recovery\ReAgent.xml").open().read().decode("utf-8-sig")
+            test("recovery.reagent_registration",
+                 ("offset=\""+str(r["start"]*512)+"\"") in reg and guid in reg and "\\Recovery\\WindowsRE" in reg)
     with (a.bench/"protected-home.vdi").open("rb",buffering=0) as fh:
         f=VDI(fh).open()
         protected,unused,dguid=check_gpt(f)

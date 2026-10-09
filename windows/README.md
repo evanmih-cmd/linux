@@ -4,6 +4,7 @@ This directory contains the Windows 11 Pro security-workstation design and test 
 
 - `BUSINESS_REQUIREMENTS.md` — authoritative product requirements for the Windows workstation.
 - `ARCHITECTURE.md` — selected Windows security architecture and validation model.
+- `ASUS_RELEASE_AUDIT.md` — evidence-backed NO-GO/GO audit, 36-requirement traceability, and the current physical-installation blockers. A structural contract PASS is not release authorization.
 - `vm/` — repeatable VirtualBox test bench tracked by GitHub issue #6.
 - Bare-metal ASUS implementation remains tracked by GitHub issue #5.
 

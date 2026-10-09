@@ -100,8 +100,59 @@ The N edition is not selected because removing and later reconstructing media
 framework dependencies creates unnecessary product risk around camera,
 biometrics and related desktop components without providing a security benefit.
 
-Region, keyboard, time zone and date/currency formats are independent of the
-base OS language and may be configured for Germany or user preference.
+### Deployment locale contract
+
+The installation and normal desktop locale are explicit and must not depend on
+Setup/OOBE guesses:
+
+- Windows UI/base language: **English (United States)** (`en-US`);
+- primary keyboard/input layout: **US** (`0409:00000409`);
+- additional keyboard/input layout: **Russian** (`0419:00000419`);
+- **no German keyboard/input profile** (`de-DE` / `00000407`) may be installed by the canonical provisioning path;
+- region/home location: **Germany**;
+- regional formats for dates, numbers and currency: **German / Germany**;
+- time zone: **W. Europe Standard Time**.
+
+The English Windows UI is intentional and independent of German regional
+formats. Both US and Russian input layouts must already be present after the
+unattended first boot; adding them manually after provisioning is not the
+canonical path.
+
+**Product-first configuration boundary (corrected 2026-10-08):** distinguish
+*configuration* from *access/transport*. Desired state is expressed in
+inspectable Windows Setup answers, supported Windows policy/CSP/ADMX settings,
+and supported packaged DSC/WinGet resources, or an off-the-shelf product's
+configuration when a Windows-native declarative resource is missing. No custom
+resident provisioning logic, package installers, scheduled-task configuration
+agents, or perpetual post-logon/post-update scripts that repair keyboard state.
+
+Temporary privilege elevation, authentication, interactive-session creation,
+Guest Control and command launch are **access mechanisms**, not alternative
+configuration systems. A narrowly scoped bootstrap/UAC/elevated task is allowed
+during installation and test iterations to execute the chosen supported
+product configuration engine. Prefer arranging a suitable privileged context
+using supported Windows Setup provisioning before first logon where possible.
+The disposable VM may retain elevated-access tasks, test credentials and
+other bench-only plumbing for repeated iterations. **Do not clean the VM merely
+to simulate a release.** Production artifacts are built independently with an
+explicit file allowlist and fail-closed guard against VM helpers, credentials,
+AutoLogon and first-logon commands. Only release-file contents, not the current
+VM guest state, define what is shipped. The final production workstation must
+have no leftover bootstrap accounts or access mechanisms; that is a separate
+machine acceptance condition. The external VM harness may orchestrate access
+and verify state, but may not implement a parallel desired-state policy inside
+the guest.
+
+Language input profiles are user state, distinct from UserLocale (date/number
+formats). Microsoft documents that first-logon region selection may generate
+input profiles. Accordingly, testing only the unattended XML is insufficient:
+acceptance requires a separate real user-language/input-list read-back after
+first logon and after updates. A supported, current-Windows declarative way
+to enforce that user list after provisioning is **not yet proven**. Never
+silently substitute a PowerShell script, registry deletion or legacy intl.cpl
+XML for that missing contract; report the capability gap until a supported
+product resource has passed real Windows 11 validation.
+
 
 License activation is separate from software provenance. A product key may
 activate the OS, but activation is not evidence that the installation media is
@@ -274,12 +325,97 @@ SSD2
     ├── GPT
     ├── dedicated EFI System Partition
     ├── Microsoft Reserved partition as required
-    ├── BitLocker-protected OS volume
-    └── dedicated Windows RE partition
+    ├── BitLocker-protected Windows C:
+    └── dedicated Windows RE partition (after C:)
 ```
 
 SSD2 should receive its own ESP and recovery structures so it can be erased,
 reinstalled or removed without creating a boot-repair dependency on SSD1.
+
+**Authoritative firmware boot-selection requirement (2026-10-08):**
+The owner chooses the **physical boot disk / RAID logical disk (LUN)** in
+the ASUS **firmware boot-device menu**. This is NOT a request for a
+two-Windows menu inside Windows Boot Manager, nor for choosing between
+two Windows Boot Manager entries in UEFI NVRAM. Each disk must boot its own
+Windows using its own ESP and BCD, independently of the presence of the
+other disk. The firmware must expose a usable device-selection path for
+both SSD1 and the SSD2 RAID LUN. Whether ASUS/RAIDXpert2 firmware exposes
+this selection must be verified physically; do not silently substitute
+NVRAM-entry selection for disk selection or claim hardware support from VM.
+NVRAM entries may exist but cannot be the only means to choose the OS.
+
+Microsoft's BCDBoot /s explicitly writes files and BCD to the nominated
+ESP without registering a new Windows Boot Manager NVRAM entry; the
+documented default UEFI path is EFI/BOOT/BOOTX64.EFI. Preparing this
+fallback path is a candidate to satisfy device-based boot, but real
+device-selection behavior remains a separate hardware acceptance gate.
+
+**Target-local boot partitions are a hard acceptance requirement:**
+
+The live two-disk Windows 11 Setup test on 2026-10-08 **FAILED** when the
+operator put the protected SSD1 analog Offline, then selected the separate
+LUN as Unallocated Space and let stock Windows Setup partition it.
+The intended target actually received ONLY an MSR and NTFS partition;
+no target-local ESP. Setup failed at Update Boot Code, 0x8007001F, after
+successful WIM application. The protected SSD1 VDI GPT/sentinel stayed intact.
+
+Therefore it is false that stock Setup is guaranteed to create an
+independent ESP when another GPT disk with an ESP is still enumerated.
+**Do not use this unattended+GUI flow on the physical ASUS.**
+
+We still do not require arbitrary project-defined MiB sizes. However,
+the install design must use a documented Microsoft path that explicitly
+creates/provisions the ESP and BCD on the operator-selected target LUN,
+with no disk-index guess and no writes to SSD1. Microsoft documents
+WinPE DiskPart UEFI/GPT partition preparation and target-bound BCDBoot
+through its /s option; this is the supported next design candidate,
+not yet a working accepted full install workflow. BCDBoot /s does not
+register a UEFI NVRAM entry and relies on the firmware's standard boot
+path. The acceptance target is boot-disk selection, NOT NVRAM-entry
+selection.
+
+Audit target-local ESP, MSR, C: and WinRE, independence from SSD1, correct GPT
+roles, enabled REAgentC and adequate recovery free capacity. Measure the
+effective layout and WinRE location after installation; do not assume recovery
+is invariably partition 4 or any particular size.
+
+Windows servicing may resize/recreate WinRE but does not automatically
+grow C: when the RAID LUN gains new capacity.
+
+**RAID LUN expansion is a different, explicitly initiated operation.**
+RAIDXpert2 first expands the capacity of the independent virtual disk.
+The resulting extra space appears AFTER the target recovery partition, so the normal
+Windows C: Extend Volume operation is blocked by that intervening partition.
+No Windows Update automatically handles that storage expansion. Reuse native,
+documented Microsoft recovery and storage operations only when LUN growth is
+requested, after an offline recovery/BitLocker state gate:
+
+1. Positively identify the expanded selected RAID LUN and its current
+   target-local recovery partition using measured GPT roles and REAgentC.
+   Confirm offline recovery and BitLocker readiness; back up WinRE.
+2. Disable WinRE with REAgentC and delete **only** the positively verified
+   recovery partition (not an assumed fourth partition).
+3. Extend C: using supported Windows storage mechanisms while reserving
+   adequate current WinRE image space and Microsoft's servicing margin.
+4. Recreate an appropriately sized target-local recovery partition after C:,
+   set the recovery GPT attributes and register/enable it with REAgentC.
+5. Verify actual C: size, EFI/BCD, WinRE, BitLocker protectors/PIN and
+   offline recovery. Fail closed if recovery or protection is not working.
+
+This is a documented **rare maintenance transaction**, not a homemade general
+partition manager and not a routine step for Windows Update. It must be
+tested on a disposable Windows VM, including synthetic virtual-disk expansion
+and protection rollback; RAID-controller-specific growth remains the separate
+RAIDXpert2 physical experiment. Microsoft's Windows deployment reference
+includes a CreateRecoveryPartitions-UEFI example that extends Windows,
+shrinks a recovery-sized reserve, and creates the recovery partition. Prefer
+adapting that supported flow over inventing a new storage layer.
+
+Microsoft references:
+- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-recovery-environment--windows-re--technical-reference
+- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/oem-deployment-of-windows-desktop-editions-sample-scripts
+- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions
+- https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/add-update-to-winre
 
 This is primarily an **independence and recovery** property. A separate ESP is
 not treated as a confidentiality boundary because a sufficiently privileged
@@ -287,14 +423,129 @@ attacker can modify storage that the running OS can access.
 
 ### Installation isolation
 
-During physical Windows 11 Pro installation, SSD1 should be made **offline in
-WinPE/Setup** before destructive partitioning begins.
+During physical Windows 11 Pro installation, **SSD1 is placed Offline in
+WinPE/Setup before any destructive operation**. Physical removal of SSD1 is not
+required. The owner then explicitly chooses the Windows-target RAID virtual
+disk in **interactive WinPE DiskPart**. This intentional manual disk-selection step is
+not a deviation from the unattended goal: all remaining unattended settings
+(edition, locale, OOBE, product configuration) still apply. Do not hardcode
+a production DiskID or attempt elaborate NVMe-serial-to-number binding.
 
-Physical removal of SSD1 is not required.
+The protected SSD1 remains visible for identification but not writable. An
+ambiguous disk list, an online SSD1, or a mistaken virtual-disk selection is a
+stop condition; the owner must confirm the target before wiping. Isolation is
+an additional protection, **not** permission for setup to pick a random disk.
 
-The installation process must fail safely if disk identity is ambiguous. Do not
-guess by drive letter, display order, or approximate size when a destructive
-operation is involved.
+**FAILED mixed Windows Setup installation — STOP gate (2026-10-08):**
+
+The common answer file legitimately requests manual image target selection
+using OSImage WillShowUI=Always and no DiskConfiguration or hardcoded DiskID.
+That part works. However, on a two-VDI machine, the operator manually
+put protected Disk 0 Offline, selected Disk 1 Unallocated Space and clicked
+Next. Windows Setup applied the Windows 11 Pro WIM but FAILED to create
+a bootable independent target:
+
+- Actual target GPT: MSR (16 MiB) and Windows NTFS only, **no ESP**.
+- Panther setuperr.log: BFSVC ServicingBootFiles 0x1F and
+  CUpdateBootCode 0x8007001F, during Finalize.
+- The protected original VDI's GPT, protective MBR and raw data sentinel
+  were subsequently verified unchanged by read-only VDI inspection.
+- The absence of an ESP on the selected LUN is unacceptable even if Setup
+  were to complete successfully using SSD1's existing ESP.
+
+**The previous 'Offline SSD1 then choose blank LUN in Windows Setup and
+let Setup create all partitions' procedure is explicitly rejected.**
+On 2026-10-09 that rejected stock Setup path was replaced by operator-controlled
+WinPE DiskPart partitioning, DISM image application, target-local BCDBoot /s,
+REAgentC registration and the one password-free XML copied to Windows/Panther
+for specialize/OOBE. The existing two-disk VM reached a real Windows desktop
+once. This is a positive first-boot result, **not** proof of repeat logon,
+WinRE Enabled, Windows-side SSD1 Offline, production Secure Boot or ASUS release.
+No physical release or installed VM destruction is authorized from a static
+XML contract or a first-boot observation alone.
+
+Official Microsoft reference:
+https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/automate-windows-setup?view=windows-11
+https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-setup-imageinstall-osimage-willshowui
+https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/offline-disk
+https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-setup-installing-using-the-mbr-or-gpt-partition-style
+
+**Two-disk VM acceptance for this issue:** verify the Windows target's own
+ESP/BCD/WinRE and its independent boot, while preserving the protected
+Home-like synthetic VDI GPT and sentinel. The synthetic VDI is not a bootable
+Windows Home installation; booting actual Home independently is a physical
+ASUS gate, not a credible VM simulation.
+On physical ASUS, additionally prove selection of SSD1 versus SSD2
+RAID LUN as a **boot device** in the firmware boot menu; do not substitute
+selection of Windows Boot Manager NVRAM entries. One VDI emulates protected
+Home with sentinel data and one VDI emulates the full target RAID LUN. Perform
+the real Offline and manual WinPE target-selection steps and also reverse disk
+enumeration. Verify sentinel integrity, target-local ESP/WinRE/BCD,
+manually created target-local GPT partition roles and working WinRE after Windows Update.
+Separately simulate LUN growth and WinRE maintenance. Hardware RAIDXpert2
+feasibility is NOT proven by a synthetic VDI.
+
+The original one-disk working VM / installed-clean snapshot is preserved.
+Three stock Setup attempts failed; the later manual two-disk deployment reached
+the Windows desktop once. Full runtime acceptance, a second cold boot and
+reverse-enumeration tests remain UNPROVEN. A running-VDI host read-back is
+provisional; BitLocker now prevents unauthenticated offline inspection of C:.
+
+### Storage-allocation layer status
+
+The long-term allocation requirement is to avoid repeated shrink/move cycles
+between several OS installations on the 4 TB SSD. True shared thin provisioning
+would be ideal, but the ordered **Lexar NM790 4 TB
+(LNM790X004T-RNNNG)** does not expose NVMe Namespace
+Management/Attachment and therefore cannot supply hardware thin namespaces.
+
+**RAIDXpert2 is selected as the intended allocation layer**, not a throughput
+RAID requirement. Hardware feasibility and supported driver/firmware operation
+on the ASUS are tested in a **separate storage experiment**, outside the scope
+of the Windows installation-configuration issue. The accepted logical model is:
+
+```text
+SSD1
+└── existing Windows 11 Home, preserved independently if the AMD RAID mode
+    can expose it as a legacy/non-member disk
+
+SSD2 / Lexar NM790 4 TB
+├── small bootable virtual disk → security Windows
+├── small bootable virtual disk → optional dev Windows
+├── small bootable virtual disk → optional Linux
+└── unused capacity for later Online Capacity Expansion
+```
+
+This is deliberately not described as thin provisioning: an allocated virtual
+disk owns its assigned capacity, deleted files do not donate that capacity to
+another virtual disk, and shrink is not assumed. The useful property under
+evaluation is **small initial allocation plus Online Capacity Expansion in
+small increments** without moving neighbouring GPT partitions.
+
+The architecture must not span SSD1 and SSD2 with RAID0 or another
+failure-coupled aggregate merely to obtain one large device. Existing Home
+recoverability and failure independence are more valuable than striping
+performance.
+
+The following are acceptance criteria of the **separate RAIDXpert2 hardware
+experiment**, not blockers to completion of this Windows Setup configuration
+issue. Before any physical deployment depends on RAID, that experiment must
+prove on the exact FA401EA path that:
+
+- firmware exposes the required NVMe RAID mode;
+- SSD1 can remain legacy/non-member without destructive initialization;
+- the existing Home installation can be prepared to boot through the AMD RAID
+  boot-critical driver stack;
+- single-disk virtual disks on NM790 can coexist and be expanded independently
+  from still-unused capacity;
+- expansion preserves bootability and BitLocker state;
+- a failed ASUS does not make the data practically unrecoverable: supported
+  migration and an independently tested raw-disk recovery path must exist.
+
+The Windows Setup VM bench models the RAID virtual disk with a normal VDI;
+it does not need the AMD controller to validate disk selection or GPT layout.
+The RAID experiment independently establishes the supported hardware layer.
+The Setup answer and checks must not rely on guessed RAIDXpert2 device IDs.
 
 ### No cross-OS auto-unlock
 
@@ -461,6 +712,32 @@ known vulnerable-driver paths and writable/executable kernel memory abuse.
 It is a hardening layer, not a substitute for the stronger secret boundaries
 provided by TPM/Pluton, ESS, VBS enclaves, YubiKey or Ledger.
 
+### Production UEFI Lock (physical ASUS finalization)
+
+Owner is physically present at the ASUS and accepts firmware-presence recovery;
+there is **no portability reason** to omit UEFI Lock. The workstation must
+converge to VBS and HVCI with their UEFI locks enabled. Apply the reviewed
+native DSC overlay `windows/configuration/security-hardware.winget` only **after**
+VBS/HVCI are proven running on the physical ASUS, hardware drivers are accepted,
+and WinRE/recovery access is established. It sets both DeviceGuard and HVCI
+`Locked=1`. Production acceptance must verify effective runtime and locked
+state across a reboot; registry value alone is not proof of firmware enrollment.
+
+The shared VM/physical baseline deliberately **does not manage** either
+`DeviceGuard/Locked` or `HVCI/Locked` value. The physical ASUS-only overlay
+exclusively sets both to `1` after verified VBS/HVCI runtime and recovery.
+Reapplying the common workstation baseline must never undo or request a
+reversal of firmware locks. On the NEM-backed bench VTL1 runtime is not
+provable; the hardware overlay is excluded.
+
+The real recovery cost of UEFI Lock is not portability: when HVCI causes a
+boot-time failure, disabling the lock may require entering the local UEFI setup,
+turning Secure Boot off temporarily and following Microsoft's WinRE recovery
+procedure. Do **not** set VBS `Mandatory=1`: unlike UEFI Lock it makes the OS
+refuse to boot when virtualization components fail. Recovery is a product gate.
+
+Source: https://learn.microsoft.com/en-us/windows/security/hardware-security/enable-virtualization-based-protection-of-code-integrity
+
 ## Secure Launch / DRTM
 
 Enable and verify **System Guard Secure Launch / DRTM** on the physical ASUS
@@ -497,6 +774,16 @@ hardware-backed user authorization
 ```
 
 The Hello PIN is fallback, not the preferred routine prompt.
+
+**Final interactive-account credential contract:** the owner separately sets
+and retains a **long, high-entropy emergency/recovery account password**
+during a trusted owner-controlled enrollment step. It is not generated by the
+VM bench, included in unattended installation media, or used for everyday
+sign-in. Normal sign-in/reauthorization uses Windows Hello Face via the built-in
+IR camera (ESS where supported); the separate Hello PIN is the fallback.
+This long account password is **not** the BitLocker recovery key or startup PIN:
+those protect different boundaries. Any install-time bootstrap account is
+transient access plumbing and may not become the owner's final identity.
 
 ### ESS is already evidenced on this ASUS
 
@@ -615,8 +902,59 @@ marginal security value justifies the operational cost.
 
 Windows Sandbox may be used for opening unknown/untrusted files when useful.
 
-It is a convenience isolation tool, not part of the credential root of trust
-and not a substitute for VBS-enclave, YubiKey or Ledger boundaries.
+The default `sandbox-untrusted.wsb` remains **offline**: a deliberately
+selected host inbox is exposed read-only, with clipboard/network/device
+redirection disabled. This is a convenient exploratory desktop, **not** a
+network-behavior monitor or credential root of trust.
+
+The user also requires convenient *observation of suspicious behavior*:
+`process.exe attempted destination example.com:443`, then blocked, with
+process identity, time, target and an accessible event history. Windows Sandbox
+has no built-in per-domain allow/deny dialog or reliable outbound-event
+history. Disabling networking removes the sandbox virtual NIC, so network
+tools may not observe DNS names/remote connections at all. Do not claim the
+offline Sandbox can disclose every attempted network destination.
+
+A distinct `sandbox-networked.wsb` explicitly enables the Hyper-V default
+switch and starts the built-in `resmon.exe` Resource Monitor as a lightweight,
+convenient GUI for per-process TCP and traffic inspection. It preserves the
+same read-only single-folder mapping, Protected Client and blocked host device
+redirection as the offline profile.
+
+**Required change before accepting networked use on the ASUS:** egress must
+be **internet-only**, not Hyper-V Default Switch's unrestricted LAN+internet.
+At the host-side enforcement layer deny guest access to Windows host addresses,
+all directly connected LAN/VPN prefixes, RFC1918, loopback, link-local, CGNAT,
+IPv6 ULA/link-local and other non-public destinations. Ensure a working DNS
+path that does not reopen access to host/private services. Allow external
+public addresses, subject to ordinary malware exfiltration risk.
+
+Prefer first-party Windows **Hyper-V Firewall** (per-`VMCreatorId` and
+`RemoteAddresses` on Windows 11), if native Windows Sandbox actually exposes
+a distinct, stable creator identity and effective packet filtering. This must
+be discovered and verified on the physical ASUS; never guess or reuse the WSL
+creator GUID. Test host LAN/VPN deny, host-access deny, IPv4/IPv6 bypass deny,
+public HTTPS success and persistence across Sandbox restarts. The native
+`.wsb` does not configure these rules and no such live proof exists yet.
+If Windows Sandbox cannot be isolated separately, use a dedicated Hyper-V VM
+with its own network policy rather than globally blocking ASUS/WSL traffic.
+
+**Until that proof, `sandbox-networked.wsb` is a prepared, UNRESTRICTED
+connectivity diagnostic, not an internet-only security profile,** and should
+not be used for executing adversarial programs or advertised as safe.
+
+For dynamic malware/network research, design a **separately isolated analysis
+VM**, with a network policy enforcement point and logs outside the untrusted
+guest, preventing real LAN access or internet exfiltration. Prefer existing
+products (e.g. Safing Portmaster domain-aware monitoring and prompt/deny UI,
+Sysinternals Procmon for process/file/registry behavior) over any homemade
+monitor. An in-guest firewall alone is not trustworthy against guest admin-level
+malware; experiments must never expose the hardware wallet/credential host to
+the suspicious guest. This is a distinct staged product, not a promise that
+WSB can behave like a professional malware sandbox.
+
+Windows Sandbox is not a substitute for VBS-enclave, YubiKey or Ledger
+boundaries.
 
 ## Credential strategy
 
@@ -1034,8 +1372,11 @@ Use a dedicated sensitive Chrome profile with:
 
 Ordinary browsing should use a separate browser/profile so arbitrary browsing
 state, cookies, downloads and extensions do not accumulate in the sensitive
-profile. The exact general-purpose browser is not currently an architecture
-constraint.
+profile. The exact general-purpose browser is not an architecture constraint;
+the Windows baseline uses **Microsoft Edge** for this role because it is
+Microsoft-maintained, already native to Windows, and avoids adding another
+third-party browser/update channel. Chrome remains reserved for the dedicated
+sensitive profile.
 
 The user may serve as the wallet-extension allowlist. A large enterprise browser
 policy framework is not required merely to encode the same tiny list unless
@@ -1184,6 +1525,185 @@ Trusted recovery starts from known-good recovery/installation media.
 
 ## Provisioning architecture
 
+### Canonical unattended mechanism
+
+The canonical installation contract is a repository-owned Windows-native
+**`Autounattend.xml`** consumed by Windows Setup. The same answer file and the
+same Windows Setup semantics must be usable in:
+
+- the VirtualBox bench from attached answer/configuration media; and
+- production installation from trusted USB/media on the ASUS.
+
+VirtualBox-specific `IUnattended` is not the production deployment mechanism
+and must not be the basis of acceptance. It may be used only for diagnostic
+experiments that do not define the final install path.
+
+The answer file must explicitly select **Windows 11 Pro, non-N**, apply the
+deployment locale contract above, and complete supported Windows Setup/OOBE
+without manual *installation troubleshooting*. The VM may reach
+its disposable test desktop. Production **must not auto-logon**: after Setup,
+owner enrollment and deliberate interactive sign-in are required. The owner
+sets a separate long recovery account password and configures Windows Hello
+Face/ESS on the physical ASUS; those user actions are not Setup defects.
+
+"Same answer file" means a **single renderer with identical setup
+semantics**. Only per-install bootstrap identity fields (username,
+password, display name and hostname) are bound when producing media.
+No VM-only AutoLogon or Guest Additions commands are allowed in the answer.
+VirtualBox Guest Additions and remote access must be established outside
+the XML by supported bench plumbing. Existing working VM has them; the
+new-install access bootstrap is not yet accepted.
+
+### Exhaustive install-time contract
+
+Before another unattended-install attempt, the renderer and its static
+contract test must prove the following values are present exactly:
+
+| Area | Required effective value | Windows mechanism / proof |
+|---|---|---|
+| OS source | official Microsoft ISO only | SHA-256 must equal the value in `vm/ISO_PROVENANCE.md` before rendering or boot |
+| Edition | Windows 11 Pro, non-N | `ImageInstall/OSImage/InstallFrom/MetaData` with `/IMAGE/NAME = Windows 11 Pro`; final audit rejects Pro N |
+| Setup UI | English (United States) | `Microsoft-Windows-International-Core-WinPE/SetupUILanguage/UILanguage = en-US` |
+| Installed UI | English (United States) | `UILanguage = en-US` in `windowsPE` and `oobeSystem` |
+| Non-Unicode system locale | English (United States) | `SystemLocale = en-US` |
+| Regional formats | German / Germany | `UserLocale = de-DE` in `windowsPE` and `oobeSystem` |
+| Default keyboard | US | first `InputLocale` entry exactly `0409:00000409` |
+| Additional keyboard | Russian | second `InputLocale` entry exactly `0419:00000419` |
+| Forbidden keyboard | no German layout | no `0407:00000407`, no German input profile anywhere in the product render; runtime audit treats either as FAIL |
+| Home location | Germany, GeoID 94 | effective state must audit as GeoID 94; because International-Core Unattend does not expose a HomeLocation/GeoID setting, converge it through the supported International configuration path if Setup does not derive it |
+| Time zone | W. Europe Standard Time | `TimeZone` in `specialize` and `oobeSystem`; runtime audit must match exactly |
+| Computer name | explicit, environment-bound | no random Setup-generated product hostname; bench may use `WINBENCH` |
+| EULA | accepted by unattended setup | `UserData/AcceptEula = true` |
+| Setup edition key | public Microsoft Windows 11 Pro GVLK only | `UserData/ProductKey/Key = W269N-WFGWX-YVC9B-4J6C9-T83GX` with `WillShowUI = Never`; this is a public Setup selector, not the user's activation credential and no `Microsoft-Windows-Shell-Setup/ProductKey` is set |
+| Microsoft Account | not required for provisioning | `OOBE/HideOnlineAccountScreens = true` plus a local bootstrap account |
+| Network page | no OOBE network dependency | `OOBE/HideWirelessSetupInOOBE = true`; trusted installation must be able to start offline |
+| OOBE defaults | no interactive Express-settings page | `OOBE/ProtectYourPC = 3` |
+| Unsupported OOBE bypasses | forbidden | no `SkipMachineOOBE`, no `SkipUserOOBE`, no registry/BYPASSNRO trick |
+| Destructive disk | only owner-selected RAID virtual disk | interactive target selection after SSD1 Offline; no unattended wipe against a guessed or hardcoded DiskID; prove the manual Setup/WinPE sequence |
+| Non-target SSD1 | preserved/offline during destructive Setup | bare-metal pre-Setup gate; installation must abort rather than guess if this cannot be established |
+| Partition table | GPT/UEFI target-local layout | selected RAID virtual disk receives dedicated ESP + MSR + Windows C: + WinRE, in Microsoft's recommended order |
+| ESP | dedicated target-local FAT32 ESP | operator-verified WinPE DiskPart `create partition efi size=300`, formatted FAT32 |
+| MSR | dedicated target-local MSR | operator-verified WinPE DiskPart 16 MiB partition |
+| Windows volume | target-local OS partition | NTFS C: on the operator-selected LUN, sized by stock Setup; never `InstallToAvailablePartition=true` |
+| WinRE | target-local recovery after Windows C: | operator-created 2048 MiB recovery partition, registered with REAgentC; verify actual `winre.wim`, free capacity and Enabled state after boot |
+| Cross-OS dependency | none | no boot/recovery structure for Pro may be placed on SSD1; no OS-volume auto-unlock is configured |
+| Account secret | no final production secret in media/repo/logs | any unattended bootstrap credential is per-install ephemeral infrastructure, never a final user credential, and must be removed/rotated before production acceptance |
+| Setup/owner sign-in boundary | no manual Setup troubleshooting; no production AutoLogon | answer suppresses the language-selection page; VM can enter its test desktop, production requires intentional sign-in and separate owner-secret/Hello enrollment |
+| Post-install boundary | separate from Setup | PowerShell/WinGet/DSC, updates, Chrome, BitLocker, Hello/ESS, VBS/HVCI and workload software are not falsely claimed as `Autounattend.xml` work |
+
+A visible language-selection page is therefore an immediate **FAIL**: Microsoft
+documents that when an implicitly discovered `Autounattend.xml` is in use,
+that page is not displayed. The bench must stop rather than click through it.
+
+The canonical product file remains `Autounattend.xml` at the root of
+removable installation/configuration media. Production installation on the ASUS
+places that file at the root of the trusted physical USB installation media.
+**The owner creates the bootable Microsoft USB themselves**; neither an ISO
+writer nor a USB image builder is a requirement of this project. Project-owned
+gates are correct answer-file bytes, matching vendor source/edition, explicit
+SSD2 selection without guessing SSD1, production post-install execution and
+actual recovery/security acceptance. Never reject a release merely because
+no project-specific USB writer exists.
+
+VirtualBox does not expose an attached virtual hard disk as the removable USB
+flash class required by Setup's removable read/write implicit-search path. That
+approach was tested and rejected: Windows saw the device but still displayed the
+language page.
+
+For the VM bench, use Microsoft's separate supported **removable read-only
+media** discovery path instead. The harness builds a tiny Joliet answer DVD and
+must prove before boot that:
+
+- a Joliet supplementary volume descriptor is present;
+- the Joliet root exposes exactly `Autounattend.xml`;
+- the XML itself passes the full install contract;
+- the answer DVD is separate from and does not modify the official Microsoft
+  installation ISO.
+
+The ISO9660 primary namespace may contain the 8.3-compatible
+`AUTOUNAT.XML;1`; Windows Setup must receive the exact long name from Joliet.
+This distinction is empirically material: the non-Joliet answer DVD was ignored,
+while the corrected Joliet DVD suppressed the language-selection page and
+entered unattended Setup.
+
+Thus VM and production use the same Windows **implicit answer-file discovery**
+semantics and the same rendered product contract, while the removable-media
+class differs only because of VirtualBox's device model.
+
+The stock Microsoft optical image intentionally has a timed "Press any key to
+boot from CD or DVD" gate. The VM uses VirtualBox `USBKeyboard` because the
+SOAP keyboard path was empirically shown not to reach this UEFI prompt through
+the PS/2 HID configuration. The harness detects the one-line optical prompt
+from framebuffer geometry and then sends exactly one **Enter** make/break pair
+through `IKeyboard.putScancodes`. If the prompt is not observed, it sends no
+key and fails closed. This exception is boot orchestration only;
+keyboard/scancode injection remains forbidden as a guest automation or command
+transport, and no keys are sent during Windows Setup/OOBE.
+
+The old VM had exactly one synthetic destructive target, so its resolved `DiskID=0`
+proves answer-file mechanics only. A production renderer must not silently reuse
+that binding on the two-SSD ASUS.
+
+### Business-requirement coverage by provisioning phase
+
+Every authoritative requirement in `BUSINESS_REQUIREMENTS.md` has an explicit
+owner. "Not in Autounattend" is intentional where the requirement belongs to a
+later or hardware-specific trust boundary.
+
+| BR | Owner |
+|---:|---|
+| 1 | hardware architecture; ASUS binding is allowed |
+| 2 | user-selected RAID virtual disk; SSD1 Offline; independent target-local ESP/WinRE |
+| 3 | product/trust architecture, not an install-page setting |
+| 4 | post-install isolation + VBS/vault/Ledger boundaries |
+| 5 | TPM/Pluton/VBS design and bare-metal validation |
+| 6 | UEFI/Secure Boot at install plus BitLocker/Secure Launch post-install |
+| 7 | BitLocker post-install on each relevant OS volume |
+| 8 | independent volume protectors; no cross-OS auto-unlock |
+| 9 | BitLocker TPM + startup PIN post-install |
+| 10 | startup PIN distinct from Hello/ESS credentials |
+| 11 | Hello/ESS bare-metal gate |
+| 12 | VBS credential-broker/vault gate |
+| 13 | trusted-context/transaction-confirmation architecture |
+| 14 | accepted v1 trusted-context compromise + phase-2 display |
+| 15 | Ledger/YubiKey remain independent hardware trust domains |
+| 16 | offline BitLocker/vault recovery material + independent token path |
+| 17 | official media + reproducible install/configuration/audit |
+| 18 | known-good external recovery/install media + offline recovery material |
+| 19 | Setup can begin offline; network is allowed after the fresh OS runs |
+| 20 | post-install maintenance/sensitive-work gate |
+| 21 | Windows Update/OEM/Google supported maintenance channels |
+| 22 | supported Windows security mechanisms; minimal custom plumbing |
+| 23 | Autounattend + desired-state configuration + machine-readable audit |
+| 24 | VM evidence and ASUS bare-metal evidence remain separate |
+| 25 | interactive target selection + SSD1 Offline; never an unconfirmed automatic wipe |
+| 26 | Microsoft ISO provenance + vendor-origin software channels |
+| 27 | post-install Chrome/wallet/Ledger/Hello workload validation |
+| 28 | product outcome/economics may replace a mechanism without weakening requirements |
+| 29 | TPM + offline recovery key protection immediately; owner startup PIN after Setup |
+| 30 | enforce Windows 11 Administrator Protection, reboot and verify live behavior |
+| 31 | physical ASUS VBS/HVCI firmware UEFI Lock after verified runtime and recovery |
+| 32 | offline and networked Windows Sandbox profiles, read-only narrow input |
+| 33 | internet-only Sandbox network acceptance with host/LAN/VPN blocking |
+| 34 | connection-process/destination observation and host-side deny/prompt |
+| 35 | Edge everyday, Chrome sensitive; official wallets, KeePass and Ledger |
+| 36 | owner-provided USB, interactive RAID selection, ESP/MSR/C:/WinRE layout, postinstall acceptance |
+
+### Account and OOBE contract
+
+The unattended path must avoid making a Microsoft Account a prerequisite for
+installation. Use supported Windows unattended/OOBE mechanisms to suppress the
+Microsoft Account requirement where the installed build exposes such controls.
+
+A local account may be created by supported unattended means when that is
+required to complete automated setup and establish the post-install automation
+boundary.
+
+Production secrets must **never** be embedded in `Autounattend.xml`, auxiliary
+answer media, repository files, VM run artifacts or logs. VM-only throwaway
+credentials are test infrastructure and must remain outside Git. They are not
+the production credential design.
+
 ### Production physical installation
 
 The physical provisioning flow is:
@@ -1191,23 +1711,31 @@ The physical provisioning flow is:
 ```text
 verify official Microsoft ISO
         ↓
-create trusted installation media
+create trusted installation media + Autounattend.xml
         ↓
 boot WinPE/Setup
         ↓
-identify SSD1 and SSD2 unambiguously
+identify existing SSD1 in WinPE and place it Offline
         ↓
-set SSD1 offline
+show user the RAID virtual disks and obtain an explicit target selection
         ↓
-install Windows 11 Pro to SSD2
+verify selected target is writable and protected SSD1 remains Offline
         ↓
-allow Setup to create SSD2 GPT/ESP/WinRE
+prepare GPT: ESP(300) + MSR(16) + C:(capacity minus WinRE) + WinRE(2048)
         ↓
-first boot
+install Windows 11 Pro (non-N) to the selected C: partition
+        ↓
+verify target-local ESP/WinRE, WinRE registration and no SSD1 dependency
+        ↓
+apply en-US UI + US/Russian input + Germany formats + W. Europe timezone
+        ↓
+complete supported local-account/OOBE path
+        ↓
+first usable desktop
         ↓
 supported drivers + Windows Update
         ↓
-apply desired security/configuration state
+apply declarative desired state
         ↓
 enable/configure BitLocker TPM+PIN
         ↓
@@ -1218,21 +1746,69 @@ install workload software
 run machine-readable audit
 ```
 
+RAIDXpert2 is already accepted as the allocation architecture. The RAID
+hardware experiment, separately tracked from this Setup issue, proves that
+the ASUS actually exposes independent expandable virtual disks without
+compromising Home. The installation target above is the owner-selected
+single-disk virtual disk on Lexar SSD2. Setup/deployment owns the target-local
+ESP/MSR/WinRE/Windows partition layout. SSD1 must not become a boot/storage
+member of the Pro environment.
+
 Network availability is not required to **begin** trusted installation.
 
 Network use after the fresh OS is running is acceptable and desirable for
 supported Windows updates, drivers, activation and vendor software.
 
-### Declarative preference
+Any change to install-time disk layout, boot configuration, edition selection,
+answer-file/OOBE behavior or other pre-desktop semantics must be validated by a
+**clean reinstall** of the disposable VM. Do not mutate a previously installed
+VM and call that installation-path evidence.
 
-Use supported Windows unattended/setup mechanisms and PowerShell/Windows
-configuration interfaces.
+### Declarative post-install configuration
+
+After the clean unattended install reaches a usable desktop, ordinary
+configuration iteration should happen from snapshots rather than by repeating
+the complete Windows installation.
+
+The preferred post-install mechanism is supported **WinGet Configuration / DSC**
+desired state where the required resource exists. PowerShell is a supported
+implementation/interface tool, but it is not a license to turn the
+configuration into one giant imperative bootstrap script.
+
+Specific rules:
+
+- install/update PowerShell to the **latest supported stable release**
+  declaratively through the selected supported package/configuration path;
+- use first-party or otherwise supported DSC/WinGet Configuration resources
+  where they express the desired state;
+- do **not** hide arbitrary imperative PowerShell inside generic DSC `Script`
+  resources and describe the result as declarative;
+- keep vendor-owned maintenance on vendor-supported channels: Windows Update
+  for Windows, the official Google channel for Chrome, and supported OEM/vendor
+  mechanisms for device software;
+- use imperative code only for a demonstrated residual gap that cannot be
+  represented reasonably by supported desired-state mechanisms;
+- keep that residual code narrow, explicit and auditable.
 
 Manual GUI steps should exist only when the product deliberately requires user
-presence or a supported API is unavailable.
+presence or no supported automation interface exists.
 
-The configuration source should be understandable as desired state, not a long
-sequence of fragile simulated clicks.
+The VM bench must therefore prove two distinct boundaries:
+
+```text
+official ISO + Autounattend.xml
+        ↓
+clean reproducible Windows desktop
+        ↓
+snapshot
+        ↓
+WinGet Configuration / DSC desired state
+        ↓
+audit
+```
+
+Install/boot-path changes require rebuilding from the first boundary.
+Post-install desired-state changes may iterate from the clean snapshot.
 
 ## VirtualBox development bench
 
@@ -1259,7 +1835,13 @@ The VM should prove:
 - repeatable disk/layout automation;
 - repeatable post-install configuration;
 - browser/software install logic;
-- audit logic;
+- **elevated** in-guest audit of actual Secure Boot state, TPM 2.0 readiness
+  and specification, target-local GPT partitions, WinRE enabled/location,
+  BitLocker encryption versus actual TPM+PIN/recovery protectors, and
+  Administrator Protection policy; missing elevation is an audit failure,
+  never a silent WARN or a successful audit;
+- separate VBS/HVCI configuration-policy read-back from runtime proof (the
+  current VirtualBox Hyper-V/NEM backend cannot validate VTL1 runtime);
 - update/reboot automation;
 - snapshot/reset/rebuild lifecycle;
 - BitLocker policy flow to the extent VirtualBox presents a meaningful TPM;
@@ -1277,6 +1859,27 @@ The VM should prove:
 - use snapshots aggressively;
 - do not reinstall the VM for ordinary iteration when a clean checkpoint is
   available;
+- a destructive install run must persist its stage outside the harness process;
+  after the initial optical boot has succeeded, `await-guest-control` and
+  `base-checkpoint` are resumable boundaries so a host/harness restart does not
+  require another disk wipe;
+- resume must fail closed for ambiguous earlier stages rather than repeating a
+  destructive action;
+- while waiting for the first usable desktop, persist a read-only heartbeat with
+  VM state, Guest Additions state, Guest Control readiness and VDI size/mtime so
+  a stuck Windows Setup is diagnosable without injecting guest commands;
+- keep the VM network adapter disabled throughout Setup and OOBE; enable NAT
+  only after the powered-off `installed-clean` checkpoint, immediately before
+  post-install bootstrap/update work;
+- do not request nested hardware virtualization for the installation bench by
+  default. VBS/nested-virtualization experiments belong to the later security
+  validation stage, especially when VirtualBox itself is running through the
+  Windows Hyper-V/NEM backend;
+- if the VirtualBox bench remains Running with no VDI progress before Guest
+  Control becomes available, record the stall evidence and permit one VM-only
+  cold restart of the existing VDI without optical boot. A repeated stall is
+  a hard failure; never turn this recovery into a destructive reinstall;
+- allow only one install/resume controller process for the active run;
 - clean old VMs/snapshots/cache artifacts so disk consumption remains bounded.
 
 ### What the VM cannot prove

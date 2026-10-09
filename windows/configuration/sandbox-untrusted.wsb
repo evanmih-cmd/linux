@@ -1,0 +1,22 @@
+<Configuration>
+  <!-- Host directory C:\Sandbox-Inbox must exist and contain ONLY the file(s)
+       deliberately submitted for examination. Sandbox gets read-only access. -->
+  <vGPU>Disable</vGPU>
+  <Networking>Disable</Networking>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\Sandbox-Inbox</HostFolder>
+      <SandboxFolder>C:\Incoming</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>explorer.exe C:\Incoming</Command>
+  </LogonCommand>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <ProtectedClient>Enable</ProtectedClient>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <MemoryInMB>4096</MemoryInMB>
+</Configuration>

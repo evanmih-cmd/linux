@@ -19,7 +19,7 @@
         WScript.Echo("WSHCHECK " + id + " " + state + " " + explanation);
     }
     function fatal(id, err) {
-        verdict(id, "FAIL", "exception_" + (err.number || "unknown"));
+        verdict(id, "FAIL", "exception_" + (err.message || err.description || err.number || "unknown"));
     }
     function xmlDoc(file) {
         var d = new ActiveXObject("Msxml2.DOMDocument.6.0");
@@ -35,18 +35,21 @@
         s.Close();
         return text;
     }
-    function readBinaryPairs(file, sz) {
-        // FileSystemObject with TristateTrue reads a UTF-16LE code unit for
-        // each pair of source bytes, even if the underlying file is UTF-8.
-        // If size is even and result length == size/2, and file has no BOM,
-        // equality of all code units PROVES equality of all source bytes.
-        var s = FSO.OpenTextFile(file, 1, false, -1);
-        var text = s.ReadAll();
-        s.Close();
-        if (sz % 2 || text.length !== sz / 2) throw new Error("Non_pair_aligned_file");
-        // XML starts with ASCII '<?', which should encode as little-endian
-        // code unit 0x3f3c. Reject a decoder that normalized the input.
-        if (text.length === 0 || text.charCodeAt(0) !== 0x3f3c) throw new Error("Unexpected_byte_decoder");
+    function readBytesExact(file, sz) {
+        // For an ASCII XML every byte is one FSO TristateFalse character.
+        // Check every code point, not just equal strings: ANSI code-page
+        // conversion must NEVER turn different source bytes into PASS.
+        // Works for odd AND even sizes, without MSXML serialization/normalization.
+        var stream = FSO.OpenTextFile(file, 1, false, 0);
+        var text = stream.ReadAll();
+        stream.Close();
+        if (text.length !== sz) throw new Error("ASCII_byte_count_mismatch");
+        if (text.substr(0, 2) !== "<?") throw new Error("Unexpected_XML_preamble");
+        for (var i = 0; i < text.length; i++) {
+            if (text.charCodeAt(i) > 127) {
+                throw new Error("Non_ASCII_XML_requires_binary_reader");
+            }
+        }
         return text;
     }
     var installed = os + ":\\Windows\\Panther\\Unattend.xml";
@@ -57,8 +60,8 @@
         if (ia.Size !== ib.Size) {
             verdict("windows.answer_identity", "FAIL", "XML_file_size_differs");
         } else {
-            var lhs = readBinaryPairs(installed, ia.Size);
-            var rhs = readBinaryPairs(canonical, ib.Size);
+            var lhs = readBytesExact(installed, ia.Size);
+            var rhs = readBytesExact(canonical, ib.Size);
             verdict("windows.answer_identity", lhs === rhs ? "PASS" : "FAIL",
                     lhs === rhs ? "Exact_source_bytes_equal" : "XML_source_bytes_differ");
         }

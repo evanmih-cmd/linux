@@ -1,0 +1,242 @@
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+
+metadata:
+  winget:
+    processor:
+      identifier: dscv3
+
+resources:
+  - type: Microsoft.WinGet/Package
+    name: PowerShell
+    properties:
+      id: Microsoft.PowerShell
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install or update the latest stable Microsoft PowerShell release.
+
+  - type: Microsoft.WinGet/Package
+    name: Chrome
+    properties:
+      id: Google.Chrome
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install or update Google Chrome for the dedicated sensitive workload profile.
+
+  - type: Microsoft.WinGet/Package
+    name: Edge
+    properties:
+      id: Microsoft.Edge
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Microsoft Edge is installed for ordinary browsing workloads.
+
+  - type: Microsoft.WinGet/Package
+    name: KeePass
+    properties:
+      id: DominikReichl.KeePass
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install official KeePass 2, with native KDBX 4.x database support.
+
+  - type: Microsoft.WinGet/Package
+    name: LedgerWallet
+    properties:
+      id: LedgerHQ.LedgerLive
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install official Ledger Wallet desktop (formerly Ledger Live); never import hardware seed.
+
+  # Chrome Enterprise ExtensionSettings policy: IDs are anchored to publisher-
+  # verified Chrome Web Store listings in browser-wallets.md. No CRX sideloads.
+  # normal_installed keeps user ability to disable extensions, unlike forced install.
+  # Edge is for normal workloads; this policy applies only to Google Chrome.
+  - type: Microsoft.Windows/Registry
+    name: ChromeWalletExtensionSettings
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Google\Chrome
+      valueName: ExtensionSettings
+      valueData:
+        String: >-
+          {"*":{"installation_mode":"blocked"},
+          "nkbihfbeogaeaoehlefnkodbefgpgknn":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+          "bfnaelmomeimhlpmgjnjophhpkkoljpa":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+          "acmacodkjbdgmoleebolmdjonilkdbch":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+          "egjidjbpglichdcondbcbdnbeeppgdph":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+          "aflkmfhebedbjioipglgcbcmnbpgliof":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+          "klghhnkeealcohjjanjjdaeeggmfmlpl":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"}}
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Chrome wallet allowlist and store-only normal installation for six publisher-verified IDs.
+
+  - type: Microsoft.Windows/Registry
+    name: AdministratorProtectionMode
+    properties:
+      keyPath: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+      valueName: TypeOfAdminApprovalMode
+      valueData:
+        DWord: 2
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable Windows 11 Administrator Protection; requires reboot.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerAdvancedStartup
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: UseAdvancedStartup
+      valueData:
+        DWord: 1
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable Microsoft BitLocker advanced startup authentication policy.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerRequireRealTPM
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: EnableBDEWithNoTPM
+      valueData:
+        DWord: 0
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow BitLocker OS unlock without an available TPM.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerAllowTPMAtProvisioning
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: UseTPM
+      valueData:
+        DWord: 2
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Allow TPM-only activation before owner enrolls a startup PIN; interim stage ONLY.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerAllowTPMAndPIN
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: UseTPMPIN
+      valueData:
+        DWord: 2
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Permit later TPM+PIN enrollment, without requiring a PIN before owner setup.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerDisableTPMStartupKey
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: UseTPMKey
+      valueData:
+        DWord: 0
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow USB startup key as an alternate normal boot path.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerDisableTPMKeyPIN
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: UseTPMKeyPIN
+      valueData:
+        DWord: 0
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow TPM+USB key+PIN combination; standard target is TPM+PIN.
+
+  - type: Microsoft.Windows/Registry
+    name: BitLockerMinStartupPIN
+    properties:
+      keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+      valueName: MinimumPIN
+      valueData:
+        DWord: 8
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Require minimum eight characters for owner-chosen numeric startup PIN.
+
+  # Windows Sandbox optional feature: supported built-in DSC v3 DISM resource.
+  # On a virtualized/NEM bench, do not confuse Installed with working nested VM.
+  - type: Microsoft.Windows/OptionalFeatureList
+    name: WindowsSandboxFeature
+    properties:
+      features:
+        - featureName: Containers-DisposableClientVM
+          state: Installed
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable first-party Windows Sandbox optional feature on Windows 11 Pro.
+
+  - type: Microsoft.Windows/Registry
+    name: EnableVBS
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+      valueName: EnableVirtualizationBasedSecurity
+      valueData:
+        DWord: 1
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable virtualization-based security.
+
+  - type: Microsoft.Windows/Registry
+    name: RequireSecureBootForVBS
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+      valueName: RequirePlatformSecurityFeatures
+      valueData:
+        DWord: 1
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Require Secure Boot as the VBS platform security feature.
+
+  - type: Microsoft.Windows/Registry
+    name: EnableHVCI
+    properties:
+      keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+      valueName: Enabled
+      valueData:
+        DWord: 1
+      _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable HVCI / Memory Integrity.

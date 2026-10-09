@@ -1,7 +1,7 @@
 # Windows two-disk bench: real state and operator runbook
 
-**Status (2026-10-09): BLOCKED — three failed stock Windows Setup runs.**
-A working two-disk independent boot has NOT been demonstrated.
+**Status (2026-10-09): manual Microsoft WinPE deployment reached Windows 11 desktop once; full acceptance remains BLOCKED.**
+Three earlier stock Windows Setup attempts failed to create a working target-local boot path. Subsequently, the same two-disk VM was deployed manually with DiskPart, DISM, BCDBoot and REAgentC, using the common password-free XML for specialize/OOBE. The first Windows desktop was observed on the VM without a password prompt. Repeat logon, enabled WinRE, Windows-side disk Offline state and Secure Boot runtime are not yet proven. Current SOAP sees Running with black framebuffer after Shift; Guest Additions are not ready and an ACPI power-button request did not shut the guest down. No hard reset/reinstall has been made.
 
 - Installed canonical VM `Desktop-Windows-11-Pro` and the
   `installed-clean` snapshot remain preserved.
@@ -54,9 +54,7 @@ the authoritative exact sequence.
 - `BCDBoot /s` does not create a firmware NVRAM entry; Asus firmware
   presentation of the RAID LUN must be verified on physical hardware.
 
-The separate VM reached an official Windows installer WinPE
-`X:\Sources>` prompt on 2026-10-09. **The new manual deployment has
-not yet been executed or accepted.** Do not claim PASS.
+The same VM subsequently completed the manual deployment and first boot to the Windows desktop. WinPE AUDIT.CMD reported 29 PASS / 0 FAIL / 6 NOT_PROVABLE. A new read-only Linux/VDI parity audit sees 17 PASS / 0 FAIL / 6 NOT_PROVABLE_ENCRYPTED, including intact protected GPT/sentinel, target-local ESP/BCD, WinRE image and exact target partition geometry. The system VDI is now BitLocker-marked (`-FVE-FS-`), so the offline auditor cannot read its Windows files or REAgentC registration without recovery material. Because the VM was Running during parity, that evidence is provisional until a powered-off audit can be obtained. Do not claim full post-boot acceptance.
 
 ## Read-only bench commands
 
