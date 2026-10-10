@@ -108,6 +108,8 @@ exit
 
 В WinPE узнать фактическую букву официального DVD/ISO через `diskpart` → `list volume` → `exit`. **Ниже E: — пример, не фиксированная буква.**
 
+**Сначала прочитать фактическое содержимое** `E:\sources`: в официальном Microsoft USB может быть один `install.wim`, `install.esd` либо **split-WIM** (`install.swm`, `install2.swm`, …). Следующий блок **только для `install.wim`**; при split-WIM вместо него использовать отдельный блок ниже. Это альтернативы, а не последовательные операции на одной `W:`.
+
 ```cmd
 dir E:\sources\install.wim
 dism /Get-ImageInfo /ImageFile:E:\sources\install.wim
@@ -118,6 +120,21 @@ dism /Get-ImageInfo /ImageFile:E:\sources\install.wim
 ```cmd
 dism /Apply-Image /ImageFile:E:\sources\install.wim /Name:"Windows 11 Pro" /ApplyDir:W:\
 ```
+
+**Если на USB split-WIM:** Microsoft DISM поддерживает прямое `/Apply-Image` с `/SWMFile` без склейки, экспорта или изменения файлов. Сначала проверить **точные имена** и нужную редакцию (read-only):
+
+```cmd
+dir /b E:\sources\install*.swm*
+dism /Get-ImageInfo /ImageFile:E:\sources\install.swm
+```
+
+**Стандартные имена** — `install.swm`, `install2.swm`, `install3.swm` и т. д., все в **одном каталоге**. Если вместо `install2.swm` действительно обнаружен файл `install.swm2` либо нет ожидаемой части — **STOP, показать точный вывод `dir`**, не переименовывать и не пытаться склеивать. После подтверждения, что `Get-ImageInfo` показывает **Windows 11 Pro** и её реальный индекс/имя, выполнить **только одну** команду развёртывания:
+
+```cmd
+dism /Apply-Image /ImageFile:E:\sources\install.swm /SWMFile:E:\sources\install*.swm /Name:"Windows 11 Pro" /ApplyDir:W:\
+```
+
+`E:` и `W:` — примеры: проверять заново на ASUS; `W:` должен быть вручную размеченным, подтверждённым разделом **WinOps RAID LUN**, SSD1/WinHome — Offline. Не выполнять эту команду при неопознанной LUN, неполных SWM, неподтверждённой Pro или отсутствии целевого `W:`. После успеха путь для `boot-critical` AMD RAID и WinRE **тот же**, что ниже.
 
 **ОБЯЗАТЕЛЬНЫЙ RAID-этап перед первым boot:** если цель — AMD RAID LUN `WinOps`, после успешного `/Apply-Image` **прямо сейчас** выполнить [`AMD_RAID_BOOT.md`, раздел 3](AMD_RAID_BOOT.md#3-после-dism-apply-image-добавить-загрузочный-raid-в-установленную-winops): три vendor INF в offline `W:\Windows` и индивидуальные `DISM /Get-DriverInfo`. Проверить архитектуру и `Boot Critical: Yes` для необходимых драйверов загрузочного пути. Просто запись в Driver Store или одна WinPE с драйвером недостаточны. При ошибке **не продолжать BCDBoot/first boot**.
 
