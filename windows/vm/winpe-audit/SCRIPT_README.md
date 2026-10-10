@@ -42,8 +42,6 @@ U:\AUDIT.CMD N M S W R F > U:\audit-report.txt
 
 **Для физического AMD RAID:** этот read-only GPT/BCD/WinRE-аудит **не доказывает**, что `rcbottom`/`rcraid` стали boot-critical в offline установленной Windows или что WinRE видит RAID LUN. Дополнительные DISM-проверки `Boot Critical`, фактическая загрузка WinOps и доступ из WinRE обязательны по [AMD_RAID_BOOT.md](../deployment/AMD_RAID_BOOT.md). `PASS` этого аудитора нельзя использовать вместо них.
 
-**Диагностика геометрии при `FAIL`:** актуальный `EXTRA.JS` в draft-ветке теперь сообщает конкретное нарушенное сравнение **в байтах** (`esp_size_bytes`, `winre_size_bytes`, `msr_gap_bytes`, `windows_winre_gap_bytes`, `disk_tail_bytes`, `windows_size_bytes`) вместо безымянного `Wrong_partition_sizes_offsets_or_tail`. Строгие условия принятия не ослаблены. **На физической ASUS USB может находиться прежняя копия** `EXTRA.JS`, которая ещё печатает только общий FAIL; новая версия в GitHub не обновляет флэшку автоматически. Для уже работающей WinPE сначала прочитать существующий `X:\Windows\Temp\winpe-accept\diskpart.txt` без изменения состояния дисков.
-
 ## Границы доказательств
 
 `FAIL` означает обнаруженное нарушение. `NOT_PROVABLE` остаётся только там, где недостаточно данных или проверка невозможна **до загрузки новой ОС**, а не из-за отсутствующего `findstr`/PowerShell/средства сравнения XML:
