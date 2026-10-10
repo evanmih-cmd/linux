@@ -46,7 +46,15 @@ dism /Image:C:\WinOps-WinPE\mount /Add-Driver /Driver:"%RAID%\rccfg\rccfg.inf"
 dism /Image:C:\WinOps-WinPE\mount /Get-Drivers /Format:List
 ```
 
-**STOP при любой ошибке / неподтверждённом индексе**; не фиксировать испорченный WIM. По результату `/Get-Drivers` определить OEM-имена трёх пакетов и выполнить `dism /Image:C:\WinOps-WinPE\mount /Get-DriverInfo /Driver:oemNN.inf` **для каждого, подставляя реальное имя**; сверить `Boot Critical` для `rcbottom` и `rcraid`, подписанный x64 пакет и Hardware IDs. Это свойство пакета; доступность настоящей LUN доказывается только загрузкой WinPE на ASUS. Если WIM уже смонтирован и какой-то `Add-Driver` завершился ошибкой, откатить только рабочий mount командой `dism /Unmount-Image /MountDir:C:\WinOps-WinPE\mount /Discard`; резервный `boot.original.wim` не меняется. После трёх успешных `Add-Driver` и проверки фактических пакетов:
+**STOP при любой ошибке / неподтверждённом индексе**; не фиксировать испорченный WIM. После `/Get-Drivers` подтвердить фактическое присутствие всех трёх OEM-пакетов. Для чтения свойств исходных INF не нужно искать назначенные Windows номера: Microsoft DISM позволяет передать полный путь к INF.
+
+```cmd
+dism /Image:C:\WinOps-WinPE\mount /Get-DriverInfo /Driver:"%RAID%\rcbottom\rcbottom.inf"
+dism /Image:C:\WinOps-WinPE\mount /Get-DriverInfo /Driver:"%RAID%\rcraid\rcraid.inf"
+dism /Image:C:\WinOps-WinPE\mount /Get-DriverInfo /Driver:"%RAID%\rccfg\rccfg.inf"
+```
+
+Сверить `Boot Critical` для `rcbottom` и `rcraid`, x64 и Hardware IDs. **Путь к INF проверяет свойства пакета даже без staging; /Get-Drivers отдельно доказывает факт добавления.** Это свойство пакета; доступность настоящей LUN доказывается только загрузкой WinPE на ASUS. Если WIM уже смонтирован и какой-то `Add-Driver` завершился ошибкой, откатить только рабочий mount командой `dism /Unmount-Image /MountDir:C:\WinOps-WinPE\mount /Discard`; резервный `boot.original.wim` не меняется. После трёх успешных `Add-Driver` и проверки фактических пакетов:
 
 ```cmd
 dism /Unmount-Image /MountDir:C:\WinOps-WinPE\mount /Commit
@@ -94,13 +102,15 @@ dism /Image:W:\ /Add-Driver /Driver:"%RAID%\rccfg\rccfg.inf"
 dism /Image:W:\ /Get-Drivers /Format:List
 ```
 
-После **каждой** команды DISM требовать успешное завершение. По полям `Original File Name` / `Published Name` сопоставить каждому драйверу его новый `oemNN.inf`, **не угадывать номер**. Затем для **каждого** фактического имени:
+После **каждой** команды DISM требовать успешное завершение. В `/Get-Drivers` проверить, что три исходных INF добавлены (по `Original File Name` / `Published Name`). Свойства можно проверить **непосредственно через пути к официальному пакету**:
 
 ```cmd
-dism /Image:W:\ /Get-DriverInfo /Driver:oemNN.inf
+dism /Image:W:\ /Get-DriverInfo /Driver:"%RAID%\rcbottom\rcbottom.inf"
+dism /Image:W:\ /Get-DriverInfo /Driver:"%RAID%\rcraid\rcraid.inf"
+dism /Image:W:\ /Get-DriverInfo /Driver:"%RAID%\rccfg\rccfg.inf"
 ```
 
-`oemNN.inf` здесь — **шаблон, его нужно заменить**. В отчёте DISM сверить:
+`/Get-DriverInfo /Driver:<path>` проверяет INF даже без установки; поэтому **фактическое присутствие драйверов в offline Windows отдельно доказывает /Get-Drivers**. В отчёте `Get-DriverInfo` сверить:
 - `rcbottom` и `rcraid` — действительные компоненты загрузочного RAID-пути. Ожидается **`Boot Critical: Yes`**, архитектура **amd64**, подходящие Hardware ID / Service Name / DriverVer. Если `No` или несовпадающая архитектура, **STOP**, изучить INF и аппаратную привязку. Не «чинить» вручную `StartType` в реестре.
 - `rccfg` — конфигурационный компонент; **не требовать** от него `Boot Critical: Yes`.
 - Само `Boot Critical: Yes` **не гарантирует** загрузку: это проверка свойств пакета; окончательный PASS — только реальная загрузка и рабочий RAID-контроллер.
@@ -128,7 +138,15 @@ dism /Image:W:\WinOps-WinRE-Mount /Add-Driver /Driver:"%RAID%\rccfg\rccfg.inf" /
 dism /Image:W:\WinOps-WinRE-Mount /Get-Drivers /Format:List
 ```
 
-По `Published Name` проверить реальные три INF и для каждого реального `oemNN.inf` выполнить `dism /Image:W:\WinOps-WinRE-Mount /Get-DriverInfo /Driver:oemNN.inf`. Проверить boot-critical **именно на WinRE WIM** для `rcbottom` и `rcraid` и правильные x64/HW IDs; `rccfg` не обязан быть boot-critical. Только после этого:
+В `/Get-Drivers` проверить добавление трёх пакетов в WinRE. Свойства исходных INF можно получить без опубликованных номеров:
+
+```cmd
+dism /Image:W:\WinOps-WinRE-Mount /Get-DriverInfo /Driver:"%RAID%\rcbottom\rcbottom.inf"
+dism /Image:W:\WinOps-WinRE-Mount /Get-DriverInfo /Driver:"%RAID%\rcraid\rcraid.inf"
+dism /Image:W:\WinOps-WinRE-Mount /Get-DriverInfo /Driver:"%RAID%\rccfg\rccfg.inf"
+```
+
+Проверить boot-critical для `rcbottom` и `rcraid`, x64/HW IDs; `rccfg` не обязан быть boot-critical. **Факт staging в WinRE отдельно подтверждается /Get-Drivers**, а не проверкой исходного пути. Только после этого:
 
 ```cmd
 dism /Unmount-Image /MountDir:W:\WinOps-WinRE-Mount /Commit /ScratchDir:W:\WinOps-DISM-Scratch
