@@ -182,6 +182,37 @@ $LedgerWallet = [ordered]@{
     Path = $LedgerWalletPath
 }
 
+# Administrator Protection elevates using an ephemeral ADMIN_owner identity.
+# Audit the canonical installed local owner's actual SID/profile, never the
+# current admin token's HKCU/LOCALAPPDATA. Only package/extension metadata and
+# state flags are collected. No passwords, cookies, wallet data or seeds.
+$CanonicalOwnerName = 'owner'
+$OwnerAccount = Try-Value {
+    Get-CimInstance Win32_UserAccount -Filter "Name='owner' AND LocalAccount=True"
+}
+$OwnerSid = if ($OwnerAccount) { [string]$OwnerAccount.SID } else { $null }
+$OwnerUserProfile = if ($OwnerSid) {
+    Try-Value { Get-CimInstance Win32_UserProfile -Filter "SID='$OwnerSid'" }
+} else { $null }
+$OwnerProfilePath = if ($OwnerUserProfile) {
+    [string]$OwnerUserProfile.LocalPath
+} else { $null }
+$OwnerProfileValid = [bool](
+    $OwnerAccount -and $OwnerSid -and $OwnerProfilePath -and
+    (Split-Path -Path $OwnerProfilePath -Leaf) -ieq $CanonicalOwnerName -and
+    (Test-Path -LiteralPath $OwnerProfilePath -PathType Container)
+)
+$OwnerLocalAppData = if ($OwnerProfileValid) {
+    Join-Path $OwnerProfilePath 'AppData\Local'
+} else { $null }
+$OwnerProfileEvidence = [ordered]@{
+    Name = $CanonicalOwnerName
+    SID = $OwnerSid
+    Path = $OwnerProfilePath
+    Loaded = if ($OwnerUserProfile) { [bool]$OwnerUserProfile.Loaded } else { $false }
+    Resolved = $OwnerProfileValid
+}
+
 # Audit only extension IDs, publisher store provenance flags and enablement
 # indicators. Never serialize any wallet settings, keys or profile secrets.
 $RequiredWalletIds = @(
@@ -209,21 +240,26 @@ $ChromePolicy = [ordered]@{
     } else { $null }
 }
 
-$ChromeDefaultProfile = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data\Default'
-$SecurePrefPath = Join-Path $ChromeDefaultProfile 'Secure Preferences'
+$ChromeDefaultProfile = if ($OwnerLocalAppData) {
+    Join-Path $OwnerLocalAppData 'Google\Chrome\User Data\Default'
+} else { $null }
+$SecurePrefPath = if ($ChromeDefaultProfile) {
+    Join-Path $ChromeDefaultProfile 'Secure Preferences'
+} else { $null }
 $SecurePrefObject = Try-Value {
+    if (-not $SecurePrefPath) { return $null }
     Get-Content -Raw -Path $SecurePrefPath -ErrorAction Stop |
         ConvertFrom-Json -ErrorAction Stop
 }
-$ExtensionDir = Join-Path $ChromeDefaultProfile 'Extensions'
+$ExtensionDir = if ($ChromeDefaultProfile) { Join-Path $ChromeDefaultProfile 'Extensions' } else { $null }
 $WalletExtensions = @(
     foreach ($Id in $RequiredWalletIds) {
         $Saved = if ($SecurePrefObject) {
             $SecurePrefObject.extensions.settings.PSObject.Properties[$Id].Value
         } else { $null }
-        $Folder = Join-Path $ExtensionDir $Id
+        $Folder = if ($ExtensionDir) { Join-Path $ExtensionDir $Id } else { $null }
         $Versions = @(
-            if (Test-Path $Folder) {
+            if ($Folder -and (Test-Path -LiteralPath $Folder)) {
                 Get-ChildItem -Path $Folder -Directory -ErrorAction SilentlyContinue |
                     Select-Object -ExpandProperty Name
             }
@@ -241,7 +277,7 @@ $WalletExtensions = @(
     }
 )
 $OtherChromeExtensionIds = @(
-    if (Test-Path $ExtensionDir) {
+    if ($ExtensionDir -and (Test-Path -LiteralPath $ExtensionDir)) {
         Get-ChildItem -Path $ExtensionDir -Directory -ErrorAction SilentlyContinue |
             Where-Object {
                 $_.Name -notin $RequiredWalletIds -and
@@ -252,17 +288,22 @@ $OtherChromeExtensionIds = @(
 
 # PowerShell 7.6+ WinGet defaults to Microsoft's signed MSIX package.
 # Accept a registered MSIX + user alias OR a vendor MSI installation.
-$PowerShellMSIX = Try-Value { Get-AppxPackage -Name Microsoft.PowerShell }
+$PowerShellMSIX = if ($OwnerProfileValid) {
+    Try-Value { Get-AppxPackage -Name Microsoft.PowerShell -User $OwnerSid }
+} else { $null }
 $PowerShellMSIPath = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
-$PowerShellAlias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\pwsh.exe'
-if ($PowerShellMSIX -and (Test-Path $PowerShellAlias)) {
+$PowerShellAlias = if ($OwnerLocalAppData) {
+    Join-Path $OwnerLocalAppData 'Microsoft\WindowsApps\pwsh.exe'
+} else { $null }
+if ($OwnerProfileValid -and $PowerShellMSIX -and
+    $PowerShellAlias -and (Test-Path -LiteralPath $PowerShellAlias)) {
     $PowerShell7 = [ordered]@{
         Installed = $true
         Method = 'MSIX'
         Version = [string]$PowerShellMSIX.Version
         Path = [string]$PowerShellMSIX.InstallLocation
     }
-} elseif (Test-Path $PowerShellMSIPath) {
+} elseif ($OwnerProfileValid -and (Test-Path -LiteralPath $PowerShellMSIPath)) {
     $PowerShell7 = [ordered]@{
         Installed = $true
         Method = 'MSI'
@@ -359,6 +400,7 @@ $Facts = [ordered]@{
     KeePass = $KeePass
     LedgerWallet = $LedgerWallet
     ChromePolicy = $ChromePolicy
+    OwnerProfile = $OwnerProfileEvidence
     WalletExtensions = $WalletExtensions
     OtherChromeExtensionIds = $OtherChromeExtensionIds
     PendingReboot = $PendingReboot

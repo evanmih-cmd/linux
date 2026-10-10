@@ -81,7 +81,12 @@ $RecoveryPath = if ($Recovery.Count -eq 1 -and $TargetNumber -ge 0) {
 Add-Check 'winre-on-target-recovery' ($RecoveryPath -ne '' -and $WinRE.IndexOf($RecoveryPath, [StringComparison]::OrdinalIgnoreCase) -ge 0) 'WinRE on target recovery partition' $WinRE
 Add-Check 'chrome-installed' (Check-Installed $Facts.Chrome) 'Google Chrome' $Facts.Chrome
 Add-Check 'edge-installed' (Check-Installed $Facts.Edge) 'Microsoft Edge' $Facts.Edge
-Add-Check 'powershell7-installed' (Check-Installed $Facts.PowerShell7) 'PowerShell 7' $Facts.PowerShell7
+$Owner = $Facts.OwnerProfile
+$OwnerOK = $Owner.Resolved -eq $true -and $Owner.Loaded -eq $true -and
+    $Owner.Name -eq 'owner' -and [string]$Owner.SID -match '^S-1-5-21-' -and
+    [string]$Owner.Path -match '(?i)\\owner$'
+Add-Check 'owner-profile-target' $OwnerOK 'Live local owner SID/profile; not Administrator Protection temporary identity' $Owner
+Add-Check 'powershell7-installed' ($OwnerOK -and (Check-Installed $Facts.PowerShell7)) 'PowerShell 7 registered for owner' $Facts.PowerShell7
 Add-Check 'keepass2-installed' (Check-Installed $Facts.KeePass) 'KeePass 2' $Facts.KeePass
 Add-Check 'ledger-wallet-desktop' (Check-Installed $Facts.LedgerWallet) 'Ledger desktop application' $Facts.LedgerWallet
 $WalletIDs = @('nkbihfbeogaeaoehlefnkodbefgpgknn',
@@ -104,7 +109,7 @@ if ($WalletOK) {
             @($Wallet.DisableReasons).Count -ne 0) { $WalletOK = $false; break }
     }
 }
-Add-Check 'chrome-wallets-verified-six' $WalletOK 'Six official enabled wallet extensions, store provenance and allowlist' $Facts.ChromePolicy
+Add-Check 'chrome-wallets-verified-six' ($WalletOK -and $OwnerOK) 'Six official enabled wallet extensions, store provenance and allowlist' $Facts.ChromePolicy
 $FP = $Facts.BitLockerPolicy
 $FveOK = $FP.UseAdvancedStartup -eq 1 -and $FP.EnableBDEWithNoTPM -eq 0 -and
     $FP.UseTPM -eq 2 -and $FP.UseTPMPIN -eq 2 -and

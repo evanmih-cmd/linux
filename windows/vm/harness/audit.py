@@ -281,11 +281,27 @@ def evaluate(facts):
         )
     )
 
+    owner = facts.get("OwnerProfile") or {}
+    profile_valid = (
+        owner.get("Resolved") is True
+        and owner.get("Name") == "owner"
+        and isinstance(owner.get("SID"), str)
+        and owner["SID"].startswith("S-1-5-21-")
+        and (owner.get("Path") or "").replace("/", "\\").casefold().endswith("\\owner")
+        and owner.get("Loaded") is True
+    )
+    checks.append(check(
+        "owner-profile-target",
+        "PASS" if profile_valid else "FAIL",
+        {key: owner.get(key) for key in ("Name", "SID", "Path", "Loaded", "Resolved")},
+        "Data collected from canonical interactive owner SID, not ephemeral ADMIN_owner"
+    ))
+
     pwsh = facts.get("PowerShell7") or {}
     checks.append(
         check(
             "powershell7-installed",
-            "PASS" if pwsh.get("Installed") is True else "FAIL",
+            "PASS" if profile_valid and pwsh.get("Installed") is True else "FAIL",
             pwsh,
             "PowerShell 7 installed via Microsoft MSIX or MSI",
         )
@@ -337,7 +353,7 @@ def evaluate(facts):
     checks.append(
         check(
             "chrome-wallets-verified-six",
-            "PASS" if wallet_checks_ok and policy_ok and not unknown_extensions
+            "PASS" if profile_valid and wallet_checks_ok and policy_ok and not unknown_extensions
             else "FAIL",
             {
                 "policy_valid": policy_ok,

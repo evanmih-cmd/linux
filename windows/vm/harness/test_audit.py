@@ -66,6 +66,13 @@ def good_facts():
         "PowerShell7": {"Installed": True, "Method": "MSIX", "Version": "7.6.6.0"},
         "KeePass": {"Installed": True, "Version": "2.61.1.0"},
         "LedgerWallet": {"Installed": True, "Version": "4.23.0.0"},
+        "OwnerProfile": {
+            "Name": "owner",
+            "SID": "S-1-5-21-11-22-33-1001",
+            "Path": r"C:\Users\owner",
+            "Loaded": True,
+            "Resolved": True,
+        },
         "ChromePolicy": {
             "ValidJson": True,
             "Ids": ["*", *sorted(WALLET_EXTENSION_IDS)],
@@ -173,6 +180,21 @@ class AuditTests(unittest.TestCase):
         fixture = good_facts()
         fixture["SandboxFeature"]["State"] = "Disabled"
         self.assertIn("windows-sandbox-feature", evaluate(fixture)["failed"])
+
+    def test_audit_rejects_temporary_admin_profile_misattribution(self):
+        fixture = good_facts()
+        fixture["OwnerProfile"]["Name"] = "ADMIN_owner"
+        fixture["OwnerProfile"]["Path"] = r"C:\Users\ADMIN_owner"
+        result = evaluate(fixture)
+        for name in ("owner-profile-target", "powershell7-installed", "chrome-wallets-verified-six"):
+            self.assertIn(name, result["failed"])
+
+    def test_audit_rejects_missing_owner_identity(self):
+        fixture = good_facts()
+        fixture.pop("OwnerProfile")
+        result = evaluate(fixture)
+        for name in ("owner-profile-target", "powershell7-installed", "chrome-wallets-verified-six"):
+            self.assertIn(name, result["failed"])
 
     def test_missing_powershell7_fails(self):
         fixture = good_facts()

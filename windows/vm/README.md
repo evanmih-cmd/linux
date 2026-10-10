@@ -325,3 +325,64 @@ The current VM was not reinstalled/reset, and the original passwordless answer
 DVD was restored to SATA port 4. Structural parity and audit proof in a VM
 do not replace the physical ASUS tests, protected SSD1 preservation gate,
 BitLocker owner enrollment, or final hardware-only acceptance.
+
+
+### Post-reboot operational audit and Windows Sandbox VM limit (2026-10-10)
+
+The earlier **27 PASS / 2 FAIL / 8 NOT_PROVABLE_IN_VM** result was
+recorded **before** the first feature-servicing reboot. It was not a
+functional acceptance. On reboot, Windows completed `Customizing
+features` and returned to the `owner` desktop. The owner manually
+configured a local password and Hello PIN (neither stored in repo/XML).
+Actual Microsoft-signed PowerShell UAC elevation was authorized with
+Windows Hello under `SECUREWS\ADMIN_owner`, confirming that
+Administrator Protection **works in this installed VM after reboot**.
+
+**The first post-reboot audit detected a profile-context flaw.**
+Administrator Protection's short-lived elevated account had its own
+`LOCALAPPDATA`, app registrations and Chrome profile. Reading those
+instead of `SECUREWS\owner` falsely reported missing PowerShell 7 and
+all six wallet extensions. The canonical auditor now resolves the actual
+installed local `owner` SID and its loaded profile through stock WMI,
+checks the owner's PowerShell MSIX with `Get-AppxPackage -User <SID>`,
+and inspects only extension metadata/status inside the owner's Chrome
+profile. Both Windows-native and host evaluators **fail closed** for
+missing or misidentified user profiles; the ephemeral `ADMIN_owner`
+is never accepted as the wallet profile. **No wallet secrets, browser
+cookies or credentials are collected.**
+
+**Verified after reboot:** Windows-native report
+`20261010-091008-2b23855e4874` evaluated to **27 PASS / 3 FAIL /
+8 NOT_PROVABLE_IN_VM** (38 checks). The genuine `owner` profile is
+loaded, PowerShell 7.6.6 is registered there, and all six intended wallet
+extensions remain present and enabled, with their Web Store indicators
+and extension allowlist verified. Genuine VBS runtime status in this
+guest is `VirtualizationBasedSecurityStatus=1` with no security service
+actually running; registry policy PASS must never be described as
+hardware VBS or HVCI runtime PASS.
+
+**Only remaining FAILs:** the two owner-deferred BitLocker protector
+checks and `windows-sandbox-feature`. Crucially,
+`Containers-DisposableClientVM` is **Disabled** after feature-servicing
+reboot, `RestartNeeded=False`. An interactive attempt to start
+`WindowsSandbox` yielded Windows' native *cannot find program* dialog.
+Therefore **Sandbox is not working in this VM** even though DSC
+previously returned 21/21 successful desired-state application. The
+exact Windows servicing rollback/disable reason was not established:
+an exploratory read-only CBS/Event Log probe timed out without a report.
+Do not invent a cause or relabel this check NOT_PROVABLE.
+
+The physical Windows Sandbox product **requires nested hardware
+virtualization to run inside a VM** (Microsoft documentation:
+https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-install ).
+The existing VirtualBox/Hyper-V NEM bench was deliberately configured
+without nested virtualization (`vm_nested_hwvirt=False`), so functional
+Sandbox acceptance is an **ASUS bare-metal gate**, not something this
+bench can prove. Physical acceptance must include: feature Enabled
+**after reboot**, Sandbox actually launches, and its isolated environment
+works. No new VM, artificial exception, disabling the Windows baseline
+feature, or repetitive feature-install/reboot trial was introduced.
+
+Observed machine after diagnostics: `Desktop-Windows-11-Pro-TwoDisk`
+`Running`, Guest Additions `Desktop`, original passwordless
+`Autounattend.iso` re-mounted on SATA4, snapshot count 1.
