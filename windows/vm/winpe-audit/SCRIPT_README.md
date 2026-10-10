@@ -38,6 +38,8 @@ U:\AUDIT.CMD N M S W R F > U:\audit-report.txt
 
 **Безопасность:** `diskpart /s` внутри аудита использует только `list`, `select`, `detail`, `uniqueid disk` (без `id=`). Ни одной команды `clean`, `format`, `create`, `shrink`, `remove`, `assign`, `online` или изменяющей BCD/реестр. Временные отчёты записываются исключительно на RAM-диск `X:`. `EXTRA.JS` вообще не создаёт файлов и не запускает процессов. Это **аудит**, а не скрипт установки.
 
+**Для физического AMD RAID:** этот read-only GPT/BCD/WinRE-аудит **не доказывает**, что `rcbottom`/`rcraid` стали boot-critical в offline установленной Windows или что WinRE видит RAID LUN. Дополнительные DISM-проверки `Boot Critical`, фактическая загрузка WinOps и доступ из WinRE обязательны по [AMD_RAID_BOOT.md](../deployment/AMD_RAID_BOOT.md). `PASS` этого аудитора нельзя использовать вместо них.
+
 ## Границы доказательств
 
 `FAIL` означает обнаруженное нарушение. `NOT_PROVABLE` остаётся только там, где недостаточно данных или проверка невозможна **до загрузки новой ОС**, а не из-за отсутствующего `findstr`/PowerShell/средства сравнения XML:
