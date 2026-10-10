@@ -119,24 +119,8 @@
             pWin.size > 2048 * MiB;
         // WMI starts at the first usable aligned LBA and the last partition
         // ends just before backup GPT. Up to 2MiB tail covers 512e and 4Kn.
-        // Keep the exact strict acceptance predicate, but report which
-        // byte-precise part actually failed. No changes to partition layout.
-        var geometryFailures = [];
-        if (!mapping) {
-            geometryFailures.push("volume_mapping_missing");
-        } else {
-            if (pEsp.size !== 300 * MiB) geometryFailures.push("esp_size_bytes_" + pEsp.size + "_expected_" + (300 * MiB));
-            if (pRe.size !== 2048 * MiB) geometryFailures.push("winre_size_bytes_" + pRe.size + "_expected_" + (2048 * MiB));
-            var msrGap = pWin.offset - (pEsp.offset + pEsp.size);
-            if (msrGap !== 16 * MiB) geometryFailures.push("msr_gap_bytes_" + msrGap + "_expected_" + (16 * MiB));
-            var winreGap = pRe.offset - (pWin.offset + pWin.size);
-            if (winreGap !== 0) geometryFailures.push("windows_winre_gap_bytes_" + winreGap + "_expected_0");
-            var tailBytes = diskSize - (pRe.offset + pRe.size);
-            if (tailBytes < 0 || tailBytes > 2 * MiB) geometryFailures.push("disk_tail_bytes_" + tailBytes + "_allowed_0_to_" + (2 * MiB));
-            if (pWin.size <= 2048 * MiB) geometryFailures.push("windows_size_bytes_" + pWin.size + "_must_exceed_" + (2048 * MiB));
-        }
         verdict("target.partition_sizes_exact", exact ? "PASS" : "FAIL",
-                exact ? "ESP300_MSR16_WindowsRemainder_Recovery2048_end" : geometryFailures.join("__"));
+                exact ? "ESP300_MSR16_WindowsRemainder_Recovery2048_end" : "Wrong_partition_sizes_offsets_or_tail");
         var diskpart = safeText(diskpartLog);
         var guidMatch = /Disk ID:\s*\{?([0-9a-fA-F-]{36})\}?/i.exec(diskpart);
         diskID = guidMatch ? guidMatch[1].toLowerCase() : "";
