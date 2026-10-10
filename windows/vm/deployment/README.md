@@ -32,6 +32,14 @@ certutil -hashfile U:\PostInstall\DSC-3.3.0-x86_64-pc-windows-msvc.zip SHA256
 
 После копирования начинается уже существующая процедура §1–§6. В WinPE буква флэшки **может быть не `U:`**: находите её повторно через `diskpart` → `list volume`; все номера дисков устанавливайте только по фактическим устройствам. Не нажимайте «Install now» в Windows Setup: используется существующий ручной DISM-путь, после которого XML копируется в `W:\Windows\Panther\Unattend.xml` (§4). Подготовка файлов на USB **не означает разрешения очищать SSD2 до прохождения ASUS/SSD1 preflight**.
 
+### AMD RAID на ASUS: дополнение к установке (обязательно для WinOps)
+
+**Если WinOps находится на AMD RAID LUN, до `1 и разметки необходимо выполнить [дополнение AMD_RAID_BOOT.md](AMD_RAID_BOOT.md).** Оно не заменяет эту инструкцию и не разрешает менять SSD1. Должна загрузиться WinPE с совместимым драйвером и показать **виртуальную WinOps LUN**, а не физический NVMe ~3.7 TB как `Unknown/MBR`. В этом случае `clean` / `convert gpt` физического SSD2 **запрещены**: AMD предупреждает о риске уничтожения RAID metadata.
+
+Единственное одобренное исключение из сохранения исходных Microsoft-файлов на уже готовой USB — **адресная замена `sources\boot.wim`** на проверенную рабочую копию с AMD RAID INF при сохранении **отдельного неизменённого оригинала** на WinHome. Если USB уже модифицирована, не считать её копию оригиналом. Пересоздавать USB и менять XML/`install.*` не требуется. `drvload` с сообщением «driver requires reboot» не является успешной загрузкой AMD RAID.
+
+Обязательны **три отдельные среды:** (1) Setup WinPE `boot.wim`, (2) offline установленная Windows после `DISM /Apply-Image` и **до boot**, (3) `Winre.wim` **до копирования на R:**. Порядок, штатные DISM-команды и проверка именно `Boot Critical` описаны в [AMD_RAID_BOOT.md](AMD_RAID_BOOT.md). Результаты и возможные ошибки фиксировать в [ASUS журнале #9](https://github.com/evanmih-cmd/linux/issues/9).
+
 ## 1. До удаления любых разделов
 
 Загрузить **официальный ISO Windows 11** в UEFI-режиме и открыть командную строку WinPE (`Shift+F10`). Найти существующий SSD1 по размеру и `detail disk`, вручную перевести его Offline. Затем выбрать целевой диск по **фактической идентичности**, не по постоянному номеру.
@@ -111,6 +119,8 @@ dism /Get-ImageInfo /ImageFile:E:\sources\install.wim
 dism /Apply-Image /ImageFile:E:\sources\install.wim /Name:"Windows 11 Pro" /ApplyDir:W:\
 ```
 
+**ОБЯЗАТЕЛЬНЫЙ RAID-этап перед первым boot:** если цель — AMD RAID LUN `WinOps`, после успешного `/Apply-Image` **прямо сейчас** выполнить [`AMD_RAID_BOOT.md`, раздел 3](AMD_RAID_BOOT.md#3-после-dism-apply-image-добавить-загрузочный-raid-в-установленную-winops): три vendor INF в offline `W:\Windows` и индивидуальные `DISM /Get-DriverInfo`. Проверить архитектуру и `Boot Critical: Yes` для необходимых драйверов загрузочного пути. Просто запись в Driver Store или одна WinPE с драйвером недостаточны. При ошибке **не продолжать BCDBoot/first boot**.
+
 Дождаться `The operation completed successfully`.
 
 ```cmd
@@ -123,6 +133,8 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum all
 `/s S:` явно указывает **собственный ESP целевого диска**, без поиска ESP на SSD1. С `/s` BCDBoot не создаёт запись UEFI NVRAM; независимую загрузку из firmware Boot Menu надо доказать отдельно на ASUS.
 
 ```cmd
+rem ПРЕДВАРИТЕЛЬНО ДЛЯ AMD RAID: выполнить раздел 4 AMD_RAID_BOOT.md.
+rem До copy обязательны mount Winre.wim, Add-Driver для rcbottom/rcraid/rccfg и /Commit.
 md R:\Recovery\WindowsRE
 copy W:\Windows\System32\Recovery\Winre.wim R:\Recovery\WindowsRE\Winre.wim
 W:\Windows\System32\reagentc.exe /setreimage /path R:\Recovery\WindowsRE /target W:\Windows
@@ -277,6 +289,8 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "U:\PostInstall\
 На тестовой VM допускаются отдельные тестовые пароль/PIN, заданные
 после установки и не переносимые на ASUS. Эта процедура **не** входит
 в `Autounattend.xml`; на реальном ASUS учётные данные выбирает владелец.
+
+**Дополнительная приёмка AMD RAID:** при установке на `WinOps`, помимо критериев ниже, требуются подтверждённые boot-critical AMD RAID INF в offline Windows и обновлённом WinRE, успешное завершение DISM mount/commit, фактическая первая загрузка именно с RAID LUN, наличие AMD RAID-устройств и работающий доступ к массиву **из WinRE**. Подробности — [AMD_RAID_BOOT.md](AMD_RAID_BOOT.md). `DISM /Get-Drivers`, `Boot Critical: Yes` и запись политики по отдельности не доказывают работающую систему.
 
 ## 6. Критерии принятия
 
