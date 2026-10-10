@@ -15,6 +15,17 @@ Rules:
   the resource semantics are hardware-independent.
 - VM-only transport/bootstrap code is not part of the desired state.
 
+**Required manual prerequisite (physical ASUS):** before running this
+post-install desired state, the owner must set an account password when
+needed, enroll a working Windows Hello PIN, and verify that administrative
+elevation can be approved. Administrator Protection is enabled by this
+manifest; enabling it before Hello enrollment locked out the passwordless
+VM account's UAC elevation after reboot. This is an installation runbook
+gate, **not** a request to put credentials into unattended XML or DSC.
+See [the ASUS deployment procedure](../vm/deployment/README.md#обязательный-ручной-шаг-windows-hello-до-post-install).
+After the feature-configuration reboot, verify live Hello elevation and
+a functional Windows Sandbox launch; registry read-back is not sufficient.
+
 The supported execution path on both the VM and physical ASUS is native
 Microsoft `dsc.exe config set --file workstation.winget --output-format json`
 via `windows/vm/payload/apply-configuration.ps1`. The launcher requires the
