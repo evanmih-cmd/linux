@@ -20,6 +20,9 @@ from vbox import VBox
 from live_audit import guest_property,mount_media,type_one_command,restore_media
 
 PREFIX="/desktopwindows/postinstall/"
+# Clean DSC + optional Windows feature installation took 3,690 seconds in the
+# actual two-disk VM. Bound report collection at 90 minutes, not 15/30.
+REPORT_TIMEOUT_SECONDS=5400
 
 def make_iso(cfg,d,runid):
     p=d/"media";p.mkdir()
@@ -42,7 +45,7 @@ def make_iso(cfg,d,runid):
         "-o",str(iso),str(p)],check=True,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     return iso
 
-def wait_log(box,runid,timeout=900):
+def wait_log(box,runid,timeout=REPORT_TIMEOUT_SECONDS):
     base=PREFIX+runid
     deadline=time.monotonic()+timeout
     last=None
@@ -88,7 +91,9 @@ def main():
             print("MOUNTED; opening Windows Run dialog",flush=True)
             type_one_command(box,"F:\\RUN.CMD",open_run_dialog=True)
             print("COMMAND_SUBMITTED; UAC consent might be required",flush=True)
-            outcome,raw=wait_log(box,runid,900)
+            # Collect for the observed full clean-install duration with a
+            # safety margin; timeout never terminates the guest DSC process.
+            outcome,raw=wait_log(box,runid)
             (dest/"configuration.log").write_bytes(raw)
             print("OUTCOME",outcome,"LOG_PATH",dest/"configuration.log",flush=True)
             print("LOG_TAIL",raw.decode("utf-8-sig",errors="replace")[-7500:],flush=True)
