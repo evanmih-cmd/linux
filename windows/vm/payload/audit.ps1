@@ -168,11 +168,20 @@ $Edge = if (Test-Path $EdgePath) {
     [ordered]@{ Installed = $false; Version = $null; Path = $EdgePath }
 }
 
-$KeePassPath = 'C:\Program Files (x86)\KeePass2x\KeePass.exe'
+# KeePass installer location varies by package/build; verify the actual
+# executable in the vendor's standard Program Files directories.
+$KeePassCandidates = @(
+    (Join-Path $env:ProgramFiles 'KeePass Password Safe 2\KeePass.exe')
+    (Join-Path ${env:ProgramFiles(x86)} 'KeePass Password Safe 2\KeePass.exe')
+    (Join-Path ${env:ProgramFiles(x86)} 'KeePass2x\KeePass.exe')
+)
+$KeePassPath = $KeePassCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
 $KeePass = [ordered]@{
-    Installed = (Test-Path $KeePassPath)
-    Version = if (Test-Path $KeePassPath) { (Get-Item $KeePassPath).VersionInfo.ProductVersion } else { $null }
-    Path = $KeePassPath
+    Installed = [bool]$KeePassPath
+    Version = if ($KeePassPath) { [string](Get-Item -LiteralPath $KeePassPath).VersionInfo.ProductVersion } else { $null }
+    Path = if ($KeePassPath) { [string]$KeePassPath } else { $null }
 }
 
 $LedgerWalletPath = 'C:\Program Files\Ledger Wallet\Ledger Wallet.exe'
