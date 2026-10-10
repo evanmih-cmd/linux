@@ -1,6 +1,6 @@
 # AMD RAID: boot-critical драйверы WinOps (WinPE / Windows / WinRE)
 
-**Обязательное дополнение к [основной инструкции](README.md), а не её замена.** Старые `0–`6 с ручной разметкой, DISM, ESP/BCD, WinRE, XML и аудитом остаются действующими. Применяется только к физическому ASUS FA401EA при использовании RAID LUN `WinOps` на SSD2 (Lexar NM790); на VirtualBox без AMD RAID не требуется.
+**Обязательное дополнение к [основной инструкции](README.md), а не её замена.** Старые разделы 0–6 с ручной разметкой, DISM, ESP/BCD, WinRE, XML и аудитом остаются действующими. Применяется только к физическому ASUS FA401EA при использовании RAID LUN `WinOps` на SSD2 (Lexar NM790); на VirtualBox без AMD RAID не требуется.
 
 **Наблюдение, ещё не PASS:** исходная WinPE показывала физическую NM790 ~3.7 TB как Unknown/MBR вместо целевой LUN; `drvload rcbottom\rcbottom.inf` потребовал reboot. Владелец уже подготовил изменённый `boot.wim` в WinHome и записывал его на существующую USB. Загрузка именно RAID LUN с обновлённой флэшки пока не подтверждена.
 
@@ -46,7 +46,7 @@ dism /Image:C:\WinOps-WinPE\mount /Add-Driver /Driver:"%RAID%\rccfg\rccfg.inf"
 dism /Image:C:\WinOps-WinPE\mount /Get-Drivers /Format:List
 ```
 
-**STOP при любой ошибке / неподтверждённом индексе**; не фиксировать испорченный WIM. После трёх успешных `Add-Driver` и проверки фактических пакетов:
+**STOP при любой ошибке / неподтверждённом индексе**; не фиксировать испорченный WIM. По результату `/Get-Drivers` определить OEM-имена трёх пакетов и выполнить `dism /Image:C:\WinOps-WinPE\mount /Get-DriverInfo /Driver:oemNN.inf` **для каждого, подставляя реальное имя**; сверить `Boot Critical` для `rcbottom` и `rcraid`, подписанный x64 пакет и Hardware IDs. Это свойство пакета; доступность настоящей LUN доказывается только загрузкой WinPE на ASUS. Если WIM уже смонтирован и какой-то `Add-Driver` завершился ошибкой, откатить только рабочий mount командой `dism /Unmount-Image /MountDir:C:\WinOps-WinPE\mount /Discard`; резервный `boot.original.wim` не меняется. После трёх успешных `Add-Driver` и проверки фактических пакетов:
 
 ```cmd
 dism /Unmount-Image /MountDir:C:\WinOps-WinPE\mount /Commit
@@ -76,7 +76,7 @@ exit
 
 **PASS:** виден отдельный логический RAID-диск именно того размера, который назначен `WinOps` в UEFI/RAIDXpert2. Дополнительно вручную `detail disk` для каждого нужного устройства, зафиксировать действительные номера после загрузки драйверов. **STOP:** виден лишь физический NVMe ~3.7 TB как Unknown/MBR. AMD официально предупреждает: попытки удалять/форматировать разделы физического NVMe без драйвера могут уничтожить RAID metadata. Не применять `clean`/`convert gpt` к такому представлению.
 
-До ручной разметки в [основном runbook `1–`2](README.md) идентифицировать и перевести защищаемый SSD1/WinHome **Offline**, убедиться, что выбран именно WinOps LUN. Не переносить номера Disk 0/Disk 1 из VM или прошлой WinPE. Далее разметка вручную: ESP 300 MiB, MSR 16 MiB, Windows, WinRE 2048 MiB в конце.
+До ручной разметки в [основном runbook, разделы 1–2](README.md) идентифицировать и перевести защищаемый SSD1/WinHome **Offline**, убедиться, что выбран именно WinOps LUN. Не переносить номера Disk 0/Disk 1 из VM или прошлой WinPE. Далее разметка вручную: ESP 300 MiB, MSR 16 MiB, Windows, WinRE 2048 MiB в конце.
 
 ## 3. После DISM Apply-Image: добавить загрузочный RAID в установленную WinOps
 
@@ -118,7 +118,7 @@ md W:\WinOps-DISM-Scratch
 dism /Get-ImageInfo /ImageFile:W:\Windows\System32\Recovery\Winre.wim
 ```
 
-**STOP**, если WIM отсутствует, index 1 не подтверждён, каталог монтирования не пуст или недостаточно места на W:. При наличии мешающих read-only/system/hidden атрибутов работать только с копией WinRE на WinOps; Microsoft описывает снятие атрибутов при offline-servicing WinRE.
+**STOP**, если WIM отсутствует, index 1 не подтверждён, каталог монтирования не пуст или недостаточно места на W:. Если именно атрибуты read-only/system/hidden на WinOps препятствуют монтированию, сначала посмотреть `attrib W:\Windows\System32\Recovery\Winre.wim`; при необходимости снять их **с целевого файла WinOps** командой `attrib -r -h -s W:\Windows\System32\Recovery\Winre.wim` и повторить Mount-Image. Не трогать WinHome.
 
 ```cmd
 dism /Mount-Image /ImageFile:W:\Windows\System32\Recovery\Winre.wim /Index:1 /MountDir:W:\WinOps-WinRE-Mount /ScratchDir:W:\WinOps-DISM-Scratch
@@ -128,7 +128,7 @@ dism /Image:W:\WinOps-WinRE-Mount /Add-Driver /Driver:"%RAID%\rccfg\rccfg.inf" /
 dism /Image:W:\WinOps-WinRE-Mount /Get-Drivers /Format:List
 ```
 
-По `Published Name` проверить реальные три INF и через `/Get-DriverInfo` подтвердить boot-critical **именно на WinRE WIM** для нужных storage-компонентов. Только после этого:
+По `Published Name` проверить реальные три INF и для каждого реального `oemNN.inf` выполнить `dism /Image:W:\WinOps-WinRE-Mount /Get-DriverInfo /Driver:oemNN.inf`. Проверить boot-critical **именно на WinRE WIM** для `rcbottom` и `rcraid` и правильные x64/HW IDs; `rccfg` не обязан быть boot-critical. Только после этого:
 
 ```cmd
 dism /Unmount-Image /MountDir:W:\WinOps-WinRE-Mount /Commit /ScratchDir:W:\WinOps-DISM-Scratch
