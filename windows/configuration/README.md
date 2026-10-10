@@ -15,6 +15,8 @@ Rules:
   the resource semantics are hardware-independent.
 - VM-only transport/bootstrap code is not part of the desired state.
 
+**AMD RAID boot prerequisite for physical WinOps:** if Windows is deployed to an RAIDXpert2 virtual LUN, first use the [existing installation runbook](../vm/deployment/README.md) **together with its [AMD RAID boot-critical supplement](../vm/deployment/AMD_RAID_BOOT.md)**. These steps cover the distinct driver locations in Setup WinPE, the offline installed Windows OS, and WinRE before the first boot. Merely loading a RAID driver in WinPE or staging an INF in the OS is not proof of boot-critical readiness. This is storage/installation work, **not a DSC or WinGet resource**. Keep all physical SSD1/RAID checks in [#9](https://github.com/evanmih-cmd/linux/issues/9).
+
 **Required manual prerequisite (physical ASUS):** before running this
 post-install desired state, the owner must set an account password when
 needed, enroll a working Windows Hello PIN, and verify that administrative
