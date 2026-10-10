@@ -1,0 +1,301 @@
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+
+metadata:
+  winget:
+    processor:
+      identifier: dscv3
+
+resources:
+  - type: Microsoft.WinGet/Package
+    name: PowerShell
+    properties:
+      id: Microsoft.PowerShell
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install or update the latest stable Microsoft PowerShell release.
+
+  - type: Microsoft.WinGet/Package
+    name: Chrome
+    properties:
+      id: Google.Chrome
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install or update Google Chrome for the dedicated sensitive workload profile.
+
+  - type: Microsoft.WinGet/Package
+    name: Edge
+    properties:
+      id: Microsoft.Edge
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Microsoft Edge is installed for ordinary browsing workloads.
+
+  - type: Microsoft.WinGet/Package
+    name: KeePass
+    properties:
+      id: DominikReichl.KeePass
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install official KeePass 2, with native KDBX 4.x database support.
+
+  - type: Microsoft.WinGet/Package
+    name: LedgerWallet
+    properties:
+      id: LedgerHQ.LedgerLive
+      source: winget
+      useLatest: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Install official Ledger Wallet desktop (formerly Ledger Live); never import hardware seed.
+
+  # Chrome Enterprise ExtensionSettings policy: IDs are anchored to publisher-
+  # verified Chrome Web Store listings in browser-wallets.md. No CRX sideloads.
+  # normal_installed keeps user ability to disable extensions, unlike forced install.
+  # Edge is for normal workloads; this policy applies only to Google Chrome.
+  - type: Microsoft.Windows/RegistryList
+    name: ChromeWalletExtensionSettings
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Google\Chrome
+          valueName: ExtensionSettings
+          valueData:
+            String: >-
+              {"*":{"installation_mode":"blocked"},
+              "nkbihfbeogaeaoehlefnkodbefgpgknn":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+              "bfnaelmomeimhlpmgjnjophhpkkoljpa":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+              "acmacodkjbdgmoleebolmdjonilkdbch":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+              "egjidjbpglichdcondbcbdnbeeppgdph":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+              "aflkmfhebedbjioipglgcbcmnbpgliof":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"},
+              "klghhnkeealcohjjanjjdaeeggmfmlpl":{"installation_mode":"normal_installed","update_url":"https://clients2.google.com/service/update2/crx"}}
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Chrome wallet allowlist and store-only normal installation for six publisher-verified IDs.
+
+  - type: Microsoft.Windows/RegistryList
+    name: AdministratorProtectionMode
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+          valueName: TypeOfAdminApprovalMode
+          valueData:
+            DWord: 2
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable Windows 11 Administrator Protection; requires reboot.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerAdvancedStartup
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: UseAdvancedStartup
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable Microsoft BitLocker advanced startup authentication policy.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerRequireRealTPM
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: EnableBDEWithNoTPM
+          valueData:
+            DWord: 0
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow BitLocker OS unlock without an available TPM.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerAllowTPMAtProvisioning
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: UseTPM
+          valueData:
+            DWord: 2
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Allow TPM-only activation before owner enrolls a startup PIN; interim stage ONLY.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerAllowTPMAndPIN
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: UseTPMPIN
+          valueData:
+            DWord: 2
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Permit later TPM+PIN enrollment, without requiring a PIN before owner setup.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerDisableTPMStartupKey
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: UseTPMKey
+          valueData:
+            DWord: 0
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow USB startup key as an alternate normal boot path.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerDisableTPMKeyPIN
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: UseTPMKeyPIN
+          valueData:
+            DWord: 0
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Disallow TPM+USB key+PIN combination; standard target is TPM+PIN.
+
+  - type: Microsoft.Windows/RegistryList
+    name: BitLockerMinStartupPIN
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SOFTWARE\Policies\Microsoft\FVE
+          valueName: MinimumPIN
+          valueData:
+            DWord: 8
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Require minimum eight characters for owner-chosen numeric startup PIN.
+
+  # Built-in native DSC resource, run by official standalone DSC 3.3.0.
+  # The Store AppX DSC package rejects this native DISM resource; never
+  # downgrade to an ad hoc DISM script. Feature Installed is not proof of
+  # successful nested Sandbox runtime in a virtual machine.
+  - type: Microsoft.Windows/OptionalFeatureList
+    name: WindowsSandboxFeature
+    properties:
+      features:
+        - featureName: Containers-DisposableClientVM
+          state: Installed
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable first-party Windows Sandbox optional feature via DSC.
+
+  # Explicit key existence and ordering for a fresh Windows installation.
+  # Native DSC registry value writes previously failed with ERROR_FILE_NOT_FOUND.
+  - type: Microsoft.Windows/RegistryList
+    name: DeviceGuardKey
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Device Guard policy parent key exists.
+
+  - type: Microsoft.Windows/RegistryList
+    name: DeviceGuardScenariosKey
+    dependsOn:
+      - "[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardKey')]"
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure Device Guard Scenarios parent key exists.
+
+  - type: Microsoft.Windows/RegistryList
+    name: HVCIScenarioKey
+    dependsOn:
+      - "[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardScenariosKey')]"
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Ensure HVCI policy key exists.
+
+  - type: Microsoft.Windows/RegistryList
+    name: EnableVBS
+    dependsOn:
+      - "[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardKey')]"
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+          valueName: EnableVirtualizationBasedSecurity
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable virtualization-based security.
+
+  - type: Microsoft.Windows/RegistryList
+    name: RequireSecureBootForVBS
+    dependsOn:
+      - "[resourceId('Microsoft.Windows/RegistryList', 'DeviceGuardKey')]"
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+          valueName: RequirePlatformSecurityFeatures
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Require Secure Boot as the VBS platform security feature.
+
+  - type: Microsoft.Windows/RegistryList
+    name: EnableHVCI
+    dependsOn:
+      - "[resourceId('Microsoft.Windows/RegistryList', 'HVCIScenarioKey')]"
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+          valueName: Enabled
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Enable HVCI / Memory Integrity.

@@ -1,0 +1,41 @@
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+
+# Physical ASUS finalization stage ONLY. Apply after first successful boot and
+# verifying actual VBS/HVCI runtime, installed drivers and WinRE recovery route.
+# Exclude from disposable NEM test bench: nested VTL1 cannot be proven there.
+# Once EFI lock is enrolled, reversing this can require entering ASUS UEFI
+# and temporarily disabling Secure Boot to restore a nonbooting installation.
+# This is NOT the VBS Mandatory=1 fail-stop boot option.
+metadata:
+  winget:
+    processor:
+      identifier: dscv3
+
+resources:
+  - type: Microsoft.Windows/RegistryList
+    name: RequireVBSUEFILockOnPhysicalASUS
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard
+          valueName: Locked
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Prevent remote/policy-only VBS disable by locking state to physical UEFI presence.
+
+  - type: Microsoft.Windows/RegistryList
+    name: RequireHVCIUEFILockOnPhysicalASUS
+    properties:
+      registryEntries:
+        - keyPath: HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity
+          valueName: Locked
+          valueData:
+            DWord: 1
+          _exist: true
+    metadata:
+      winget:
+        securityContext: elevated
+      description: Lock active HVCI to UEFI after driver and WinRE acceptance on physical ASUS.
