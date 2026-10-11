@@ -1,0 +1,1652 @@
+; Microsoft Windows 11 26H2 Security Baseline v2, verified SHA256 369f8dad02485b3fc20be089649a29eb6432a7d0f63cef75addace9685e45d18
+; WinOps final policy, no non-domain delta, UEFI lock, domain-LAPS or unsupported Pro features
+
+Computer
+SOFTWARE\Policies\Microsoft\FVE
+UseEnhancedPin
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\FVE
+RDVDenyCrossOrg
+DWORD:0
+
+Computer
+SOFTWARE\Policies\Microsoft\FVE
+DisableExternalDMAUnderLock
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Power\PowerSettings\abfc2519-3608-4c2a-94ea-171b0ed546ab
+DCSettingIndex
+DWORD:0
+
+Computer
+SOFTWARE\Policies\Microsoft\Power\PowerSettings\abfc2519-3608-4c2a-94ea-171b0ed546ab
+ACSettingIndex
+DWORD:0
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions
+DenyDeviceClasses
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions
+DenyDeviceClassesRetroactive
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions\DenyDeviceClasses
+*
+DELETEALLVALUES
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions\DenyDeviceClasses
+1
+SZ:{d48179be-ec20-11d1-b6b8-00c04fa372a7}
+
+Computer
+System\CurrentControlSet\Policies\Microsoft\FVE
+RDVDenyWriteAccess
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender
+PUAProtection
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender
+DisableLocalAdminMerge
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender
+HideExclusionsFromLocalAdmins
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender
+DisableRoutinelyTakingAction
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Features
+PassiveRemediation
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\MpEngine
+MpCloudBlockLevel
+DWORD:2
+
+Computer
+Software\Policies\Microsoft\Windows Defender\MpEngine
+MpBafsExtendedTimeout
+DWORD:50
+
+Computer
+Software\Policies\Microsoft\Windows Defender\NIS
+EnableConvertWarnToBlock
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableIOAVProtection
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableRealtimeMonitoring
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableScriptScanning
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableBehaviorMonitoring
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+RealtimeScanDirection
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableOnAccessProtection
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+DisableScanOnRealtimeEnable
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Real-Time Protection
+OobeEnableRtpAndSigUpdate
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Reporting
+EnableDynamicSignatureDroppedEventReporting
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Scan
+DisableRemovableDriveScanning
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Scan
+QuickScanIncludeExclusions
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Spynet
+SpynetReporting
+DWORD:2
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Spynet
+DisableBlockAtFirstSeen
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Spynet
+SubmitSamplesConsent
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR
+ExploitGuard_ASR_Rules
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+75668c1f-73b5-4cf0-bb93-3ecf5cb7cc84
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+3b576869-a4ec-4529-8536-b80a7769e899
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+d4f940ab-401b-4efc-aadc-ad5f3c50688a
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+5beb7efe-fd9a-4556-801d-275e5ffc04cc
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+d3e037e1-3eb8-44c8-a917-57927947596d
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+be9ba2d9-53ea-4cdc-84e5-9b1eeee46550
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+b2b3f03d-6a65-4f7b-a9c7-1c7ef74a9ba4
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+26190899-1602-49e8-8b27-eb1d0a1ce869
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+c1db55ab-c21a-4637-bb3f-a12568109d35
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+e6db77e5-3df2-4cf1-b95a-636979351e5b
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+56a863a9-875e-4185-98a7-b882c64b5ce5
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules
+d1e49aac-8f56-4280-b9ba-993a6d77406c
+SZ:2
+
+Computer
+Software\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\Network Protection
+EnableNetworkProtection
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\Ext
+RunThisTimeEnabled
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\Ext
+VersionCheckEnabled
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Download
+RunInvalidSignatures
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Download
+CheckExeSignatures
+SZ:yes
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main
+Isolation64Bit
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main
+DisableEPMCompat
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main
+Isolation
+SZ:PMEM
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main
+DisableInternetExplorerLaunchViaCOM
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_DISABLE_MK_PROTOCOL
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_DISABLE_MK_PROTOCOL
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_DISABLE_MK_PROTOCOL
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_HANDLING
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_HANDLING
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_HANDLING
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_SNIFFING
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_SNIFFING
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_MIME_SNIFFING
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_ACTIVEXINSTALL
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_ACTIVEXINSTALL
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_ACTIVEXINSTALL
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_FILEDOWNLOAD
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_FILEDOWNLOAD
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_RESTRICT_FILEDOWNLOAD
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_SECURITYBAND
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_SECURITYBAND
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_SECURITYBAND
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_WINDOW_RESTRICTIONS
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_WINDOW_RESTRICTIONS
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_WINDOW_RESTRICTIONS
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_ZONE_ELEVATION
+(Reserved)
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_ZONE_ELEVATION
+explorer.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_ZONE_ELEVATION
+iexplore.exe
+SZ:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\PhishingFilter
+PreventOverrideAppRepUnknown
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\PhishingFilter
+PreventOverride
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\PhishingFilter
+EnabledV9
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Restrictions
+NoCrashDetection
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Security
+DisableSecuritySettingsCheck
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Security\ActiveX
+BlockNonAdminActiveXInstall
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\AxInstaller
+OnlyUseAXISForActiveXInstall
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+Security_zones_map_edit
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+Security_options_edit
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+Security_HKLM_only
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+CertificateRevocation
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+PreventIgnoreCertErrors
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+WarnOnBadCertRecving
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+EnableSSL3Fallback
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings
+SecureProtocols
+DWORD:10240
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\0
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\1
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\2
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\3
+2301
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\4
+2301
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Lockdown_Zones\4
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap
+UNCAsIntranet
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\0
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\0
+270C
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\1
+270C
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\1
+1201
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\1
+1C00
+DWORD:65536
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\2
+1C00
+DWORD:65536
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\2
+270C
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\2
+1201
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2001
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2102
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1802
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+160A
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1201
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1406
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1804
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2200
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1209
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1206
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1809
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2500
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2103
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1606
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2402
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2004
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1001
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1A00
+DWORD:65536
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2708
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1004
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+120b
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1407
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1409
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+270C
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1607
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2709
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2101
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+2301
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+1806
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+120c
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\3
+140C
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1608
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1201
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1001
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1607
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+120b
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1809
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1004
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1606
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1407
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+160A
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1406
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2102
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2004
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2200
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2000
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1402
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1803
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2402
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1400
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1A00
+DWORD:196608
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2001
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2500
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1409
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1C00
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1209
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+270C
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1206
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2708
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1802
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2103
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2709
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1405
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2101
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+2301
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1200
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1804
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+1806
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+120c
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\Zones\4
+140C
+DWORD:3
+
+Computer
+Software\Microsoft\WcmSvc\wifinetworkmanager\config
+AutoConnectAllowedOEM
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\CredUI
+EnumerateAdministrators
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\Explorer
+NoDriveTypeAutoRun
+DWORD:255
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\Explorer
+NoWebServices
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\Explorer
+NoAutorun
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System
+MSAOptional
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System
+DisableAutomaticRestartSignOn
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System
+LocalAccountTokenFilterPolicy
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System
+EnableMPR
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit
+ProcessCreationIncludeCmdLine_Enabled
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\CredSSP\Parameters
+AllowEncryptionOracle
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters
+PKINITHashAlgorithmConfigurationEnabled
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters
+PKINITSHA1
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters
+PKINITSHA256
+DWORD:3
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters
+PKINITSHA384
+DWORD:3
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\KDC\Parameters
+PKINITSHA512
+DWORD:3
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+PKInitHashAlgorithmConfigurationEnabled
+DWORD:1
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+PKInitSHA1
+DWORD:0
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+PKInitSHA256
+DWORD:3
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+PKInitSHA384
+DWORD:3
+
+Computer
+Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+PKInitSHA512
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Biometrics\FacialFeatures
+EnhancedAntiSpoofing
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Internet Explorer\Feeds
+DisableEnclosureDownload
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51
+DCSettingIndex
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51
+ACSettingIndex
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\AppPrivacy
+LetAppsActivateWithVoiceAboveLock
+DWORD:2
+
+Computer
+Software\Policies\Microsoft\Windows\Bowser
+EnableMailslots
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\CloudContent
+DisableWindowsConsumerFeatures
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\CredentialsDelegation
+AllowProtectedCreds
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\EventLog\Application
+MaxSize
+DWORD:32768
+
+Computer
+Software\Policies\Microsoft\Windows\EventLog\Security
+MaxSize
+DWORD:196608
+
+Computer
+Software\Policies\Microsoft\Windows\EventLog\System
+MaxSize
+DWORD:32768
+
+Computer
+Software\Policies\Microsoft\Windows\Explorer
+NoAutoplayfornonVolume
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\Explorer
+DisableMotWOnInsecurePathCopy
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\GameDVR
+AllowGameDVR
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\Installer
+AlwaysInstallElevated
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\Installer
+EnableUserControl
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\Kernel DMA Protection
+DeviceEnumerationPolicy
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+AuditClientDoesNotSupportEncryption
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+AuditClientDoesNotSupportSigning
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+AuditInsecureGuestLogon
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+EnableAuthRateLimiter
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+MaxSmb2Dialect
+DWORD:785
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+MinSmb2Dialect
+DWORD:768
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanServer
+InvalidAuthenticationDelayTimeInMs
+DWORD:2000
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+AllowInsecureGuestAuth
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+AuditInsecureGuestLogon
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+AuditServerDoesNotSupportEncryption
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+AuditServerDoesNotSupportSigning
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+MaxSmb2Dialect
+DWORD:785
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+MinSmb2Dialect
+DWORD:768
+
+Computer
+Software\Policies\Microsoft\Windows\LanmanWorkstation
+RequireEncryption
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\Network Connections
+NC_ShowSharedAccessUI
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\NetworkProvider
+EnableMailslots
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths
+\\*\SYSVOL
+SZ:RequireMutualAuthentication=1,RequireIntegrity=1
+
+Computer
+Software\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths
+\\*\NETLOGON
+SZ:RequireMutualAuthentication=1,RequireIntegrity=1
+
+Computer
+Software\Policies\Microsoft\Windows\Personalization
+NoLockScreenCamera
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\Personalization
+NoLockScreenSlideshow
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging
+EnableScriptBlockLogging
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging
+EnableScriptBlockInvocationLogging
+DELETE
+
+Computer
+Software\Policies\Microsoft\Windows\Sudo
+Enabled
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\System
+AllowDomainPINLogon
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\System
+EnumerateLocalUsers
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\System
+EnableSmartScreen
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\System
+ShellSmartScreenLevel
+SZ:Block
+
+Computer
+Software\Policies\Microsoft\Windows\System
+AllowCustomSSPsAPs
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\System
+RunAsPPL
+DWORD:2
+
+Computer
+Software\Policies\Microsoft\Windows\WcmSvc\GroupPolicy
+fBlockNonDomain
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\Windows Search
+AllowIndexingEncryptedStoresOrItems
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Client
+AllowDigest
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Client
+AllowUnencryptedTraffic
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Client
+AllowBasic
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Service
+AllowUnencryptedTraffic
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Service
+DisableRunAs
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\WinRM\Service
+AllowBasic
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows\WTDS\Components
+NotifyMalicious
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\WTDS\Components
+NotifyPasswordReuse
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\WTDS\Components
+NotifyUnsafeApp
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows\WTDS\Components
+ServiceEnabled
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\DNSClient
+EnableMulticast
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\DNSClient
+EnableNetbios
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers
+DisableWebPnPDownload
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers
+RedirectionGuardPolicy
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers
+CopyFilesPolicy
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\DriverRanking
+UseWindowsReadyPrintDriverRankingGroupPolicy
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint
+RestrictDriverInstallationToAdministrators
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\RPC
+RpcUseNamedPipeProtocol
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\RPC
+RpcAuthentication
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\RPC
+RpcProtocols
+DWORD:5
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\RPC
+ForceKerberosForRpc
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Printers\RPC
+RpcTcpPort
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Rpc
+RestrictRemoteClients
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fUseMailto
+DELETE
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fAllowToGetHelp
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fAllowFullControl
+DELETE
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+MaxTicketExpiry
+DELETE
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+MaxTicketExpiryUnits
+DELETE
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+MinEncryptionLevel
+DWORD:3
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fPromptForPassword
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fDisableCdm
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+DisablePasswordSaving
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\Windows NT\Terminal Services
+fEncryptRPCTraffic
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile
+DefaultOutboundAction
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile
+DisableNotifications
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile
+EnableFirewall
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile
+DefaultInboundAction
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging
+LogDroppedPackets
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging
+LogFileSize
+DWORD:16384
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging
+LogSuccessfulConnections
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile
+EnableFirewall
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile
+DisableNotifications
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile
+DefaultInboundAction
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile
+DefaultOutboundAction
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging
+LogSuccessfulConnections
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging
+LogDroppedPackets
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging
+LogFileSize
+DWORD:16384
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+DefaultOutboundAction
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+EnableFirewall
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+DisableNotifications
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+AllowLocalIPsecPolicyMerge
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+AllowLocalPolicyMerge
+DWORD:0
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile
+DefaultInboundAction
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging
+LogFileSize
+DWORD:16384
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging
+LogDroppedPackets
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging
+LogSuccessfulConnections
+DWORD:1
+
+Computer
+Software\Policies\Microsoft\WindowsInkWorkspace
+AllowWindowsInkWorkspace
+DWORD:1
+
+Computer
+SYSTEM\CurrentControlSet\Control\Lsa
+RunAsPPL
+DWORD:2
+
+Computer
+SYSTEM\CurrentControlSet\Control\Print
+RpcAuthnLevelPrivacyEnabled
+DWORD:1
+
+Computer
+SYSTEM\CurrentControlSet\Control\Session Manager\kernel
+DisableExceptionChainValidation
+DWORD:0
+
+Computer
+SYSTEM\CurrentControlSet\Policies\EarlyLaunch
+DriverLoadPolicy
+DWORD:3
+
+Computer
+SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+SMB1
+DWORD:0
+
+Computer
+SYSTEM\CurrentControlSet\Services\MrxSmb10
+Start
+DWORD:4
+
+Computer
+SYSTEM\CurrentControlSet\Services\Netbt\Parameters
+NoNameReleaseOnDemand
+DWORD:1
+
+Computer
+SYSTEM\CurrentControlSet\Services\Netbt\Parameters
+NodeType
+DWORD:2
+
+Computer
+SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
+EnableICMPRedirect
+DWORD:0
+
+Computer
+SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
+DisableIPSourceRouting
+DWORD:2
+
+Computer
+SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters
+DisableIPSourceRouting
+DWORD:2
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+EnableVirtualizationBasedSecurity
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+RequirePlatformSecurityFeatures
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+HypervisorEnforcedCodeIntegrity
+DWORD:2
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+HVCIMATRequired
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+ConfigureSystemGuardLaunch
+DWORD:1
+
+Computer
+SOFTWARE\Policies\Microsoft\Windows\DeviceGuard
+ConfigureKernelShadowStacksLaunch
+DWORD:1
+
+User
+Software\Policies\Microsoft\Windows\CloudContent
+DisableThirdPartySuggestions
+DWORD:1
+
+User
+Software\Policies\Microsoft\Windows\CurrentVersion\PushNotifications
+NoToastApplicationNotificationOnLockScreen
+DWORD:1
+
+User
+Software\Policies\Microsoft\Internet Explorer\Control Panel
+FormSuggest Passwords
+DWORD:1
+
+User
+Software\Policies\Microsoft\Internet Explorer\Main
+FormSuggest PW Ask
+SZ:no
+
+User
+Software\Policies\Microsoft\Internet Explorer\Main
+FormSuggest Passwords
+SZ:no
