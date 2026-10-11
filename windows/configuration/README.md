@@ -2,6 +2,8 @@
 
 `workstation.winget` is the canonical post-install desired-state document.
 
+**Mandatory ordering:** first a fully working **stock** Windows install with official hardware drivers and stable Windows Update, then an independently verified **System Restore checkpoint** of that clean Windows, and **only afterwards** DSC + LGPO custom WinOps configuration. See the authoritative [post-install guide](../POST_INSTALL_GUIDE.md). No LGPO, Administrator Protection reconfiguration or other WinOps hardening before this checkpoint.
+
 Rules:
 
 - Official Microsoft DSC v3 is the primary declarative engine; the canonical
@@ -123,8 +125,10 @@ databases. Launching the `.wsb` opens the folder as `C:\Incoming` inside
 Sandbox with read-only access. Users may inspect the file there, or copy it
 inside the disposable Sandbox filesystem and run/analyse it there. The source
 directory is read-only to the sandbox; changes inside Sandbox disappear when
-it closes. Networking, clipboard, webcam, microphone, printer and vGPU remain
-disabled. Windows Sandbox is not a substitute for malware analysis on an
+it closes. Networking, webcam, microphone, printer and vGPU remain
+disabled, **but clipboard redirection is enabled** by the owner's explicit choice.
+Disable Windows clipboard *history* and cross-device sync separately, not
+normal Sandbox copy/paste. Protected Client may restrict file pasting. Windows Sandbox is not a substitute for malware analysis on an
 air-gapped dedicated machine, and it is not proof against all VM escape bugs.
 
 Windows Sandbox is a Windows Pro optional feature; its runtime requires
@@ -181,7 +185,9 @@ The two first-party Windows Sandbox profiles are intentionally distinct:
   separately from File Explorer to access selected files.
 
 Both use the same read-only host `C:\Sandbox-Inbox`, Protected Client,
-no microphone, webcam, printers, clipboard, or virtual GPU. Create the inbox
+no microphone, webcam, printers or virtual GPU; **clipboard enabled in both**.
+The networked profile intentionally supports Internet **and LAN**. This does not
+make it a secure malware lab isolated from the host/network. Create the inbox
 on the Windows host before use; place only disposable specimens there, never
 any recovery material, wallet files, KeePass vaults, passwords or secrets.
 
@@ -199,38 +205,28 @@ future capability and should not be implied by this file.
 Both `.wsb` profiles are on the intended production **allowlist**, and the
 structural guard rejects changed networking permissions, writable mappings,
 redirected devices, unexpected startup commands or swapped file identities.
-The actual production staging operation is still BLOCKED by the unsafe legacy
-fixed-DiskID unattended installer; neither profile being well-formed nor a
-contract PASS is permission to ship that installer.
+The obsolete fixed-DiskID Windows Setup experiment is not the current installation
+procedure. The one canonical deployment runbook now uses manual offline disk
+identification/partitioning plus Microsoft DISM; Sandbox runtime still requires
+an independent real Windows functional check.
 
 Official Microsoft documentation:
 https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file
 
-## Networked Sandbox: internet-only acceptance gate (not yet proven)
+## Networked Sandbox: accepted Internet + LAN behavior
 
-User requirement: enable public Internet access but deny local LAN, Windows
-host, VPN destinations, and all non-public IPv4/IPv6 destinations from the
-networked Sandbox; retain the separate offline profile.
+The owner explicitly accepts the networked profile's Internet **and LAN** connectivity,
+with normal clipboard enabled. `sandbox-networked.wsb` uses Microsoft Sandbox
+`<Networking>Enable</Networking>`, Protected Client and a read-only mapped inbox,
+with built-in Resource Monitor for visibility. It does **not** enforce an Internet-only
+destination allowlist, prevent all host/LAN access, or guarantee malware-grade
+isolation. The separate `sandbox-untrusted.wsb` disables all networking for
+untrusted samples; clipboard remains enabled by the accepted compromise.
+Do not add custom Hyper-V Firewall rules, a separate VM, or silent network-policy
+workarounds to assert an unrequested Internet-only requirement.
 
-The current `sandbox-networked.wsb` enables the Hyper-V default switch, so
-**it does NOT yet satisfy this requirement**. The `.wsb` schema itself has
-only whole-network Enable/Disable controls, not destination allow/deny lists.
+**Acceptance:** on the actual ASUS launch both profiles and check their real
+network access, offline isolation, read-only folder and ordinary clipboard
+semantics; log limits of file paste with Protected Client. Successful XML parsing
+alone is insufficient.
 
-Candidate native enforcement: Windows 11 Hyper-V Firewall, targeting only
-the observed Sandbox VMCreatorId via RemoteAddresses and Direction=Outbound.
-Get-NetFirewallHyperVVMCreator must identify that Sandbox separately; a
-WSL creator ID is not a Sandbox ID. Do not install broad host-wide blocking
-rules or guest-only admin-reversible rules. If Sandbox creator scoping is
-unavailable, replace networked testing with a dedicated isolated Hyper-V VM.
-
-Acceptance on the physical ASUS must prove (from Sandbox, and from external
-active firewall-rule readback): public HTTPS and DNS work; the host, router
-management, other LAN devices, RFC1918/CGNAT/link-local/loopback, local
-IPv6 and ULA, and reachable VPN ranges are inaccessible; no IPv6 bypass.
-Repeat after closing/reopening Sandbox. If any check cannot be proven,
-networked Sandbox mode is NOT ready for untrusted malware testing.
-
-References:
-https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/hyper-v-firewall
-https://learn.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallhypervrule
-https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file
