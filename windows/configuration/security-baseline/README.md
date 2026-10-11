@@ -29,6 +29,10 @@
 
 **Never run Microsoft `Baseline-LocalInstall.ps1 -Win11NonDomainJoined` unmodified**: `DeltaForNonDomainJoined.inf/.txt` clears the two local-account logon denies and sets `LocalAccountTokenFilterPolicy=1`. Our runner imports neither delta. Other Microsoft hardening, including SmartScreen Block, Defender ASR, firewall and auditing, remains.
 
+## Application order / checkpoint prerequisite
+
+**Do not apply this native LGPO baseline during OOBE or initial stock Windows setup.** First complete supported Windows device drivers and stable Windows Update including required owner-controlled reboots. **Then create and verify a System Restore point of the working, unmodified Windows** (see [canonical post-install guide](../../POST_INSTALL_GUIDE.md)). Only after that checkpoint invoke the shared DSC + LGPO launcher. Optional UEFI-lock remains a separate deferred decision.
+
 ## Offline USB post-install integration
 
 Copy this whole directory to `U:\PostInstall\security-baseline\`, including official `Tools\LGPO.exe`. The standard launcher `U:\PostInstall\apply-configuration.ps1 -ConfigurationPath U:\PostInstall\workstation.winget` runs Microsoft DSC then this native LGPO stage. Administrator manually configures password and Windows Hello **before** running it. A missing dependency or nonzero LGPO exit is a configuration failure. No reboot is initiated by APPLY.CMD; reboot/functional acceptance is separate.
