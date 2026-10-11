@@ -71,8 +71,23 @@ try {
     # Apply the prefiltered, final Microsoft Security Baseline values after DSC.
     # Never use Microsoft's non-domain relaxation delta or UEFI-lock overlay.
     '=== Microsoft LGPO Security Baseline 26H2 v2 ===' | Add-Content -LiteralPath $LogPath
-    & $baselineCmd 2>&1 | ForEach-Object { [string]$_ | Add-Content -LiteralPath $LogPath }
-    $baselineCode = [int]$LASTEXITCODE
+    # Windows PowerShell 5.1 can promote redirected native stderr (2>&1)
+    # into a terminating NativeCommandError when ErrorActionPreference=Stop.
+    # Run the native CMD in its own process, capture both streams and check
+    # the *actual process exit code*, exactly as for dsc.exe above.
+    $baselineStdout = "$LogPath.lgpo.stdout"
+    $baselineStderr = "$LogPath.lgpo.stderr"
+    Remove-Item -LiteralPath $baselineStdout,$baselineStderr -ErrorAction SilentlyContinue
+    $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+    $cmdArgs = '/d /s /c ""' + $baselineCmd.Replace('"', '') + '""'
+    $baselineProc = Start-Process -FilePath $cmdExe -ArgumentList $cmdArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $baselineStdout -RedirectStandardError $baselineStderr
+    $baselineCode = [int]$baselineProc.ExitCode
+    if (Test-Path -LiteralPath $baselineStdout) {
+        Get-Content -LiteralPath $baselineStdout | Add-Content -LiteralPath $LogPath
+    }
+    if (Test-Path -LiteralPath $baselineStderr) {
+        Get-Content -LiteralPath $baselineStderr | Add-Content -LiteralPath $LogPath
+    }
     ("LGPO exit={0}" -f $baselineCode) | Add-Content -LiteralPath $LogPath
     if ($baselineCode -ne 0) {
         throw "WinOps LGPO baseline failed: $baselineCode"
