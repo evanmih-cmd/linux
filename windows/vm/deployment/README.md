@@ -263,64 +263,16 @@ reagentc /info
 
 Статус должен быть `Enabled`, расположение Windows RE — на Recovery-разделе **целевого** диска. Далее в установленной Windows проверить редакцию Pro, `msinfo32` → `Secure Boot State: On`, фактический загрузочный диск и сохранность SSD1. Скрипт `AUDIT.CMD` предназначен **только для WinPE**; прежний аргумент `--phase booted` собственного EXE больше не используется. **Только после отдельной приёмки загрузившейся Windows** считать двухдисковую установку принятой.
 
-### Обязательный ручной шаг: Windows Hello **до** post-install
+### Post-install: штатная Windows → checkpoint → WinOps security
 
-**На ASUS владелец делает это сам после первой загрузки Windows 11 Pro
-и до применения `windows/configuration/workstation.winget`.**
-`Autounattend.xml` создаёт `owner` без пароля намеренно; доказательство
-такого первого входа не означает, что повышение прав будет работать после
-включения Administrator Protection.
+**Единственный актуальный практический порядок — [POST_INSTALL_GUIDE.md](../../POST_INSTALL_GUIDE.md).** Начать его **только после первой загрузки Windows**, а не в установочной WinPE. Для уже установленного ASUS не повторять разметку, DISM или настройку WinRE ради post-install.
 
-1. Войдя под `owner`, откройте **Параметры → Учётные записи →
-   Варианты входа**. Задайте **свой** пароль локального аккаунта, если
-   Windows сообщает, что без него Windows Hello PIN недоступен.
-2. Настройте **PIN (Windows Hello)** обычным интерфейсом Windows.
-   Проверьте реальный вход через PIN и работоспособность подтверждения
-   административных операций. Не начинайте защищённый post-install, пока
-   нет проверенного способа выполнять повышение прав.
-3. Только после этого применяйте **единый**
-   `windows/configuration/workstation.winget`. Он включает
-   **Administrator Protection**, поэтому после его применения и
-   перезагрузки обязательно проверьте **реальное повышение прав**, а не
-   только значение `TypeOfAdminApprovalMode` в реестре.
-4. Дождитесь окончания Windows `Customizing features` после
-   перезагрузки, вернитесь к рабочему столу и повторите установленный
-   Windows-native аудит (`RUN-AUDIT.CMD`). Проверяйте отдельным
-   функциональным тестом запуск Windows Sandbox; наличие `Enabled`
-   у компонента само по себе недостаточно. **Проверку Windows Sandbox
-   выполнять на физическом ASUS:** в текущем VirtualBox/NEM стенде
-   отсутствует nested virtualization, обязательная для Sandbox внутри
-   VM. На стенде после reboot этот компонент оказался `Disabled`;
-   это ограничение стенда, а не подтверждение работоспособности на ASUS.
+1. **Сначала штатная Windows:** завершить OOBE и вход `owner`, настроить пароль при необходимости и **Windows Hello PIN** (на ASUS — также Face/ESS), поставить подходящие официальные драйверы ASUS/AMD и обновить Windows до актуального стабильного состояния. Сделать необходимые ручные перезагрузки, проверить устойчивую загрузку, UAC, сеть, устройства, Windows Update и фактическое состояние WinRE. Никаких собственных hardening-изменений на этом шаге.
+2. **Затем обязательный checkpoint:** на рабочей, обновлённой Windows включить System Protection, настроить бюджет System Restore **12 GiB** и **создать и проверить настоящую точку восстановления «WinOps - clean Windows ...» до первого WinOps post-install**. Если точка не создаётся, **STOP**. Это не Git checkpoint и не полный образ системы.
+3. **Только затем специфическая конфигурация:** запустить общий `U:\PostInstall\apply-configuration.ps1` с `workstation.winget`, который выполняет Microsoft DSC и затем WinOps-профиль Microsoft Security Baseline 26H2 v2 через официальный `LGPO.exe`. В исходном USB должны быть все файлы из §0, включая `security-baseline\Tools\LGPO.exe`. Лог `C:\ProgramData\DesktopWindows\configuration.log` должен содержать `DSC exit=0`, `LGPO exit=0`, `BASELINE=PASS`, `CONFIGURATION=PASS`.
+4. **После настройки и необходимой перезагрузки:** проверить настоящую работу Administrator Protection (защищённое повышение, а не `TypeOfAdminApprovalMode=2` в реестре), Hello/ESS, BitLocker TPM+PIN, оба Windows Sandbox, Chrome/extensions, WinRE/AMD RAID, драйверы и остальные аппаратные требования. Запустить установленный `RUN-AUDIT.CMD`. Полный внешний offline-образ — **после** полной настройки и приёмки, не вместо контрольной точки на этапе 2.
 
-### Запуск подготовленного post-install с той же флэшки
-
-После настройки пароля и Windows Hello PIN, проверки повышения прав и подключения сети выполните штатные обновления Windows/подходящих драйверов. **Повторно определите букву USB в установленной Windows**: в следующем примере `U:` — заменяемый символ, а не гарантированное имя диска.
-
-Откройте **Windows PowerShell с повышенными правами** под `owner` (подтвердите Windows Hello) и выполните один существующий launcher из подготовленной папки:
-
-```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "U:\PostInstall\apply-configuration.ps1" -ConfigurationPath "U:\PostInstall\workstation.winget"
-```
-
-**Обязательный второй этап того же post-install:** после успешного Microsoft DSC launcher применяет предварительно отфильтрованный Microsoft Security Baseline 26H2 v2 через штатный `LGPO.exe` из `PostInstall\security-baseline\Tools`. Инструмент берём только из [официального LGPO.zip](https://download.microsoft.com/download/8/5/C/85C25433-A1B0-4FFA-9429-7E023E7DA8D8/LGPO.zip), извлекаем `LGPO_30\LGPO.exe`. При его отсутствии выполнение прекращается **до DSC**. Не применять `DeltaForNonDomainJoined.inf/.txt` или `security-hardware.winget` на первоначальном этапе. В итоговом логе обязательно `DSC exit=0`, `LGPO exit=0`, `BASELINE=PASS` и `CONFIGURATION=PASS`; после загрузки выполняется независимая функциональная приёмка.
-
-Это использует официальный `dsc.exe config set` для **одного** `workstation.winget`; ресурсы WinGet скачивают подписанные приложения из штатных источников, поэтому нужен Интернет. Не копируйте из VM `RUN.CMD`, `REPORT.PS1`, Guest Properties, старые пароли или тестовые раннеры. Дождитесь завершения; файл `C:\ProgramData\DesktopWindows\configuration.log` должен содержать `DSC exit=0` и `CONFIGURATION=PASS`, а в JSON результате не должно быть ошибок ресурсов. Затем выполните требуемую Windows перезагрузку, проверьте UAC/Hello и работоспособность Windows.
-
-**Chrome требует первого запуска под `owner`:** откройте Chrome вручную, завершите первоначальные окна без входа в Google (при желании оставьте Edge браузером по умолчанию), дайте загрузиться расширениям из Chrome Web Store. В `chrome://extensions` проверьте **все шесть** (MetaMask, Phantom, Rabby, Trust Wallet, Backpack, Zerion), что они присутствуют и включены. В `chrome://policy` проверьте `ExtensionSettings: OK`, `Platform / Machine / Mandatory`. Только запись реестра без профиля Chrome ещё **не** является готовностью кошельков: это и объясняло прежний ложный FAIL после отката чистого снапшота. Не создавать кошельки, не вводить seed phrases в ходе provisioning.
-
-После удаления лишней немецкой раскладки вручную запустите с флэшки **`U:\PostInstall\RUN-AUDIT.CMD`** и сохраните отчёт `C:\ProgramData\DesktopWindows\Audit\report.txt`. Это установленный аудит, **не** `AUDIT.CMD` из WinPE. BitLocker TPM+PIN, аппаратные VBS/HVCI/ESS, независимость SSD1, recovery и реальный Sandbox на ASUS принимаются отдельными функциональными проверками. `security-hardware.winget` нельзя применять до подтверждения VBS/HVCI и восстановления; `sandbox-networked.wsb` не обеспечивает ограничения Internet-only и не допускается для опасных образцов, пока это не доказано.
-
-**STOP:** если Windows Hello PIN не удаётся настроить или после
-перезагрузки Administrator Protection просит недоступный способ
-аутентификации, post-install **не принят**. Исправляйте операционный
-путь подтверждения прав, не выдавайте успешное применение DSC за
-функциональную проверку.
-
-**Никаких PIN/паролей в установочном XML, Git, ISO, USB или отчётах.**
-На тестовой VM допускаются отдельные тестовые пароль/PIN, заданные
-после установки и не переносимые на ASUS. Эта процедура **не** входит
-в `Autounattend.xml`; на реальном ASUS учётные данные выбирает владелец.
+**Контракт:** нет checkpoint — нет DSC/LGPO. UEFI-lock overlay `security-hardware.winget` по-прежнему **не применять** до отдельного позднего решения владельца. На текущем ASUS ранее зафиксирован реальный FAIL Administrator Protection при включённой политике; один запуск baseline не является подтверждением исправления. Полная процедура, точная команда PowerShell, проверки Chrome, G-Helper, Sandbox, Defender и пути отчётов находятся в [едином post-install руководстве](../../POST_INSTALL_GUIDE.md).
 
 ## 6. Критерии принятия
 
