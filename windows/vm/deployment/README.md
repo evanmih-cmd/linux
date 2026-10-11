@@ -33,6 +33,12 @@ certutil -hashfile U:\Recovery\WinRE\winre.wim SHA256
 
 **Проверка исходного дистрибутива:** реальный установочный носитель ASUS — официальный Microsoft USB `ESD-USB` с разделённым образом **`sources\install.swm`, `install2.swm`, ...**; §3 содержит готовые команды непосредственно для split WIM. USB не нужно пересоздавать, исходные файлы Microsoft не менять. Не пытаться монтировать `.swm` с `DISM /Mount-Image`: ошибка `0xc1420130` означает, что split WIM **не монтируется**. Для развёртывания поддерживается непосредственно `DISM /Apply-Image /SWMFile`. Если фактический носитель всё же содержит единый `install.wim`/`install.esd`, использовать явно описанную альтернативу §3, не притворяться, будто на ASUS подключён ISO. Перед повторной установкой **обязательно отдельно сохранить** подготовленный `winre.wim` с RAID-драйверами: Setup удаляет промежуточный `C:\Windows\System32\Recovery\winre.wim` после регистрации, поэтому C: или пересоздаваемый Recovery-раздел не являются резервным хранилищем. Если WinPE на ASUS не видит предполагаемый AMD RAID LUN, это **STOP до проверки официального подходящего RAID-драйвера и аппаратной конфигурации**, а не повод выбирать другой диск. Реальная пригодность RAIDXpert2 на FA401EA проверяется отдельно, не доказывается ВМ.
 
+### AMD RAID prerequisite на физическом ASUS — прежде чем выбирать диск
+
+**При развёртывании Windows на RAID LUN `WinOps` сначала обязательно прочитать [AMD_RAID_BOOT.md](AMD_RAID_BOOT.md).** Это согласованное дополнение к единственному runbook, а не новая процедура установки. На существующем SECUREWS Windows уже установлена: эта инструкция относится только к будущей переустановке/восстановлению, **ничего на работающем ASUS сейчас не менять**.
+
+После загрузки установочной USB WinPE должна видеть **виртуальную LUN WinOps**, а не только сырую физическую Lexar NM790 (~3.7 ТБ, ранее показанную как `Unknown/MBR`). Если WinPE не видит LUN, **STOP: не использовать `clean`, `convert gpt`, `format` на физической NM790 — риск уничтожения RAID metadata**. Единственное допускаемое адресное изменение официальной USB для этого оборудования — подготовленный и проверенный по SHA-256 `sources\boot.wim` с официальными AMD RAID INF, с сохранением нетронутого оригинала вне USB. Уже работающий `boot.wim` **повторно не модифицировать**. См. [первую стадию](AMD_RAID_BOOT.md#1-windows-setup-bootwim--prepare-from-winhome-before-booting-usb).
+
 После копирования начинается уже существующая процедура §1–§6. В WinPE буква флэшки **может быть не `U:`**: находите её повторно через `diskpart` → `list volume`; все номера дисков устанавливайте только по фактическим устройствам. Не нажимайте «Install now» в Windows Setup: используется существующий ручной DISM-путь, после которого XML копируется в `W:\Windows\Panther\Unattend.xml` (§4). Подготовка файлов на USB **не означает разрешения очищать SSD2 до прохождения ASUS/SSD1 preflight**.
 
 ## 1. До удаления любых разделов
@@ -125,6 +131,8 @@ dism /Apply-Image /ImageFile:E:\sources\install.wim /Index:N /ApplyDir:W:\
 
 Для `install.esd` заменить суффикс в **обеих** командах на `.esd`. Для извлечения файлов из split WIM в отдельном восстановительном сценарии (не для обычного применения Windows) сначала выполнить `DISM /Export-Image /SourceImageFile:E:\sources\install.swm /SWMFile:E:\sources\install*.swm /SourceIndex:N /DestinationImageFile:<рабочий-диск>\install.wim /Compress:max /CheckIntegrity` и монтировать **только уже экспортированный обычный WIM**.
 
+**AMD RAID — обязательная стадия после DISM Apply, до BCDBoot и первого reboot:** для новой WinOps, установленной из штатного Microsoft `install.swm/install*.swm` (или WIM/ESD), добавить и подтвердить boot-critical `rcbottom`, `rcraid`, `rccfg` в **offline целевой `W:\Windows`** штатным DISM по [AMD_RAID_BOOT.md, §2](AMD_RAID_BOOT.md#2-new-os-add-raid-to-offline-winops-immediately-after-apply-image). Три INF в `boot.wim` WinPE не переходят в установленную ОС автоматически. При ошибке или несовпадении драйвера с контроллером — STOP, не запускать BCDBoot/первую загрузку.
+
 ```cmd
 bcdboot W:\Windows /s S: /f UEFI
 dir S:\EFI\Microsoft\Boot\BCD
@@ -133,6 +141,8 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum all
 ```
 
 `/s S:` явно указывает **собственный ESP целевого диска**, без поиска ESP на SSD1. С `/s` BCDBoot не создаёт запись UEFI NVRAM; независимую загрузку из firmware Boot Menu надо доказать отдельно на ASUS.
+
+**AMD RAID WinRE — источник образа только внешний:** используйте заранее подготовленный и сохранённый `U:\Recovery\WinRE\winre.wim`, а не временный `W:\Windows\System32\Recovery\winre.wim`. Все три драйвера должны быть внесены и проверены в этот внешний образ **до** удаления разделов; порядок и стоп-условия в [AMD_RAID_BOOT.md](AMD_RAID_BOOT.md). Для обычного восстановления НЕ повторять устаревшую из PR #10 схему «смонтировать WinRE из новой W: и скопировать её на R:».
 
 **Сначала защитить образ для последующих переустановок.** До `clean` и до удаления прежнего Recovery-раздела сохранить уже подготовленный `winre.wim` с boot-critical AMD RAID `rcbottom`, `rcraid`, `rccfg` (на ASUS фактически 9.3.3.291) **вне целевого RAID LUN**, проверить SHA-256 и сохранить второй экземпляр на независимом контролируемом носителе. Никаких BitLocker recovery keys/секретов в WIM или на USB. Нельзя рассчитывать на `C:\Windows\System32\Recovery\Winre.wim`: Windows Setup штатно удаляет эту промежуточную копию после переноса на Recovery; при пересоздании раздела исчезнет и прежняя копия на нём. Для чистой установки подготовленный образ должен присутствовать на носителе как `U:\Recovery\WinRE\winre.wim` (букву `U:` установить через `list volume`, она может отличаться от буквы `E:` загрузочных файлов). Если на USB не хватает места — отдельный recovery USB/другой доверенный носитель.
 
@@ -207,6 +217,21 @@ Windows. `vmbench` из раннего стенда не является тре
 - Проверено наличие `S:\EFI\Microsoft\Boot\BCD` и `S:\EFI\Boot\bootx64.efi` **на целевом ESP**.
 - Запущены штатные скрипты [AUDIT.CMD + EXTRA.JS](../winpe-audit/SCRIPT_README.md) на выбранных вручную физических дисках. Все доступные до первой загрузки проверки должны дать `FAIL=0`. `NOT_PROVABLE` допустим только для фактической загрузки/редакции/Secure Boot/WinRE Enabled и доказательств, требующих заранее снятого эталона SSD1 или доступа к сырым GPT CRC.
 - Никаких новых `clean`, `format`, `shrink`, `create partition`, `bcdboot` или `reagentc /enable` сейчас не требуется. Защищённый SSD1 не изменять.
+
+### Обязательный запуск WinPE-аудита до первого reboot
+
+После `bcdboot`, восстановления `R:\Recovery\WindowsRE\winre.wim`, `reagentc /setreimage`, и копирования `W:\Windows\Panther\Unattend.xml` — **запустить именно WinPE `AUDIT.CMD` с соседним `EXTRA.JS`**, а не установленный `PostInstall\RUN-AUDIT.CMD`. Повторно определить актуальные диски и буквы через `diskpart` → `list disk`, `detail disk`, `list volume`. Защищаемый SSD1 должен быть Offline, целевая LUN должна быть однозначно идентифицирована.
+
+Форма вызова с подтверждёнными номерами и буквами: `<USB>:\AUDIT.CMD <target-disk-number> <protected-SSD1-number> S W R <letter-of-USB-with-Autounattend>`. Для примера, **только если фактически** LUN = Disk 1, SSD1 = Offline Disk 0, USB = `E:` и `Autounattend.xml` на ней же:
+
+~~~cmd
+dir E:\AUDIT.CMD
+dir E:\EXTRA.JS
+dir E:\Autounattend.xml
+E:\AUDIT.CMD 1 0 S W R E
+~~~
+
+Числа в примере **не переносить** автоматически на ASUS. Шестой аргумент — буква носителя с **каноническим XML**, без двоеточия; первые два аргумента — **номера дисков**. При `FAIL>0` сначала диагностировать, **не** перезагружаться и не исправлять GPT методом догадок. `PASS` аудитора не доказывает boot-critical пригодность AMD RAID или загрузку WinRE; [область проверки описана отдельно](../winpe-audit/SCRIPT_README.md).
 
 **На текущем стенде (2026-10-09):** автономный аудит из WinPE дал **40 PASS / 0 FAIL / 5 NOT_PROVABLE**; независимый Linux/VDI-аудит — **23 PASS / 0 FAIL**. Это принимает подготовку диска и файлов, **но не подтверждает состоявшуюся загрузку Windows**.
 
