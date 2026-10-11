@@ -25,6 +25,7 @@
 ```cmd
 certutil -hashfile U:\Autounattend.xml SHA256
 certutil -hashfile U:\PostInstall\DSC-3.3.0-x86_64-pc-windows-msvc.zip SHA256
+certutil -hashfile U:\Recovery\WinRE\winre.wim SHA256
 ```
 
 Ожидаемый SHA-256 XML: `8ef765a139dbbcc811f90b3df6f191c8f0405c154c350ddbc6d4672e50e4d5e4`; ZIP DSC: `3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f`. Сам launcher повторно проверяет его перед выполнением. Для копирования используйте **текущие утверждённые файлы** (включая исправленный поиск KeePass в `audit.ps1`), не старые тестовые ISO и не исторические снапшоты. Никаких PIN, паролей, recovery keys или пользовательских кошельков на USB.
@@ -135,7 +136,6 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum all
 **Сначала защитить образ для последующих переустановок.** До `clean` и до удаления прежнего Recovery-раздела сохранить уже подготовленный `winre.wim` с boot-critical AMD RAID `rcbottom`, `rcraid`, `rccfg` (на ASUS фактически 9.3.3.291) **вне целевого RAID LUN**, проверить SHA-256 и сохранить второй экземпляр на независимом контролируемом носителе. Никаких BitLocker recovery keys/секретов в WIM или на USB. Нельзя рассчитывать на `C:\Windows\System32\Recovery\Winre.wim`: Windows Setup штатно удаляет эту промежуточную копию после переноса на Recovery; при пересоздании раздела исчезнет и прежняя копия на нём. Для чистой установки подготовленный образ должен присутствовать на носителе как `U:\Recovery\WinRE\winre.wim` (букву `U:` установить через `list volume`, она может отличаться от буквы `E:` загрузочных файлов). Если на USB не хватает места — отдельный recovery USB/другой доверенный носитель.
 
 ```cmd
-certutil -hashfile U:\Recovery\WinRE\winre.wim SHA256
 md R:\Recovery\WindowsRE
 copy U:\Recovery\WinRE\winre.wim R:\Recovery\WindowsRE\winre.wim
 dism /Get-ImageInfo /ImageFile:R:\Recovery\WindowsRE\winre.wim
@@ -143,7 +143,7 @@ W:\Windows\System32\reagentc.exe /setreimage /path R:\Recovery\WindowsRE /target
 W:\Windows\System32\reagentc.exe /info /target W:\Windows
 ```
 
-Перед продолжением сравнить SHA-256 с **записанным эталоном** подготовленного образа; проверить `DISM` и фактическое наличие трёх RAID-драйверов внутри WIM (одного лишь копирования недостаточно). Если подготовленного образа нет — **STOP** до получения/инъекции и проверки драйверов в штатный WinRE; не подменять тихо подготовленный образ обычным `W:\Windows\System32\Recovery\Winre.wim` без RAID-драйверов.
+SHA-256 подготовленного образа **проверить заранее на работающей Windows в §0**, где доступен `certutil`; не предполагать, что эта утилита включена в базовый WinPE. Перед продолжением сверить результат с **записанным эталоном**; проверить `DISM` и фактическое наличие трёх RAID-драйверов внутри WIM (одного лишь копирования недостаточно). Если подготовленного образа нет — **STOP** до получения/инъекции и проверки драйверов в штатный WinRE; не подменять тихо подготовленный образ обычным `W:\Windows\System32\Recovery\Winre.wim` без RAID-драйверов.
 
 Раздел `R:` должен быть NTFS **Fully Decrypted, Encryption Method None**; `ProtectionStatus Off` при всё ещё 100%-ном BitLocker-шифровании НЕ достаточно: `reagentc /enable` отвергнет такой WinRE. При этом **BitLocker TPM+PIN системного C: сохраняется**. В WinPE `reagentc /info` может показывать Disabled до `specialize`; после первой загрузки подтвердить Enabled и физический путь, а затем отдельно проверить реальную WinRE загрузку/видимость AMD RAID. Если копирование, `bcdboot` или `reagentc /setreimage` завершаются ошибкой, **остановиться**, не перезагружаться «на авось».
 
