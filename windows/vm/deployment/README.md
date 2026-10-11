@@ -16,6 +16,7 @@
 | `U:\PostInstall\apply-configuration.ps1` | `windows/vm/payload/apply-configuration.ps1` — существующий запуск **официального** DSC, не собственный конфигуратор |
 | `U:\PostInstall\DSC-3.3.0-x86_64-pc-windows-msvc.zip` | Официальный **x64** архив Microsoft с [релиза DSC v3.3.0](https://github.com/PowerShell/DSC/releases/tag/v3.3.0); **рядом** с `workstation.winget` (запуск проверяет SHA-256) |
 | `U:\PostInstall\RUN-AUDIT.CMD`, `run-audit.ps1`, `audit.ps1`, `evaluate-audit.ps1` | **Ровно эти четыре файла** из `windows/vm/payload/`, рядом друг с другом; независимый аудит установленной Windows |
+| `U:\PostInstall\security-baseline\` | `windows/configuration/security-baseline/`: `APPLY.CMD`, `WinOps-26H2v2.lgpo.txt`, `WinOps-26H2v2-Computer.inf`, `WinOps-26H2v2-audit.csv`, `Tools\LGPO.exe` from the official Microsoft **LGPO.zip** in Security Compliance Toolkit; required for identical VM/ASUS post-install path |
 | `U:\PostInstall\security-hardware.winget` | `windows/configuration/security-hardware.winget` — аппаратные UEFI locks, **не запускать** до отдельной приёмки на ASUS |
 | `U:\PostInstall\sandbox-untrusted.wsb`, `sandbox-networked.wsb` | `windows/configuration/` — готовые профили Sandbox; сетевой профиль **не** безопасен для враждебного кода до отдельной проверки изоляции LAN/host/VPN |
 | `U:\Recovery\WinRE\winre.wim` | **Сохранённая вне целевого диска** подготовленная Windows RE с AMD RAID-драйверами `rcbottom`, `rcraid`, `rccfg` для ASUS; проверенный SHA-256 зафиксирован отдельно (вторую копию сохранить также вне ASUS). Это отдельный install/recovery artifact, а не секрет и не замена штатному Windows Setup |
@@ -276,6 +277,8 @@ reagentc /info
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "U:\PostInstall\apply-configuration.ps1" -ConfigurationPath "U:\PostInstall\workstation.winget"
 ```
+
+**Обязательный второй этап того же post-install:** после успешного Microsoft DSC launcher применяет предварительно отфильтрованный Microsoft Security Baseline 26H2 v2 через штатный `LGPO.exe` из `PostInstall\security-baseline\Tools`. Инструмент берём только из [официального LGPO.zip](https://download.microsoft.com/download/8/5/C/85C25433-A1B0-4FFA-9429-7E023E7DA8D8/LGPO.zip), извлекаем `LGPO_30\LGPO.exe`. При его отсутствии выполнение прекращается **до DSC**. Не применять `DeltaForNonDomainJoined.inf/.txt` или `security-hardware.winget` на первоначальном этапе. В итоговом логе обязательно `DSC exit=0`, `LGPO exit=0`, `BASELINE=PASS` и `CONFIGURATION=PASS`; после загрузки выполняется независимая функциональная приёмка.
 
 Это использует официальный `dsc.exe config set` для **одного** `workstation.winget`; ресурсы WinGet скачивают подписанные приложения из штатных источников, поэтому нужен Интернет. Не копируйте из VM `RUN.CMD`, `REPORT.PS1`, Guest Properties, старые пароли или тестовые раннеры. Дождитесь завершения; файл `C:\ProgramData\DesktopWindows\configuration.log` должен содержать `DSC exit=0` и `CONFIGURATION=PASS`, а в JSON результате не должно быть ошибок ресурсов. Затем выполните требуемую Windows перезагрузку, проверьте UAC/Hello и работоспособность Windows.
 
