@@ -1,37 +1,38 @@
-# WinOps — Windows 11 26H2 Security Baseline application decisions
+# WinOps — Microsoft Security Baseline 26H2 v2
 
-**Status:** approved policy decisions for a future post-install LGPO integration; this file is **not** an installer, and the baseline has **not** been applied to any PC by this change.
+**Implementation:** precompiled native Microsoft LGPO profile for the one canonical Windows 11 Pro installation (ASUS and VM). This replaces the old decisions-only note.
 
-## Upstream
+## Files and tool
 
-- Microsoft **Windows 11 v26H2 Security Baseline v2** (2026-10-08), from the official Security Compliance Toolkit.
-- Reviewed original ZIP SHA-256: `369f8dad02485b3fc20be089649a29eb6432a7d0f63cef75addace9685e45d18`.
-- The upstream `Scripts/Baseline-LocalInstall.ps1 -Win11NonDomainJoined` imports eight GPOs and then invokes `LGPO.exe /s ConfigFiles\DeltaForNonDomainJoined.inf /t ConfigFiles\DeltaForNonDomainJoined.txt`. **That last delta intentionally relaxes three local-account restrictions. We do not want those relaxations on WinOps.**
+- `WinOps-26H2v2.lgpo.txt`: 330 effective policies, 325 Computer + 5 User.
+- `WinOps-26H2v2-Computer.inf`: Microsoft Computer security settings, with original local-account remote restrictions.
+- `WinOps-26H2v2-audit.csv`: 23 Microsoft advanced-audit settings.
+- `APPLY.CMD`: native LGPO `/t /s /a` imports with failure propagation.
+- **External official prerequisite:** `Tools/LGPO.exe`, supplied by Microsoft in [SCT LGPO.zip](https://download.microsoft.com/download/8/5/C/85C25433-A1B0-4FFA-9429-7E023E7DA8D8/LGPO.zip). Download from [Microsoft SCT](https://www.microsoft.com/en-us/download/details.aspx?id=55319), extract `LGPO_30/LGPO.exe` into this folder's `Tools` subdirectory. The baseline ZIP does not include this EXE. Do not use third-party LGPO tools.
 
-## Approved rule — preserve the original Microsoft restrictions
+**Provenance:** original Microsoft `Windows 11 v26H2 Security Baseline v2.zip` (8 Oct 2026), SHA-256 `369f8dad02485b3fc20be089649a29eb6432a7d0f63cef75addace9685e45d18`. Source inventory: 331 computer registry, 5 user registry, 79 security-template records (including metadata), and 23 audit rows. The result is a compiled static desired state; no stock GPO with UEFI locks is imported even transiently.
 
-**Do not import or apply either** `DeltaForNonDomainJoined.inf` **or** `DeltaForNonDomainJoined.txt` in the WinOps configuration. Do **not** run the upstream `Baseline-LocalInstall.ps1 -Win11NonDomainJoined` unmodified.
+## Effective differences from Microsoft source
 
-| Policy | WinOps required value | Source in original baseline | Disallowed non-domain delta |
-| --- | --- | --- | --- |
-| `SeDenyNetworkLogonRight` | `*S-1-5-113` (deny network logon for local accounts) | Computer GPO `GptTmpl.inf` | Empty right / removal of the deny |
-| `SeDenyRemoteInteractiveLogonRight` | `*S-1-5-113` (deny remote interactive/RDP logon for local accounts) | Computer GPO `GptTmpl.inf` | Empty right / removal of the deny |
-| `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\LocalAccountTokenFilterPolicy` | `REG_DWORD 0` (keep Remote UAC filtering) | Computer GPO `registry.pol` | `REG_DWORD 1` |
+| Setting | Effective WinOps value |
+| --- | --- |
+| Administrator Protection `TypeOfAdminApprovalMode` and `ConsentPromptBehaviorEnhancedAdmin` | `2`, `1`: keep secure-desktop credential prompt |
+| `SeDenyNetworkLogonRight`, `SeDenyRemoteInteractiveLogonRight` | Keep `*S-1-5-113` (deny local accounts network and RDP) |
+| `LocalAccountTokenFilterPolicy` | Keep `0` (Remote UAC filtering) |
+| `SubmitSamplesConsent` | `3 -> 0`: prompt before sending samples, preserve cloud protection; weaker Block at First Sight |
+| `RDVDenyWriteAccess` | `1 -> 0`: removable media writable without BitLocker |
+| `RunAsPPL` (two entries), `HypervisorEnforcedCodeIntegrity` | `1 -> 2`: protection on, **without UEFI lock** |
+| `LsaCfgFlags`, `MachineIdentityIsolation` | Omit on standalone Pro |
+| `BackupDirectory`, `ADPasswordEncryptionEnabled`, `ADBackupDSRMPassword` | Omit AD-specific LAPS |
+| `WindowsFirewall\PolicyVersion` | Omit OS-owned firewall schema metadata |
+| `Domain Security` GPO | Omit domain-only account/password policy |
 
-`S-1-5-113` is Microsoft's well-known **Local account** SID (not the owner-specific SID). This intentionally limits remote access, including remote administration using local accounts. Local console sign-in and the selected Administrator Protection / Windows Hello elevation path remain distinct.
+**Never run Microsoft `Baseline-LocalInstall.ps1 -Win11NonDomainJoined` unmodified**: `DeltaForNonDomainJoined.inf/.txt` clears the two local-account logon denies and sets `LocalAccountTokenFilterPolicy=1`. Our runner imports neither delta. Other Microsoft hardening, including SmartScreen Block, Defender ASR, firewall and auditing, remains.
 
-**Integration direction:** import only the applicable official Microsoft GPO components using the supported LGPO tool and layer separately approved WinOps overrides. Retain the three original values above; do not introduce a compensating "restore security" script, service, or additional delta. The imported settings must later be verified as **effective**; a file or registry value by itself is not a runtime acceptance proof.
+## Offline USB post-install integration
 
-## Other already approved decisions (do not reopen while importing)
+Copy this whole directory to `U:\PostInstall\security-baseline\`, including official `Tools\LGPO.exe`. The standard launcher `U:\PostInstall\apply-configuration.ps1 -ConfigurationPath U:\PostInstall\workstation.winget` runs Microsoft DSC then this native LGPO stage. Administrator manually configures password and Windows Hello **before** running it. A missing dependency or nonzero LGPO exit is a configuration failure. No reboot is initiated by APPLY.CMD; reboot/functional acceptance is separate.
 
-- Keep `TypeOfAdminApprovalMode=2` and `ConsentPromptBehaviorEnhancedAdmin=1`: Administrator Protection + credentials **on the secure desktop**, with Windows Hello.
-- Defender cloud protection enabled, but `SubmitSamplesConsent=0` (prompt; no automatic sample submissions), acknowledging reduced Block-at-First-Sight efficacy versus automatic safe/all uploads.
-- Override `RDVDenyWriteAccess` to `0` so ordinary unencrypted removable media stay writable.
-- Exclude domain-specific LAPS and Domain Security applicability from the standalone WinOps configuration; don't claim unsupported Credential Guard on Windows 11 Pro.
-- Keep VBS, HVCI and LSA protection **without UEFI-lock at the initial post-install stage**. `windows/configuration/security-hardware.winget` is a **separate, intentionally retained, late-stage optional UEFI-lock-only overlay**, to be considered *after* the workstation is normally configured. Its presence is **not** a configuration conflict; do not automatically invoke it.
-- Keep two distinct Sandbox profiles (networked and network-disabled), **clipboard enabled in both**; ordinary clipboard is distinct from disabled clipboard *history*.
-- Use documented native Windows Update policies only; do not implement custom automatic-reboot blocking mechanisms.
+`windows/configuration/security-hardware.winget` is a **separate, unchanged, optional UEFI-lock overlay for later**. This stage must never invoke it. Sandbox clipboard policy is in the two existing `.wsb` profiles and separate from disabled Windows clipboard history.
 
-Source-of-truth discussion/checkpoint: [Windows workstation issue #5](https://github.com/evanmih-cmd/linux/issues/5#issuecomment-6111000668); subsequent clarifications in issue comments. **Issue #9 remains the observations-only journal for actual ASUS operations.**
-
-This file records only settled intent. Completing the full baseline policy inventory/diff, wiring the policy imports into post-install and acceptance testing remain separate implementation work.
+Scope: security baseline implementation, not proof of live WinOps behavior. No changes to ASUS, its disks or recovery/BitLocker keys occurred here. Decision record: [issue #5](https://github.com/evanmih-cmd/linux/issues/5); issue #9 remains observation-only.

@@ -1,0 +1,43 @@
+{
+  "source": "Original Microsoft Windows 11 v26H2 Security Baseline v2.zip",
+  "sha256": "369f8dad02485b3fc20be089649a29eb6432a7d0f63cef75addace9685e45d18",
+  "source_registry_records": 336,
+  "compiled_registry_records": 330,
+  "computer": 325,
+  "user": 5,
+  "security_template": "MSFT Windows 11 26H2 - Computer",
+  "audit_categories": 23,
+  "exclude_registry": [
+    "BackupDirectory",
+    "ADPasswordEncryptionEnabled",
+    "ADBackupDSRMPassword",
+    "LsaCfgFlags",
+    "MachineIdentityIsolation",
+    "PolicyVersion"
+  ],
+  "overrides": {
+    "SubmitSamplesConsent": [
+      3,
+      0
+    ],
+    "RDVDenyWriteAccess": [
+      1,
+      0
+    ],
+    "RunAsPPL": [
+      1,
+      2
+    ],
+    "HypervisorEnforcedCodeIntegrity": [
+      1,
+      2
+    ]
+  },
+  "never_import": [
+    "Domain Security GPO",
+    "DeltaForNonDomainJoined.inf",
+    "DeltaForNonDomainJoined.txt",
+    "UEFI lock overlay"
+  ],
+  "official_required_tool": "LGPO_30/LGPO.exe from Microsoft SCT LGPO.zip"
+}

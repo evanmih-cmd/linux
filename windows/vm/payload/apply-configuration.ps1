@@ -21,6 +21,18 @@ try {
     if (-not (Test-Path -LiteralPath $ConfigurationPath -PathType Leaf)) {
         throw "Canonical configuration is missing: $ConfigurationPath"
     }
+    # The same canonical, native LGPO baseline is required on the VM and ASUS.
+    # Preflight before running DSC, so a missing official LGPO tool cannot
+    # leave a misleading "configuration passed" result.
+    $baselineDir = Join-Path (Split-Path -Parent $ConfigurationPath) 'security-baseline'
+    $baselineCmd = Join-Path $baselineDir 'APPLY.CMD'
+    $lgpoExe = Join-Path $baselineDir 'Tools\LGPO.exe'
+    if (-not (Test-Path -LiteralPath $baselineCmd -PathType Leaf)) {
+        throw "WinOps baseline launcher missing: $baselineCmd"
+    }
+    if (-not (Test-Path -LiteralPath $lgpoExe -PathType Leaf)) {
+        throw "Official Microsoft LGPO.exe missing: $lgpoExe"
+    }
     $archiveName = 'DSC-3.3.0-x86_64-pc-windows-msvc.zip'
     $archive = Join-Path (Split-Path -Parent $ConfigurationPath) $archiveName
     $expectedSha = '3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f'
@@ -56,6 +68,16 @@ try {
     if (Test-Path $stderr) { Get-Content -LiteralPath $stderr | Add-Content -LiteralPath $LogPath }
     ("DSC exit={0}; hex=0x{1:X8}" -f $code,$code) | Add-Content -LiteralPath $LogPath
     if ($code -ne 0) { throw "Official dsc config set failed: $code; inspect native DSC output." }
+    # Apply the prefiltered, final Microsoft Security Baseline values after DSC.
+    # Never use Microsoft's non-domain relaxation delta or UEFI-lock overlay.
+    '=== Microsoft LGPO Security Baseline 26H2 v2 ===' | Add-Content -LiteralPath $LogPath
+    & $baselineCmd 2>&1 | ForEach-Object { [string]$_ | Add-Content -LiteralPath $LogPath }
+    $baselineCode = [int]$LASTEXITCODE
+    ("LGPO exit={0}" -f $baselineCode) | Add-Content -LiteralPath $LogPath
+    if ($baselineCode -ne 0) {
+        throw "WinOps LGPO baseline failed: $baselineCode"
+    }
+    'BASELINE=PASS' | Add-Content -LiteralPath $LogPath
     'CONFIGURATION=PASS' | Add-Content -LiteralPath $LogPath
 } catch {
     ("CONFIGURATION=FAIL: {0}" -f $_.Exception.Message) | Add-Content -LiteralPath $LogPath

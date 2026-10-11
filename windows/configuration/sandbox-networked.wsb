@@ -22,6 +22,6 @@
   <VideoInput>Disable</VideoInput>
   <ProtectedClient>Enable</ProtectedClient>
   <PrinterRedirection>Disable</PrinterRedirection>
-  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <ClipboardRedirection>Enable</ClipboardRedirection>
   <MemoryInMB>4096</MemoryInMB>
 </Configuration>
