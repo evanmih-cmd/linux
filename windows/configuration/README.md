@@ -15,6 +15,8 @@ Rules:
   the resource semantics are hardware-independent.
 - VM-only transport/bootstrap code is not part of the desired state.
 
+**AMD RAID boot prerequisite for a future WinOps reinstall:** the authoritative [manual Windows installation runbook](../vm/deployment/README.md) must be used together with the [reconciled AMD RAID supplement](../vm/deployment/AMD_RAID_BOOT.md): separate `boot.wim` / offline deployed Windows / **externally backed-up WinRE** preparation and independent boot-critical checks. This is Windows DISM/storage servicing before post-install, **not** a DSC resource or justification for modifying the already installed ASUS. Preserve the existing Windows 11 Pro + Security Baseline path; physical observations belong in the frozen [#9](https://github.com/evanmih-cmd/linux/issues/9).
+
 **Required manual prerequisite (physical ASUS):** before running this
 post-install desired state, the owner must set an account password when
 needed, enroll a working Windows Hello PIN, and verify that administrative
