@@ -2,6 +2,7 @@
 
 This directory contains the Windows 11 Pro security-workstation design and test bench.
 
+- [`POST_INSTALL_GUIDE.md`](POST_INSTALL_GUIDE.md) — canonical post-install procedure: stock Windows, official drivers and Windows Update, **verified System Restore checkpoint**, then WinOps DSC/LGPO hardening and acceptance.
 - `BUSINESS_REQUIREMENTS.md` — authoritative product requirements for the Windows workstation.
 - `ARCHITECTURE.md` — selected Windows security architecture and validation model.
 - `ASUS_RELEASE_AUDIT.md` — evidence-backed NO-GO/GO audit, 36-requirement traceability, and the current physical-installation blockers. A structural contract PASS is not release authorization.
