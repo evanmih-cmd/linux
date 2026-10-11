@@ -18,6 +18,7 @@
 | `U:\PostInstall\RUN-AUDIT.CMD`, `run-audit.ps1`, `audit.ps1`, `evaluate-audit.ps1` | **Ровно эти четыре файла** из `windows/vm/payload/`, рядом друг с другом; независимый аудит установленной Windows |
 | `U:\PostInstall\security-hardware.winget` | `windows/configuration/security-hardware.winget` — аппаратные UEFI locks, **не запускать** до отдельной приёмки на ASUS |
 | `U:\PostInstall\sandbox-untrusted.wsb`, `sandbox-networked.wsb` | `windows/configuration/` — готовые профили Sandbox; сетевой профиль **не** безопасен для враждебного кода до отдельной проверки изоляции LAN/host/VPN |
+| `U:\Recovery\WinRE\winre.wim` | **Сохранённая вне целевого диска** подготовленная Windows RE с AMD RAID-драйверами `rcbottom`, `rcraid`, `rccfg` для ASUS; проверенный SHA-256 зафиксирован отдельно (вторую копию сохранить также вне ASUS). Это отдельный install/recovery artifact, а не секрет и не замена штатному Windows Setup |
 
 **Проверка до извлечения USB:** проверьте точные байты канонического `Autounattend.xml` и отсутствие старых/конкурирующих ответных XML. На Windows, в которой видна флэшка `U:`, используйте встроенный `certutil`:
 
@@ -28,13 +29,13 @@ certutil -hashfile U:\PostInstall\DSC-3.3.0-x86_64-pc-windows-msvc.zip SHA256
 
 Ожидаемый SHA-256 XML: `8ef765a139dbbcc811f90b3df6f191c8f0405c154c350ddbc6d4672e50e4d5e4`; ZIP DSC: `3f8b27f648661903d066cc19d5a6e7a8c13bd07eb738d4d765ce7239619b8b5f`. Сам launcher повторно проверяет его перед выполнением. Для копирования используйте **текущие утверждённые файлы** (включая исправленный поиск KeePass в `audit.ps1`), не старые тестовые ISO и не исторические снапшоты. Никаких PIN, паролей, recovery keys или пользовательских кошельков на USB.
 
-**Проверка исходного дистрибутива:** в `sources` должен быть доступен образ Windows 11 Pro (не N). Приведённые ниже команды §3 написаны для `sources\install.wim`; если у имеющейся ванильной флэшки вместо него `install.esd` или разделённые `install*.swm`, **не вводите команды для `.wim` дословно** — сначала определите фактический формат и подтвердите имя/индекс образа через DISM. Сам USB от этого пересоздавать не нужно. Если WinPE на ASUS не видит предполагаемый AMD RAID LUN, это **STOP до проверки официального подходящего RAID-драйвера и аппаратной конфигурации**, а не повод выбирать другой диск. Реальная пригодность RAIDXpert2 на FA401EA проверяется отдельно, не доказывается ВМ.
+**Проверка исходного дистрибутива:** реальный установочный носитель ASUS — официальный Microsoft USB `ESD-USB` с разделённым образом **`sources\install.swm`, `install2.swm`, ...**; §3 содержит готовые команды непосредственно для split WIM. USB не нужно пересоздавать, исходные файлы Microsoft не менять. Не пытаться монтировать `.swm` с `DISM /Mount-Image`: ошибка `0xc1420130` означает, что split WIM **не монтируется**. Для развёртывания поддерживается непосредственно `DISM /Apply-Image /SWMFile`. Если фактический носитель всё же содержит единый `install.wim`/`install.esd`, использовать явно описанную альтернативу §3, не притворяться, будто на ASUS подключён ISO. Перед повторной установкой **обязательно отдельно сохранить** подготовленный `winre.wim` с RAID-драйверами: Setup удаляет промежуточный `C:\Windows\System32\Recovery\winre.wim` после регистрации, поэтому C: или пересоздаваемый Recovery-раздел не являются резервным хранилищем. Если WinPE на ASUS не видит предполагаемый AMD RAID LUN, это **STOP до проверки официального подходящего RAID-драйвера и аппаратной конфигурации**, а не повод выбирать другой диск. Реальная пригодность RAIDXpert2 на FA401EA проверяется отдельно, не доказывается ВМ.
 
 После копирования начинается уже существующая процедура §1–§6. В WinPE буква флэшки **может быть не `U:`**: находите её повторно через `diskpart` → `list volume`; все номера дисков устанавливайте только по фактическим устройствам. Не нажимайте «Install now» в Windows Setup: используется существующий ручной DISM-путь, после которого XML копируется в `W:\Windows\Panther\Unattend.xml` (§4). Подготовка файлов на USB **не означает разрешения очищать SSD2 до прохождения ASUS/SSD1 preflight**.
 
 ## 1. До удаления любых разделов
 
-Загрузить **официальный ISO Windows 11** в UEFI-режиме и открыть командную строку WinPE (`Shift+F10`). Найти существующий SSD1 по размеру и `detail disk`, вручную перевести его Offline. Затем выбрать целевой диск по **фактической идентичности**, не по постоянному номеру.
+Загрузиться с **уже готовой официальной установочной USB-флэшки Windows 11** в UEFI-режиме и открыть командную строку WinPE (`Shift+F10`). Источник дистрибутива остаётся проверенным образом Microsoft; работа идёт с реальной USB, а не с виртуальным DVD/ISO. Найти существующий SSD1 по размеру и `detail disk`, вручную перевести его Offline. Затем выбрать целевой диск по **фактической идентичности**, не по постоянному номеру.
 
 На *тестовом стенде* защищённый диск — **Disk 0, 8 GiB**, целевой — **Disk 1, 96 GiB**. Это **НЕ** обещанные номера на ASUS; на ASUS идентификация выполняется заново.
 
@@ -98,20 +99,29 @@ exit
 
 ## 3. Ручное развёртывание образа (после проверки разметки)
 
-В WinPE узнать фактическую букву официального DVD/ISO через `diskpart` → `list volume` → `exit`. **Ниже E: — пример, не фиксированная буква.**
+В WinPE через `diskpart` → `list volume` → `exit` определить **фактическую букву установочной USB**. Ниже `E:` — лишь пример. На ASUS фактически используется **split WIM** (`install.swm` + `install2.swm` и т. д.). Не монтировать эти файлы: `DISM /Mount-Image` на `.swm` не поддерживается.
 
 ```cmd
-dir E:\sources\install.wim
+dir E:\sources\install*.swm
+dism /Get-ImageInfo /ImageFile:E:\sources\install.swm
+```
+
+По выводу определить **точный индекс Windows 11 Pro (не N)** и вручную подставить его вместо `N`; не угадывать индекс:
+
+```cmd
+dism /Apply-Image /ImageFile:E:\sources\install.swm /SWMFile:E:\sources\install*.swm /Index:N /ApplyDir:W:\
+```
+
+`/SWMFile` передаёт все части в нативный DISM: **ни ISO, ни экспорт объединённого install.wim для развёртывания не нужны**. Дождаться `The operation completed successfully`.
+
+**Альтернатива, только если носитель действительно содержит единый `install.wim` или `install.esd`:**
+
+```cmd
 dism /Get-ImageInfo /ImageFile:E:\sources\install.wim
+dism /Apply-Image /ImageFile:E:\sources\install.wim /Index:N /ApplyDir:W:\
 ```
 
-Убедиться, что выбран **Windows 11 Pro**, затем применить соответствующий образ по имени (если имя в ISO отличается, не угадывать индекс):
-
-```cmd
-dism /Apply-Image /ImageFile:E:\sources\install.wim /Name:"Windows 11 Pro" /ApplyDir:W:\
-```
-
-Дождаться `The operation completed successfully`.
+Для `install.esd` заменить суффикс в **обеих** командах на `.esd`. Для извлечения файлов из split WIM в отдельном восстановительном сценарии (не для обычного применения Windows) сначала выполнить `DISM /Export-Image /SourceImageFile:E:\sources\install.swm /SWMFile:E:\sources\install*.swm /SourceIndex:N /DestinationImageFile:<рабочий-диск>\install.wim /Compress:max /CheckIntegrity` и монтировать **только уже экспортированный обычный WIM**.
 
 ```cmd
 bcdboot W:\Windows /s S: /f UEFI
@@ -122,18 +132,24 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum all
 
 `/s S:` явно указывает **собственный ESP целевого диска**, без поиска ESP на SSD1. С `/s` BCDBoot не создаёт запись UEFI NVRAM; независимую загрузку из firmware Boot Menu надо доказать отдельно на ASUS.
 
+**Сначала защитить образ для последующих переустановок.** До `clean` и до удаления прежнего Recovery-раздела сохранить уже подготовленный `winre.wim` с boot-critical AMD RAID `rcbottom`, `rcraid`, `rccfg` (на ASUS фактически 9.3.3.291) **вне целевого RAID LUN**, проверить SHA-256 и сохранить второй экземпляр на независимом контролируемом носителе. Никаких BitLocker recovery keys/секретов в WIM или на USB. Нельзя рассчитывать на `C:\Windows\System32\Recovery\Winre.wim`: Windows Setup штатно удаляет эту промежуточную копию после переноса на Recovery; при пересоздании раздела исчезнет и прежняя копия на нём. Для чистой установки подготовленный образ должен присутствовать на носителе как `U:\Recovery\WinRE\winre.wim` (букву `U:` установить через `list volume`, она может отличаться от буквы `E:` загрузочных файлов). Если на USB не хватает места — отдельный recovery USB/другой доверенный носитель.
+
 ```cmd
+certutil -hashfile U:\Recovery\WinRE\winre.wim SHA256
 md R:\Recovery\WindowsRE
-copy W:\Windows\System32\Recovery\Winre.wim R:\Recovery\WindowsRE\Winre.wim
+copy U:\Recovery\WinRE\winre.wim R:\Recovery\WindowsRE\winre.wim
+dism /Get-ImageInfo /ImageFile:R:\Recovery\WindowsRE\winre.wim
 W:\Windows\System32\reagentc.exe /setreimage /path R:\Recovery\WindowsRE /target W:\Windows
 W:\Windows\System32\reagentc.exe /info /target W:\Windows
 ```
 
-В WinPE `reagentc /info` может показывать Disabled до `specialize`; после первой загрузки подтвердить Enabled. Если копирование, `bcdboot` или `reagentc /setreimage` завершаются ошибкой, **остановиться**, не перезагружаться «на авось».
+Перед продолжением сравнить SHA-256 с **записанным эталоном** подготовленного образа; проверить `DISM` и фактическое наличие трёх RAID-драйверов внутри WIM (одного лишь копирования недостаточно). Если подготовленного образа нет — **STOP** до получения/инъекции и проверки драйверов в штатный WinRE; не подменять тихо подготовленный образ обычным `W:\Windows\System32\Recovery\Winre.wim` без RAID-драйверов.
+
+Раздел `R:` должен быть NTFS **Fully Decrypted, Encryption Method None**; `ProtectionStatus Off` при всё ещё 100%-ном BitLocker-шифровании НЕ достаточно: `reagentc /enable` отвергнет такой WinRE. При этом **BitLocker TPM+PIN системного C: сохраняется**. В WinPE `reagentc /info` может показывать Disabled до `specialize`; после первой загрузки подтвердить Enabled и физический путь, а затем отдельно проверить реальную WinRE загрузку/видимость AMD RAID. Если копирование, `bcdboot` или `reagentc /setreimage` завершаются ошибкой, **остановиться**, не перезагружаться «на авось».
 
 ## 4. Один существующий Autounattend.xml и первая загрузка
 
-Определить букву DVD с **тем же каноническим `Autounattend.xml`** (здесь `F:` только пример):
+Определить букву установочной USB с **тем же каноническим `Autounattend.xml`** (здесь `F:` только пример):
 
 ```cmd
 dir F:\Autounattend.xml
