@@ -41,6 +41,10 @@ native AMD GPU/UMA driver support.
 
 ## Documents
 
+- [Execution plan and evidence gates](IMPLEMENTATION_PLAN.md) — the concrete
+  2026-10-17 host choice, live ASUS RAID blocker, and release sequence
+  tracked in [issue #17](https://github.com/evanmih-cmd/linux/issues/17).
+
 - [Business requirements](BUSINESS_REQUIREMENTS.md) — confirmed needs, independent
   of technical mechanism.
 - [Architecture research](ARCHITECTURE.md) — proposed seams and evidence,
