@@ -22,11 +22,14 @@ It has exactly three product roles:
    
 **Ephemerd** must also run on LinuxDev with Factory's relevant CI contract intact.
 It is an execution service supporting role 1, not an independent fourth
-product role. **Leading isolation proposal:** use **one shared Factory execution KVM guest**
-for any existing WSL2 root that requires VM semantics **and** for ephemerd.
-The WSL `ext4.vhdx` is a filesystem image, not itself a mandate for a VM.
-Never create a second ephemerd VM by default; LinuxDev's physical OS and
-GPU stay independent.
+product role. **Leading, resource-efficient candidate:** run the original Factory WSL2 root
+via **systemd-nspawn** on LinuxDev and run Ephemerd inside that same
+isolated Factory namespace boundary, protected with user namespaces and
+additional stock kernel controls. **This is not yet qualified:** nested
+Ephemerd embedded containerd must work without leaking host privilege.
+One common KVM guest for Factory+Ephemerd remains the fallback when
+container-level containment cannot satisfy the security/runtime contract;
+never create an independent Ephemerd VM automatically.
 
 Workloads inside Factory determine the requirements of their child environments,
 **not the distro, application stack, or daily desktop software of LinuxDev**.
@@ -79,10 +82,15 @@ native AMD GPU/UMA driver support.
   placement/unlock across OSes, including crash consistency.
 - How WSL-specific host integrations and existing Factory runner services map
   to Linux containers or another compatible runtime.
-- Qualify **one shared** Factory guest for existing WSL root and ephemerd,
-  or a no-VM WSL namespace mode only where it preserves required isolation;
-  guest-root access to WSL data is an explicit trust-boundary consideration.
-  Measure real cost against 64 GB of shared GPU/CPU memory.
+- Qualify **one nspawn Factory system container** for the original WSL2 root
+  and embedded-containerd Ephemerd, including nested OCI operations and
+  restrictive user/mount/network namespaces. Preserve ownership of the
+  original WSL2 ext4 image byte-for-byte and guest-root semantics only within
+  Factory. KVM remains a one-VM fallback if this fails.
+- Use **one shared elastic RAM/swap pool** with cgroup-v2 protection and
+  pressure control for desktop, native LLM and lower-priority Factory work;
+  no statically reserved VM RAM or invented GPU memory budget. GPU-locked
+  allocations cannot be assumed swappable.
 - Native inference backend and realistic maximum model weights+KV-cache size
   without exhausting memory needed by host/child workloads.
 - Host installation and rollback strategy that leaves Windows recoverable.

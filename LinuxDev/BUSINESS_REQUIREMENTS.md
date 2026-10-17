@@ -68,19 +68,31 @@ CI cycle. This must not require a custom trusted host updater/synchronizer.
 
 **Critical distinction:** Authorized Factory control-plane administration
 is NOT the same trust category as untrusted candidate code in ordinary CI
-jobs. Candidate jobs do not receive the VM admin key, guest root rights,
-host virtualizer control or access to Ephemerd's GitHub App private key.
+jobs. Candidate jobs do not receive Factory-container administrative
+authority, host administrator authority, privileged containerd sockets,
+hypervisor control or Ephemerd's GitHub App private key.
 
-**Practicality:** Reuse an existing, justified Factory/WSL full-kernel guest as
-Ephemerd's isolation boundary; never automatically allocate a separate VM
-just for Ephemerd. A VHDX filesystem can instead run under a namespace
-container where no extra guest kernel is needed, but this does not grant
-Ephemerd unrestricted host root authority. Prefer one stock virtualization
-boundary, minimizing RAM/CPU/storage overhead against 64 GB UMA inference.
-Guest-root authority necessarily reaches WSL data presented to the same
-guest: never expose personal or independently protected WSL roots by default.
-Retain manual host-owned guest rollback when its entire OS fails; this is
-a last-resort recovery, not a permanent privileged host update service.
+**Practicality:** First qualify **one systemd-nspawn Factory child** using
+the existing Factory WSL2 root, with privileged Ephemerd operations limited
+by user namespaces, capability restrictions, seccomp, AppArmor, cgroups,
+filesystem and network isolation. Neither nspawn nor rootless claims alone
+prove embedded-containerd compatibility or security. Use **one shared KVM
+guest** for the same Factory root and Ephemerd only if the no-VM variant
+cannot meet the verified contract. Never allocate a second Ephemerd VM as
+a default. Factory administrative authority reaches Factory-owned data
+inside its own child, but not any unrelated protected WSL filesystems.
+
+**Resource requirement:** LinuxDev shall share its physical 64 GB unified
+RAM elastically between desktop, native inference and children with no
+permanently carved-out RAM quota for idle Factory/Ephemerd. It shall
+prioritize interactive/active LLM work using stock cgroup-v2/systemd
+controls, reclaim cache and inactive memory, and permit appropriately
+lower-priority anonymous pages to enter compressed/disk-backed swap.
+Host usability and data integrity must survive memory pressure without
+a bespoke resident memory-redistribution daemon. GPU-pinned/non-pageable
+allocations and the finite speed/size of swap are real limits; validate
+with representative concurrent loads. No automatic host root rights
+are delegated to Factory to change memory/isolation policy.
 
 ## BR-6: Operator desktop
 
