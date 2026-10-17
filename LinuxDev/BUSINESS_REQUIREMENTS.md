@@ -71,11 +71,16 @@ is NOT the same trust category as untrusted candidate code in ordinary CI
 jobs. Candidate jobs do not receive the VM admin key, guest root rights,
 host virtualizer control or access to Ephemerd's GitHub App private key.
 
-**Practicality:** Favor a standard, low-overhead isolation product, minimizing
-RAM/CPU/storage overhead that competes with 64 GB UMA local LLM inference.
-Retain ordinary manual host-owned VM rollback when Factory's entire execution
-domain is unrecoverably broken; this is a last-resort recovery operation,
-not a permanent host-side Factory update service.
+**Practicality:** Reuse an existing, justified Factory/WSL full-kernel guest as
+Ephemerd's isolation boundary; never automatically allocate a separate VM
+just for Ephemerd. A VHDX filesystem can instead run under a namespace
+container where no extra guest kernel is needed, but this does not grant
+Ephemerd unrestricted host root authority. Prefer one stock virtualization
+boundary, minimizing RAM/CPU/storage overhead against 64 GB UMA inference.
+Guest-root authority necessarily reaches WSL data presented to the same
+guest: never expose personal or independently protected WSL roots by default.
+Retain manual host-owned guest rollback when its entire OS fails; this is
+a last-resort recovery, not a permanent privileged host update service.
 
 ## BR-6: Operator desktop
 

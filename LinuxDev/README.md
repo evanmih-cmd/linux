@@ -22,8 +22,11 @@ It has exactly three product roles:
    
 **Ephemerd** must also run on LinuxDev with Factory's relevant CI contract intact.
 It is an execution service supporting role 1, not an independent fourth
-product role. **Leading isolation proposal:** run ephemerd inside one minimal
-KVM/Linux guest, leaving LinuxDev's physical OS and GPU independent.
+product role. **Leading isolation proposal:** use **one shared Factory execution KVM guest**
+for any existing WSL2 root that requires VM semantics **and** for ephemerd.
+The WSL `ext4.vhdx` is a filesystem image, not itself a mandate for a VM.
+Never create a second ephemerd VM by default; LinuxDev's physical OS and
+GPU stay independent.
 
 Workloads inside Factory determine the requirements of their child environments,
 **not the distro, application stack, or daily desktop software of LinuxDev**.
@@ -76,9 +79,10 @@ native AMD GPU/UMA driver support.
   placement/unlock across OSes, including crash consistency.
 - How WSL-specific host integrations and existing Factory runner services map
   to Linux containers or another compatible runtime.
-- Confirmed libvirt/KVM outer boundary, usable in-guest Factory administration
-  and exact costs against 64 GB of shared GPU/CPU memory; no unconditional
-  promise of zero overhead or identical Windows-Hyper-V security.
+- Qualify **one shared** Factory guest for existing WSL root and ephemerd,
+  or a no-VM WSL namespace mode only where it preserves required isolation;
+  guest-root access to WSL data is an explicit trust-boundary consideration.
+  Measure real cost against 64 GB of shared GPU/CPU memory.
 - Native inference backend and realistic maximum model weights+KV-cache size
   without exhausting memory needed by host/child workloads.
 - Host installation and rollback strategy that leaves Windows recoverable.

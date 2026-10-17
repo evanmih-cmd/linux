@@ -18,12 +18,11 @@ Business authority: [BUSINESS_REQUIREMENTS.md](BUSINESS_REQUIREMENTS.md).
               │ existing  │             │
               │ WSL2 FS   │             │
               ├───────────┴─────────────┤
-              │ QEMU/KVM (libvirt)      │
+              │ One Factory KVM guest   │
               │ ┌───────────────────┐  │
-              │ │Factory Linux guest│  │
-              │ │ ephemerd          │  │
-              │ │ embedded containerd│ │
-              │ │ isolated OCI jobs │  │
+              │ │ Original WSL2 FS  │  │
+              │ │ Factory control   │  │
+              │ │ Ephemerd + OCI    │  │
               │ └───────────────────┘  │
               └─────────────────────────┘
 
@@ -91,6 +90,18 @@ the established carrier where appropriate. The physical layout may need
 reconciliation with the *current* ASUS dual-SSD/WinOps installation; historical
 example partition sizes or locations are not authoritative.
 
+## Clarification: RAID compatibility is not a Ryzen-AI-Max compatibility matrix
+
+LinuxDev's AMD RAID risk is a **storage-controller and on-disk format**
+interoperability question, not a GPU/CPU SKU whitelist. Ryzen AI Max is the
+family name of the ASUS processor/APU, but it does not define the RAID
+metadata format. The relevant evidence is the controller's actual PCI ID,
+AMD RAIDXpert2 metadata/LUN layout, firmware presentation, Linux module
+behavior, Secure Boot signing and the safe boot/update/recovery path.
+A processor family missing from an old RAID driver document is at most
+insufficient support evidence; it is **not proof of incompatibility**.
+Never couple ROCm GPU compatibility gates with AMD RAID import gates.
+
 ## WSL2 on Linux — what is established
 
 1. Microsoft WSL2 distributions store Linux ext4 filesystems in `ext4.vhdx`.
@@ -157,138 +168,142 @@ a default architecture; preserving Git sources alone is not enough.
 - Linux kernel ntfs3: https://docs.kernel.org/filesystems/ntfs3.html
 - NTFS dual-boot/hibernation safety: https://manpages.debian.org/bookworm/ntfs-3g/mount.ntfs.8.en.html
 
-## Ephemerd — self-administering Factory VM, host-isolated
+## Unified Factory child: one KVM boundary, not two VMs
 
-**Status: leading architecture proposal, not yet qualified. Product-owner
-clarification 2026-10-17:** The problem to solve is **not just OCI job
-isolation**, but the authority/lifecycle boundary of ephemerd **itself**.
-Today's Windows ephemerd is a host-resident service. Factory therefore needs
-a separate, specially privileged Windows updater/synchronizer and must
-avoid modifying the sensitive physical Windows substrate. LinuxDev should
-remove that coupling, not reproduce it with privileged root on LinuxDev.
+**Corrected design discussion 2026-10-17.** The prior text incorrectly
+treated `systemd-nspawn` for existing WSL2 roots and a *separate* KVM
+guest for ephemerd as if both were justified by default. They are not.
 
-### Preferred minimum composition
+### Distinguish file format from runtime
+
+A WSL2 distro's `ext4.vhdx` is a filesystem in a virtual-disk format.
+Its data can be exposed by QEMU/VHDX to the host and run in a namespaced
+Linux OS tree by `systemd-nspawn`, with **no second kernel and no VM**.
+A separate VM is needed only if the required WSL/Factory runtime semantics
+or security boundary need a kernel/privilege isolation different from the
+LinuxDev physical host. The existing WSL2 VM on Windows is supplied by
+Windows: LinuxDev does not need to emulate *WSL itself*.
+
+**Leading consolidated composition — ONE guest for Factory:**
 
 ```text
-LinuxDev / Ubuntu Desktop (operator-owned physical trust domain)
-│
-├── GPU / ROCm / llama.cpp: direct host I/O, no GPU virtualization
-├── original WSL2 environments: direct-user child/Factory controller
-└── QEMU/KVM + libvirt (HOST-OWNED lifecycle and network)
-    │ no host/home/AI private mounts, no libvirt socket, no /dev/kvm
-    └── one small, persistent minimal Linux VM = FACTORY EXECUTION DOMAIN
-        ├── guest systemd/SSH, guest-owned filesystem + OCI caches
-        ├── ephemerd Linux binary/service + embedded containerd/BuildKit
-        ├── transient OCI CI runners & workbench (untrusted candidate route)
-        └── guest root authority (trusted Factory maintenance route ONLY)
-
-Factory controller (outside ephemerd) --guest-admin SSH--> Factory VM
-VM --github/registry public endpoints--> Internet
-VM -X-> LinuxDev host, other Windows OS data, private LAN/VPN
+   Windows booted                         LinuxDev booted
+   --------------                         ---------------
+   Windows WSL2 VM                        Ubuntu Desktop / GPU
+         │                                       │
+         └── original distro ext4.vhdx ──┐      QEMU/KVM (libvirt)
+                                         └──────► ONE Factory VM
+                                                 │ original WSL2 root FS
+                                                 │ Factory controller (not ephemerd)
+                                                 │ Ephemerd Linux backend
+                                                 │ embedded containerd/BuildKit
+                                                 └ ephemeral OCI CI jobs
 ```
 
-**No custom trusted host updater.** The normal Linux `systemd` service manager
-inside the VM and ephemerd's stock lifecycle/upgrade commands handle normal
-maintenance. When standard CI cannot resolve a contradiction, **the already
-running independent Factory controller** authenticates to the VM over ordinary
-SSH and can repair/update **anything inside that VM**, including ephemerd,
-containerd state, runner images, accounts and guest system services. If that
-repair must restart ephemerd, the maintenance command does not depend on the
-ephemerd runner process being alive: a host-of-jobs CI workflow must **never be
-the sole entrypoint capable of repairing itself**. A detached guest systemd
-service or interactive SSH session is acceptable stock product plumbing, not
-a bespoke Windows-like trusted update layer.
+Arrows are **time-alternating**, not simultaneous mounts: the original
+WSL2 image must have one exclusive RW owner and be cleanly shut down,
+flushed and detached before booting the other operating system. The
+VM receives **only the appropriate Factory-owned VHDX** from the
+LinuxDev host. There is no mandatory conversion, duplicate distro root,
+periodic sync, reinstall or new OS image allocated exclusively for
+ephemerd.
 
-**Factory control access is not candidate-code access.** A dedicated VM-admin
-credential is held only by an authorized Factory control-plane environment,
-not exposed to ordinary untrusted CI candidate jobs, any runner mounts, task
-logs or the GitHub repository. The guest's GitHub App identity is scoped to
-its required repos/capabilities. The Ephemerd Linux fake Docker API and
-`dind.allow_privileged=false` remain separately enforced. Factory has power
-over the **guest** only; permission to manage the guest is not permission to
-alter the host trust boundary. An attacker compromising the whole guest may
-still steal **guest-held** GitHub credentials and affect its jobs, so they must
-be separately scoped and recoverable; a VM is not a panacea.
+**Native Linux boot mechanism:** QEMU supports direct Linux kernel boot
+(`-kernel`, `-initrd`, `-append root=...`) independently of guest BIOS
+or bootloader, so an ext4 WSL2 root filesystem without its own bootloader
+is a legitimate VM-root candidate. Guest kernel/initrd are separate
+launch resources; the existing `ext4.vhdx` remains the persistent root.
+This is an **engineering possibility, not proof** that a given Ubuntu
+WSL2 root starts unmodified and operates correctly with the guest kernel.
+WSL `/etc/wsl.conf`, systemd, networking, cgroups and mounts must be
+accounted for by platform integration.
 
-### Why a whole VM instead of systemd-nspawn or Incus system container?
+If more than one Factory-owned WSL root is required concurrently, attach
+their original VHDX files as separate **virtual disks to the same VM**;
+boot a designated Factory root and run other guest OS trees using
+`systemd-nspawn` *inside* the VM where appropriate. Each filesystem
+still has its own persistent identity. **No second outer VM** merely
+because a second WSL image exists. Do not assume every personal/protected
+WSL root belongs in this same trust domain.
 
-Ephemerd's Linux backend creates OCI containers through *embedded containerd*,
-configures networking, manages image snapshots and implements Docker CLI
-compatibility. Outer unprivileged system-container nesting can constrain
-mounts, overlayfs, cgroups, networking and some operations; granting a
-container exceptional host-level privileges to fix nesting erodes the
-very security boundary being purchased. Upstream nspawn explicitly says its
-sandbox can be circumvented without user namespaces. A VM allows privileged
-container management against **its own kernel**, while hardware virtualization
-protects the host; a complete VM does use more RAM than a container.
+The QEMU virtualization backend is selected for a stronger VM boundary
+against ephemerd's Linux embedded-containerd operations, including the
+risk of privileged Docker-compatible jobs. `systemd-nspawn` directly
+on LinuxDev remains the cheapest WSL-compatible alternative where it
+works, but it does **not itself protect** the physical host from a
+host-privileged ephemerd Linux daemon. Do not present unprivileged
+namespace nesting as a free substitute for VM security.
 
-**Product choice:** stock **QEMU/KVM + libvirt** on Ubuntu 26.04, preferably
-operated through stock `virt-manager` on the desktop and ordinary libvirt
-CLI/API as the host lifecycle product. A minimal guest Ubuntu Server is a
-candidate; the host/guest Ubuntu versions need not be identical. The
-alternative **Incus VM** offers excellent VM lifecycle and memory controls,
-but introduces an additional instance-management daemon and access model;
-choose it only if it reduces total ownership cost relative to libvirt.
-`systemd-vmspawn` is a smaller modern QEMU wrapper but has a younger
-management/GUI/snapshot ecosystem; no demonstrated reason to replace
-libvirt's mature workflow yet.
+### Authority and independent repairs
 
-This VM is NOT an unnecessary virtualization layer on the LLM hot path:
-native GPU inference stays on LinuxDev. It **does** consume host RAM from the
-same physical 64 GB used by the GPU, plus some idle CPU and disk. Prefer
-one VM, modest on-demand vCPU assignment, guest memory balloon where
-supported, and the ability to suspend/stop the VM when maximal LLM memory is
-needed. **Do not claim a zero-overhead VM or an invented 1–2 GB minimum**:
-capacity must be measured against Factory's simultaneous job working set
-and host inference target.
+**Factory's trusted controller is an independent systemd process inside
+the same Factory guest, NOT necessarily a separate outer-VM controller.**
+It is authorized for guest-root maintenance with narrowly held local
+credentials, and can update/restart the guest ephemerd service and OCI
+runner images even while the CI daemon is stopped or inconsistent.
+Ordinary potentially hostile CI jobs must not obtain guest-root control,
+the Factory controller credentials, ephemerd secret keys, rootful
+containerd socket or host-libvirt authority.
 
-### Host and network boundary
+The guest root can inspect/change any WSL disk attached to **that guest**,
+even when mounted into a second container. This is an unavoidable trust
+property, not an isolation guarantee. Restrict the guest to Factory-owned
+roots and needed volumes; private/independently protected operator WSL
+environments must be separate or host-accessed at lower privilege.
+No raw RAIDXpert2 devices, host root filesystem/home, GPU, host Docker
+socket or libvirt socket are exposed.
 
-- No raw NVMe/RAIDXpert2 block devices, host home, host VHDX,
-  operator secrets, GPU/DRM devices, shared clipboard, guest-agent command
-  execution into host, hypervisor socket or host root filesystems.
-- A dedicated VM disk is **guest-owned**, supports ordinary snapshot/rebuild
-  and does not become a host filesystem authority.
-- libvirt default NAT network is **not a host/LAN firewall**. It permits
-  normal guest egress and may allow guest connections to host services;
-  define explicit host firewall rules for the VM interface to deny
-  guest -> host/private subnets/VPN, while selectively permitting DNS,
-  DHCP and the required GitHub/registry network path.
-- Host -> guest admin SSH is scoped to the independent Factory controller
-  (never to candidate-execution containers). Do not pass any
-  host-privileged management socket back into the guest.
-- Guest `root` is a **deliberately expendable** authority boundary: repair,
-  replace or even destroy the guest without modifying LinuxDev/Windows
-  encryption, boot, RAID, partitions or physical desktop.
+The physical host operates the VM power/network/disk attachments and an
+exceptional **manual** stock snapshot/restore for total guest failure.
+It does not install, update or repair ephemerd on Factory's behalf.
+Guest network egress must be blocked from host/LAN/private networks by
+explicit firewall policy; libvirt NAT alone does not achieve isolation.
+The VM is stopped when maximal native LLM GPU/UMA capacity is needed.
+Guest memory cost is **shared physical RAM**, to be measured.
 
-### Failure and restart contract
+### Additional cross-OS opportunity — remove Windows updater too
 
-| Scenario | Owner / mechanism |
-| --- | --- |
-| Normal job/image update | Factory CI inside guest; stock OCI/ephemerd lifecycle |
-| Ephemerd code/version defect but guest healthy | Factory control-plane SSH -> guest systemd/ephemerd, independent of ephemerd runner status |
-| Guest root filesystem/service broken | Host operator uses stock libvirt snapshot rollback / disposable guest reprovision; not a resident automatic host updater |
-| LinuxDev/RAID/boot defect | Physical host recovery, never delegated to the Factory VM |
+A future simplification is to run **the Linux ephemerd backend inside
+the very same WSL2 distribution when Windows is booted**, instead of
+Windows-hosted ephemerd plus its separate privileged update layer.
+Factory then owns the daemon and its maintenance path in either OS.
+This requires a **separate proof**, especially embedded-containerd and
+privileged-feature compatibility on the WSL2 kernel, GitHub dispatch,
+autostart/liveness, network policy and existing Factory jobs. Microsoft
+explicitly warns that **systemd services do not keep WSL running**.
+Therefore this is a candidate migration, NOT an approved retirement of
+the current Windows ephemerd service or a promise of 24/7 unattended
+Windows-side service continuity.
 
-**Acceptance requires** successful Factory-authorized guest-root repair while
-ordinary Ephemerd CI is intentionally stopped, denied privilege escalation
-for an untrusted CI job, denied VM->host/LAN access, real Factory Linux OCI
-job completion, and empirical concurrent-LLM overhead measurement.
+### Acceptance for unified composition
 
-### Primary sources
+1. Boot original Factory WSL2 `ext4.vhdx` using the selected one-VM
+   guest method; demonstrate real Factory commands/services, not just
+   a successful mount. Mutations survive return to Windows WSL2 and back.
+2. Run ephemerd Linux backend + real Factory CI under **that same VM**,
+   with OCI images/associated Btrfs volumes and jobs isolated.
+3. Show the **independent** Factory controller can repair ephemerd
+   while it is stopped, using guest-only rights.
+4. Confirm no guest->host/RAID/Windows/private WSL data authority,
+   no privileged ordinary CI admin key access, clean shutdown and
+   host RAM impact under native >48GB LLM inference.
+5. Use a second VM only if evidence establishes an **independent trust
+   domain that cannot be safely combined**. Count its resource/lifecycle
+   cost explicitly before accepting that exception.
 
-- Ephemerd Linux/Windows architecture: https://github.com/ephpm/ephemerd
-- Ephemerd explicit privileged DinD host-risk warning:
-  https://github.com/ephpm/ephemerd/security
-- QEMU/libvirt on Ubuntu 26.04:
-  https://documentation.ubuntu.com/release-notes/26.04/changes-since-previous-interim/
-- Libvirt NAT is not isolation:
-  https://libvirt.org/formatnetwork.html
-- Libvirt guest-host firewall model: https://libvirt.org/firewall.html
-- Incus VM vs container distinction:
-  https://linuxcontainers.org/incus/docs/main/explanation/containers_and_vms/
-- systemd-nspawn userns warning:
-  https://man7.org/linux/man-pages/man1/systemd-nspawn.1.html
+**Source basis:** QEMU direct Linux boot
+https://www.qemu.org/docs/master/system/linuxboot.html ;
+systemd-nspawn
+https://man7.org/linux/man-pages/man1/systemd-nspawn.1.html ;
+WSL disk ownership
+https://learn.microsoft.com/en-us/windows/wsl/wsl2-mount-disk ;
+Ephemerd backend and risk
+https://github.com/ephpm/ephemerd ,
+https://github.com/ephpm/ephemerd/security ;
+WSL service lifetime
+https://learn.microsoft.com/en-us/windows/wsl/systemd ;
+libvirt network/firewall
+https://libvirt.org/firewall.html .
 
 ## GPU / local inference — native, memory-aware
 
@@ -313,7 +328,7 @@ a target on this ASUS.
   is the documented **leading host selection**; validation of the full
   FA401EA hardware and its RAID/boot topology remains a release gate.
 - GPU memory has to leave usable headroom for host GUI, processes, Ephemerd
-  and child environments, including the independent Factory VM; assess actual
+  and child environments, including the ONE shared Factory VM; assess actual
   loaded model+KV cache, speed and memory pressure rather than a BIOS/driver
   allocation label.
 
@@ -373,8 +388,10 @@ RAIDXpert2 virtual LUN is safely visible to Ubuntu.
 Evidence on 2026-10-17:
 - AMD's March 2025 Ubuntu RAID Quick Start Guide explicitly lists supported
   Ryzen 7000/Threadripper, B650/X670/TRX chipsets, etc.; that list is not
-  affirmative native Ubuntu 26.04 support for **Ryzen AI Max+ 392/FA401EA**.
-  It documents an external RAID driver, not automatic upstream kernel support.
+  affirmative native Ubuntu 26.04 support for the **actual ASUS AMD RAID
+  controller and existing multi-LUN layout**. CPU SKU alone is not a
+  discriminator. It documents an external RAID driver, not automatic
+  upstream kernel support.
 - Community `joeytroy/amd-raid-driver` exposes GPL reverse-engineered `rcraid`,
   claims Ryzen AI Max chipset coverage and Linux 7.0 compatibility and has
   real two-NVMe RAID0/RAID1 boot evidence **on TRX50**, not on this ASUS with
@@ -426,10 +443,10 @@ selection unless they prove a **host-specific, unavoidable dependency**.
 2. Use Ubuntu 26.04 LTS Desktop + stock amdgpu as the working baseline,
    with packaged ROCm first and newer pinned AMD ROCm only where necessary;
    validate exact ASUS peripherals, resume and graphical session.
-3. Instantiate one **host-isolated Factory KVM VM** as the leading solution;
-   map Factory's pinned ephemerd version to its guest Linux backend, give
-   independent Factory controller guest-admin (NOT host-admin) access, and
-   measure guest RAM cost and isolation/security behavior.
+3. Use **one shared KVM guest for the original Factory WSL root and
+   ephemerd**, not separate WSL and Ephemerd VMs. Give an independent
+   Factory controller guest-admin (NOT host-admin) authority, demonstrate
+   its repair of stopped ephemerd and measure real guest RAM cost.
 4. Set functional acceptance criteria using actual existing environment
    continuity, representative Ephemerd job execution, and real >48 GB LLM
    usable-memory operation, plus a fully usable graphical session.
