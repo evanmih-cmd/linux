@@ -21,7 +21,17 @@ authorized.** Tracking: [Linux issue #17](https://github.com/evanmih-cmd/linux/i
 | Data | Previously researched NTFS shared capacity with dynamic VHDX; clean exclusive Windows/Linux ownership |
 | Boot | Independent Linux, WinHome, WinOps boot/recovery |
 
-## P0 — genuine supported Linux RAIDXpert2 integration
+## P0 — ASUS FA401EA RAID deployment via existing AMD APU driver adaptation
+
+**Implementation authority:** [RAID_INSTALL_FA401EA.md](RAID_INSTALL_FA401EA.md).
+Vendor 9.3.3.302 + pinned APU/kernel patches are the concrete researched
+path. The upstream auto-installer cannot be run unchanged on this machine:
+Calamares-only mount detection versus Ubuntu Desktop Subiquity; selects
+first-found vfat ESP (could be Windows); chroot may build against live
+kernel rather than new installed kernel. Explicit identity/target-ESP,
+version-matched signed module, initramfs proof are mandatory.
+
+### Previously recorded vendor context
 
 **Evidence correction:** RAIDXpert2 already has native AMD Linux drivers,
 not merely an experimental reverse-engineered port.

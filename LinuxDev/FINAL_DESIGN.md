@@ -85,11 +85,25 @@ chown, repeated package installation, sync or parallel copies.
 Do not mount writable NTFS in Linux when Windows Fast Startup
 has left it hibernated.
 
+## Verified RAID installation research
+
+The machine-specific Linux RAID driver and installation investigation is
+[RAID_INSTALL_FA401EA.md](RAID_INSTALL_FA401EA.md). AMD 9.3.3.302's official
+Linux blob requires **an APU-specific kernel/feature-mask and NVMe trap
+compatibility adaptation** on recent kernel versions; the most concrete
+prior work is DesktopECHO/rcraid-nvme (pinned main `7ef6506b1dc6`).
+Its existing installer is **NOT appropriate unmodified** for Ubuntu 26.04
+Desktop/multiple Windows ESPs; see the demonstrated Calamares-only detection,
+first-FAT ESP pick and target-kernel mismatches in that report. Use explicit
+array and ESP identification, never raw NVMe. This is an engineering
+integration path, not a claim of proven ASUS boot.
+
 ## Deployment contract
 
-1. Resolve exact official/OEM RAIDXpert2 Linux 9.3.3 SDK package
-   and validate its real kernel and existing ASUS LUN interface on
-   Ubuntu 26.04, including Secure Boot and kernel upgrades.
+1. Use the actual OEM AMD Linux RAID 9.3.3.302 RPM plus pinned and audited
+   APU/kernel compatibility port; verify existing ASUS multi-LUN identity,
+   DKMS/target-initramfs/module signing and Secure Boot under Ubuntu 26.04.
+   Do not run the upstream auto-installer or assume its ESP selection is safe.
 2. Non-destructively provision LinuxDev as independently bootable
    OS; preserve both Windows and their recovery protections.
 3. Apply declarative `factory-manager.nspawn` policy: allowed

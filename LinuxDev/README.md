@@ -60,6 +60,9 @@ native AMD GPU/UMA driver support.
 
 ## Documents
 
+- [ASUS-specific RAID installation investigation](RAID_INSTALL_FA401EA.md)
+  — OEM AMD rcraid 9.3.3.302, existing multi-LUN array, APU fixes,
+  confirmed upstream installer hazards, and exact boot procedure.
 - [Execution plan and evidence gates](IMPLEMENTATION_PLAN.md) — the concrete
   2026-10-17 host choice, live ASUS RAID blocker, and release sequence
   tracked in [issue #17](https://github.com/evanmih-cmd/linux/issues/17).
