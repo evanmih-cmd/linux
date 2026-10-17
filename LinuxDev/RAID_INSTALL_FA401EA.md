@@ -136,8 +136,9 @@ Sources:
 adapted by a pinned, audited DesktopECHO **main Jul 23 commit**.
 A minimal **LinuxDev-specific integration** shall separate
 the driver build from its unsuitable auto-installer. It shall
-use the official Ubuntu 26.04 **Subiquity / ubuntu-desktop-bootstrap**
-installation primitives with explicit target LUN selection, and
+use the official Ubuntu 26.04 LTS **Subiquity/curtin custom-storage**
+installation primitives with explicit target LUN selection, followed by
+stock Ubuntu **ubuntu-desktop** GNOME packages, and
 separately provision target initramfs/ESP. This is a one-off
 vendor-port adaptation, not a new generic RAID engine.
 
@@ -166,7 +167,8 @@ rcraid boot generation. Firmware Secure Boot stays ON;
 MOK signs `rcraid`, no Windows EFI changes.
 
 **Linux live media build/boot (offline-capable after staging)**
-4. Prepare Ubuntu 26.04.1 Desktop media and vendor RAID
+4. Prepare Ubuntu 26.04.1 **Server/Subiquity custom-storage** installation
+   media with the staged official `ubuntu-desktop` GNOME packages and vendor RAID
    9.3.3.302+audited patch source, exact kernel headers/build
    packages and local binary signatures on the media *before*
    boot. Keep Secure Boot on; arrange module signing/MOK
@@ -185,10 +187,12 @@ MOK signs `rcraid`, no Windows EFI changes.
 6. If and only if the new intended Linux **RAID virtual disk**
    is separately identifiable and no Windows disks are
    misrecognized, carry out user-approved target-only
-   partitioning: its **own ESP**, Linux root and planned
-   native-Linux swap/recovery. Ubuntu 26.04 Desktop install
-   to this **one identified LUN only**, keeping other LUNs
-   protected. User-selected target identity is explicit.
+   partitioning: its **own 2 GiB ESP**, 4 GiB Linux-only /boot,
+   and LUKS2+Btrfs root with Snapper-managed system and separate
+   home/swap subvolumes. Ubuntu 26.04 Subiquity/curtin custom storage
+   targets this **one identified LUN only**, then installs GNOME
+   with official Ubuntu packages; other LUNs stay protected.
+   User-selected target identity is explicit.
 7. Install DKMS **and signed** `rcraid` for the TARGET Ubuntu
    kernel version (not necessarily live kernel), regenerate
    and independently inspect target initramfs module included
