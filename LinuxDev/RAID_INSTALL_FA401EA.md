@@ -155,6 +155,16 @@ vendor-port adaptation, not a new generic RAID engine.
    and physical return path. No RAID mode change. This is an
    acceptance prerequisite, not a Linux imaging workaround.
 
+**Host filesystem/boot lifecycle selected in
+[LIFECYCLE.md](LIFECYCLE.md):** one NEW Linux RAID LUN
+gets a separate 2 GiB ESP and 4 GiB /boot;
+LUKS2/Btrfs Snapper system root and independent
+snapshot-excluded swap + home. Use Ubuntu 26.04
+Subiquity/curtin custom storage, then official GNOME
+packages; retain a last-known-good signed kernel/initramfs/
+rcraid boot generation. Firmware Secure Boot stays ON;
+MOK signs `rcraid`, no Windows EFI changes.
+
 **Linux live media build/boot (offline-capable after staging)**
 4. Prepare Ubuntu 26.04.1 Desktop media and vendor RAID
    9.3.3.302+audited patch source, exact kernel headers/build

@@ -129,6 +129,29 @@ or recovery paths, and no destructive installation action may guess its target.
 between Windows and LinuxDev must be operationally simple and avoid routine
 manual state reconstruction.
 
+## BR-9A: Independent updates, rollback and recoverable storage
+
+**Requirement:** Kernel/boot/host root, Factory QEMU supervisor,
+Ephemerd, each individually registered WSL2 distro and shared
+AI/user data have distinct state and update/recovery authority.
+A routine Ubuntu rollback may not roll back newer WSL images,
+code, models, snapshots or guest state.
+
+**Requirement:** Preserve a last-good, genuinely bootable
+kernel/initramfs/rcraid pair alongside system snapshots.
+Verify off-device backup recovery, not merely local Btrfs
+snapshots or untested Veeam coverage. A Windows WSL VHDX
+cannot become a QEMU snapshot backing file that diverges
+from subsequent Windows state.
+
+**Requirement:** Maintain existing firmware Secure Boot
+coexistence with both BitLocker TPM+PIN Windows installations.
+Use standard Ubuntu module signing for AMD rcraid instead
+of lowering the global firmware protection. Distinct
+LinuxDev root encryption protects offline host secrets;
+do not import the separate portable crypto workstation's
+TPM2+PIN/UKI design.
+
 ## BR-10: Total-cost discipline
 
 **Requirement:** Prefer existing supported virtualization/container/OS/GPU

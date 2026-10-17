@@ -3,6 +3,13 @@
 **Status: research / unapproved implementation decisions, 2026-10-17.**
 Business authority: [BUSINESS_REQUIREMENTS.md](BUSINESS_REQUIREMENTS.md).
 
+**Normative lifecycle:** [LIFECYCLE.md](LIFECYCLE.md)
+selects host Btrfs/Snapper, matched signed rcraid boot generations,
+distinct Factory supervisor snapshots, per-WSL offline backups,
+LUKS2 root, and UEFI Secure Boot kept on for both Windows
+BitLocker installations. Historical research below does not
+supersede it.
+
 ## Boundaries
 
 ```text

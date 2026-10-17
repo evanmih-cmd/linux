@@ -61,6 +61,20 @@ existing WinOps and future Linux logical LUNs and a recoverable
 Ubuntu 26.04 boot path. Driver existence is PROVEN; exact
 ASUS/26.04 acceptance is NOT. Keep both Windows boots intact.
 
+## P0B — single recovery-capable Linux host image
+
+Normative contract: [LIFECYCLE.md](LIFECYCLE.md).
+Select exactly the intended Linux RAID virtual LUN, create
+its own ESP/boot and LUKS2+Btrfs subvolumes using
+Subiquity/curtin custom storage, followed by official
+Ubuntu GNOME packages. Use stock Snapper for root
+snapshots; qualify real default-subvolume boot rollback,
+not Ubuntu hard-coded `subvol=@`. Retain separate
+old kernel+initramfs with exact signed `rcraid`.
+Keep firmware Secure Boot on for Windows BitLocker;
+enroll module-signing-only MOK and preserve off-laptop
+Windows/LUKS recovery.
+
 ## P1 — multiple canonical WSL2 roots, independent per guest
 
 **Do not equate WSL with one Ubuntu distro.** There may be many
@@ -190,6 +204,19 @@ to host reclaim/swap. Reporting alone cannot reclaim a guest's
 live cache; do not claim perfect instant reclamation or a full
 64 GB iGPU allocation. Host controls cgroup pressure, Factory
 controls the guest's inner service priority.
+
+## P3B — updates and snapshots across different state owners
+
+[LIFECYCLE.md](LIFECYCLE.md) defines an explicit lifecycle:
+Snapper @system snapshots with retained compatible signed
+kernel/initramfs/rcraid; APT unattended security updates
+without automatic reboot; kernel/DKMS coordinated activation.
+Separate, powered-off **supervisor-only** qcow2 snapshots
+for Factory; DO NOT snapshot VHDX backing disks or rewind
+other Windows-registered WSL images. Use per-distro
+offline restic backup plus verified external image/Veeam
+backup, not unproven VSS of a live WSL VHDX.
+Test rollback failures and off-device recovery before release.
 
 ## P4 — Windows-side Ephemerd retirement (separate release)
 

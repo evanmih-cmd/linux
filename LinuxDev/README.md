@@ -60,6 +60,8 @@ native AMD GPU/UMA driver support.
 
 ## Documents
 
+- [Snapshots, rollback, updates and Secure Boot](LIFECYCLE.md) — normative lifecycle of host, rcraid boot, Factory VM and independently persisted WSL environments.
+
 - [ASUS-specific RAID installation investigation](RAID_INSTALL_FA401EA.md)
   — OEM AMD rcraid 9.3.3.302, existing multi-LUN array, APU fixes,
   confirmed upstream installer hazards, and exact boot procedure.

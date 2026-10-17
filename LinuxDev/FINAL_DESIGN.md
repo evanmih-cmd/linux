@@ -59,6 +59,31 @@ confidentiality against this trusted admin. No private protected WSL
 disks can be attached without explicit authority. LinuxDev host
 retains the physical safety policy and device catalog.
 
+## Update, snapshot, rollback and Secure Boot architecture
+
+[LIFECYCLE.md](LIFECYCLE.md) is the selected release contract.
+One new Linux RAID LUN has its own 2 GiB ESP, 4 GiB ext4 /boot
+and independent LUKS2 passphrase-protected Btrfs root. The system
+uses **Snapper** for host rollback, with separate home, snapshot,
+swap and Factory VM state. The host keeps both current and
+last-known-good signed kernel/initramfs/rcraid pairs.
+
+Factory supervisor qcow2 may be rolled back by Factory;
+**canonical WSL ext4.vhdx and companion data VHDX may NOT be
+included in QEMU or host system snapshots.** Each distro
+has its own targeted off-device backup/restoration.
+
+**Firmware Secure Boot remains ON** for both Windows TPM+PIN
+BitLocker installations. Ubuntu Canonical-signed shim/GRUB/kernel
+plus module-signing-only MOK for patched AMD rcraid. No special
+LinuxDev TPM+PIN/UKI or firmware key replacement. Ubuntu initramfs
+is not authenticated by stock Secure Boot.
+
+Host installation is via **Ubuntu 26.04 Subiquity/curtin custom
+storage** to the explicitly verified new RAID LUN, followed by
+official Ubuntu Desktop packages for GNOME; guided Desktop
+storage cannot be relied on for exact LUKS+Btrfs snapshots.
+
 ## Dynamic UMA memory
 
 One kernel-owned pool, no fixed 8/16 GB reserve for Ephemerd.
