@@ -30,6 +30,62 @@ in the host root filesystem merely because a child uses it. Host components
 are limited to desktop, platform drivers, guest/container runtime, storage,
 recovery and native LLM execution.
 
+## Recovered prior design: one shared AI workspace
+
+**Historical source:** saved project conversation `Laptop suitability for LLMs`,
+in the section about the ASUS dual-boot storage pool, WSL2 and native Linux.
+This was already researched *before* LinuxDev was opened; do not treat its
+storage topology as an undiscovered Greenfield design problem.
+
+The previously preferred practical topology, **not yet installed or formally
+accepted for this LinuxDev release**, was:
+
+```text
+ASUS internal NVMe storage
+├── Windows OS volume(s)       native NTFS; independent boot/recovery
+├── LinuxDev OS volume         native Linux system FS; independent boot
+└── large shared NTFS data pool (dynamic free-space allocator)
+    ├── Windows games/data     native Windows files
+    ├── existing WSL distro VHDX files (as appropriate)
+    └── AI-data.vhdx            dynamically growing VHDX
+        └── ext4                one common /srv/ai
+            ├── model and dataset storage
+            ├── projects/agent workspaces
+            ├── artifacts and caches
+            └── Linux users/ownership/permissions
+```
+
+- Under WSL2: `wsl --mount --vhd` presents the shared **data** VHDX to Linux,
+  so Linux-native filesystem rights and data have one physical copy.
+- Under native Linux: mount the NTFS carrier, then `qemu-nbd` presents the
+  **same data** VHDX and ext4. No data export/import or two-way file sync.
+- Windows games and the Linux-native AI workspace draw from the **same free
+  NTFS capacity**: dynamic VHDX allocates backing space as it grows; OS root
+  partitions need not be thin-provisioned.
+- Safe use requires exclusive ownership, clean guest unmount and NTFS flush;
+  do not boot Linux with the shared NTFS volume left in Windows Fast Startup
+  or hibernation state. Space reclamation on deletion requires a separately
+  verified discard/compaction path, not just dynamic allocation on growth.
+- Prior candidate comparison rejected Storage Spaces vs LVM-thin as a single
+  interoperable local pool, judged OpenZFS-on-Windows immature at the time,
+  rejected Paragon ext4 as a critical Windows games filesystem, and retained
+  **NTFS + dynamic VHDX** as the most practical available composition.
+
+**Crucial distinction:** the original discussion decided a **shared persistent
+AI data filesystem**, not a proven way to boot the *entire original WSL2 root
+image* unchanged on native Linux. Those are independent images/concerns:
+`AI-data.vhdx` vs `ext4.vhdx` for a WSL2 distribution. LinuxDev's new explicit
+BR-3/BR-4 additionally requires direct, bidirectional continuation of each
+existing WSL2 root environment. Do not silently replace it with only the common
+`/srv/ai` directory or a recreated Linux distro.
+
+Consequently, **shared data pool selection is inherited research, not the
+next open-ended architecture question**. The remaining targeted question is
+the launch/host-integration semantics for original WSL2 system images, using
+the established carrier where appropriate. The physical layout may need
+reconciliation with the *current* ASUS dual-SSD/WinOps installation; historical
+example partition sizes or locations are not authoritative.
+
 ## WSL2 on Linux — what is established
 
 1. Microsoft WSL2 distributions store Linux ext4 filesystems in `ext4.vhdx`.
@@ -172,9 +228,11 @@ selection unless they prove a **host-specific, unavoidable dependency**.
 
 ## Release-oriented next steps
 
-1. Determine a credible storage topology and native Linux runtime for the
-   *existing* WSL2 VHDX images, including safe two-way state and non-image
-   Factory volumes/dependencies.
+1. Reuse the prior **NTFS dynamic-VHDX shared AI data pool** analysis instead
+   of re-running product selection. Resolve only the additional compatibility
+   of the **original existing WSL2 distro ext4.vhdx** as a native-Linux child
+   (including non-image Factory state, safe two-way updates, and host-specific
+   integrations), plus reconcile the storage placement with current disks.
 2. Select a native Linux kernel/distro/desktop based on the exact ASUS GPU and
    current ROCm and inference backend interoperability, not personal distro
    preference.
