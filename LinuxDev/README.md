@@ -1,110 +1,78 @@
-# LinuxDev — Linux development environment
+# LinuxDev — Linux host for Factory and local LLMs
 
-> **Status: concept draft, 2026-10-17.** This is a new, independent design
-> workstream. Nothing in this document authorizes installation, partition
-> changes, hardware purchases, or changes to the existing workstations.
-> Candidate solutions below are **not** accepted architectural decisions.
+**Status:** Product scope confirmed 2026-10-17; implementation architecture under research.
+This workstream is independent of `../windows/` and `../portable/`; their OS,
+encryption, provisioning and mobility choices are not implicitly inherited.
 
-## Purpose
+## What LinuxDev is
 
-Design a practical environment for **development targeting Linux**.
-The initial working interpretation of "LinuxDev" is a developer workstation or
-development environment, **not** a rename of the existing portable sensitive-workload
-Linux and **not** an extension of the Windows credential workstation.
-The exact workloads and deployment target remain to be established.
+LinuxDev is a **native Linux host**, not the place where application development
+dependencies or Factory's internal architecture should be installed.
 
-## Position within this repository
+It has exactly three product roles:
 
-- [`../windows/`](../windows/) — the Windows 11 Pro security/identity
-  workstation. Its business requirements remain authoritative **there**.
-- [`../portable/`](../portable/) — the frozen portable Linux
-  sensitive-workload design/research record. Its portability, encryption,
-  TPM/PIN and installation decisions are **not inherited** by LinuxDev.
-- **`LinuxDev/`** — a separate set of requirements and architecture decisions,
-  to be formulated for development workloads.
+1. **Host child environments.** Run Factory and its child projects inside their
+   own persistent Linux environments. Existing **Windows WSL2 distributions
+   must also run on LinuxDev unchanged as working environments**: edits and
+   generated state made on Linux must remain available when returning to
+   Windows WSL2, and vice versa.
+2. **Provide a convenient graphical desktop** for the human operator.
+3. **Execute demanding local workloads directly**, primarily GPU-accelerated
+   LLM inference, without unnecessary virtualization or GPU mediation.
+   
+**Ephemerd** must also run on LinuxDev with Factory's relevant CI contract intact.
+It is a host service supporting role 1, not an independent fourth product role.
 
-The three environments can share research or proven implementations, but
-sharing a repository does not imply sharing a security boundary, machine,
-disk layout, boot chain, update policy, or deployment method.
+Workloads inside Factory determine the requirements of their child environments,
+**not the distro, application stack, or daily desktop software of LinuxDev**.
+The host choice is driven by reliable child-environment execution, ergonomics and
+native AMD GPU/UMA driver support.
 
-## Decision principles
+## Current target
 
-1. **Product First:** use an established and supported capability before
-   engineering a substitute. Custom work is allowed when its benefit is proven.
-2. **Economy First:** optimize total lifecycle cost, including daily friction,
-   recovery, update overhead, hardware cost, maintenance and engineering effort.
-3. **Workload first:** choose an environment by the required development
-   capabilities; don't choose a distribution or installer first and retrofit
-   the use case to it.
-4. **Reproducibility:** prefer declarative, documented provisioning of the
-   development toolchain and workspace; avoid artisanal post-install steps.
-5. **Isolation proportional to the threat:** compilation, package execution,
-   dependencies, containers and AI-generated code can be untrusted. Determine
-   the necessary isolation **from the workloads** instead of assuming either
-   full trust or mandatory air-gapping.
-6. **Protection of current systems:** no proposal may casually modify the
-   existing WinOps/Windows Home installations or their boot and recovery paths.
-7. **Evidence rather than attractive diagrams:** assess specific current
-   product/version and hardware support before claiming a candidate works.
+- Physical target: existing **ASUS TUF A14 FA401EA**, AMD **Ryzen AI Max+ 392**
+  with Radeon **8060S**. ASUS advertises **up to 64 GB unified RAM** for this
+  model, not the 128 GB used in some Max+ 395 demonstrations.
+- Windows remains a working alternative; switching to LinuxDev must not
+  destroy existing Windows and WSL2 systems.
+- Windows' current **48 GB graphics-memory limitation** motivates testing
+  native Linux memory management for larger LLMs. This is an optimization goal,
+  not proof that the full 64 GB can become usable model memory.
 
-## Questions to settle before selecting an architecture
+## Documents
 
-| Dimension | Required information | Current status |
-| --- | --- | --- |
-| Main activities | Application development, infrastructure, containers, kernel/drivers, desktop/UI, AI/ML, or other? | Open |
-| Linux fidelity | Is Linux userspace sufficient, or is a complete Linux kernel, native boot, GUI, USB, PCIe/GPU or hardware testing needed? | Open |
-| Execution location | Existing ASUS, another machine, virtual machine, cloud/remote host, removable media? | Open |
-| Windows relationship | Must Windows and LinuxDev run concurrently? What data/services may be shared with WinOps? | Open |
-| Toolchains | Languages, compilers, build systems, IDE/editor, debugging, local services and containers | Open |
-| Performance | CPU, RAM, storage I/O, build latency, GPU acceleration and battery usage constraints | Open |
-| Persistence | Which sources, caches, environments and secrets survive rollback/reinstall? | Open |
-| Threat model | Trusted personal code vs external repositories, build scripts, downloaded binaries, security research | Open |
-| Recovery | Backup, clean rebuild, rollback, offline availability and acceptable downtime | Open |
-| Administration | Update cadence, automation, consistency, software channels | Open |
+- [Business requirements](BUSINESS_REQUIREMENTS.md) — confirmed needs, independent
+  of technical mechanism.
+- [Architecture research](ARCHITECTURE.md) — proposed seams and evidence,
+  with a clear distinction between established product capabilities and
+  the remaining interoperability questions.
 
-## Candidate deployment models (not a recommendation yet)
+## Decisions already made
 
-| Model | Why consider it | Material trade-offs to resolve |
-| --- | --- | --- |
-| **WSL2 within Windows** | Low switching cost for Linux CLI and common userspace toolchains | Different kernel/integration and isolation characteristics; depends on Windows host; not automatically suitable for kernel/hardware work |
-| **Linux virtual machine** | Full guest OS, snapshots and reproducible environments while keeping a host desktop | Virtualization overhead and hardware pass-through constraints; sharing untrusted workloads with the host needs a threat assessment |
-| **Dedicated native Linux installation** | Direct hardware access and native desktop/kernel environment | Boot/storage integration, updates, backup, recovery and potential impact on existing installations |
-| **Remote Linux development host** | Separate execution, potentially independent resources | Network dependency, remote operations cost, latency, hardware access, recovery |
-| **Portable/external Linux** | Move a development environment between computers | Device/firmware compatibility and extra boot/storage complexity; not justified by default |
+- Native Linux OS host with a graphical desktop.
+- Factory runs in child entities; the host is **not** tailored to the internals
+  of Factory or individual child projects.
+- Existing WSL2 working environments must continue across Linux/Windows
+  transitions, preserving changes in both directions.
+- Ephemerd must be supported on Linux.
+- Local LLM inference uses the physical GPU and shared memory as directly and
+  efficiently as practical.
+- Product First / Economy First: favor supported products, minimize lifetime
+  engineering and operational burden, introduce glue only for a proven gap.
 
-These are **deployment alternatives**. Containers (e.g. OCI/Distrobox/devcontainers)
-and language-specific package managers are additional toolchain/isolation choices,
-not necessarily alternatives to a host OS.
+## Still open (do not silently decide)
 
-## Initial architectural hypotheses — unapproved
+- Which native Linux distribution/kernel/desktop combination best supports
+  gfx1151/Radeon 8060S inference *on this exact ASUS* and a pleasant desktop?
+- Exact **zero-copy, bidirectional WSL2 image ownership** and its storage
+  placement/unlock across OSes, including crash consistency.
+- How WSL-specific host integrations and existing Factory runner services map
+  to Linux containers or another compatible runtime.
+- Ephemerd Linux isolation equivalence / acceptable differences relative to
+  its Windows Hyper-V backend.
+- Native inference backend and realistic maximum model weights+KV-cache size
+  without exhausting memory needed by host/child workloads.
+- Host installation and rollback strategy that leaves Windows recoverable.
 
-- Separate the **base OS/platform**, **toolchains/containers** and
-  **persistent sources and user configuration** so routine system replacement
-  does not accidentally discard work.
-- Prefer a clean, reproducible environment over preserving years of unmanaged
-  package state. Precisely which artifacts are declared versus backed up is TBD.
-- Decide Windows/WinOps integration explicitly: do not assume the security
-  workstation should also execute arbitrary development dependencies.
-- Select the **least complex model that actually satisfies the workload**, then
-  choose the distribution, disk/filesystem, encryption and installer.
-- The proven `portable/` AutoYaST/VM harness may offer reuse **only after**
-  its assumptions have been checked against LinuxDev's own requirements.
-
-## Concept milestones
-
-1. Establish the development workloads and operating constraints.
-2. Write `BUSINESS_REQUIREMENTS.md` with **confirmed** requirements;
-   clearly distinguish requirements from examples and technology suggestions.
-3. Compare viable deployment models against these requirements and eliminate
-   inappropriate options using documented evidence.
-4. Write `ARCHITECTURE.md` with a decision log, supported product versions,
-   explicit compromises, and an acceptance plan.
-5. Only then create provisioning artifacts and, if justified, a focused VM/
-   hardware validation harness.
-
-## Confirmed so far
-
-- LinuxDev has a **separate directory and conceptual scope** in the `linux`
-  repository.
-- No particular distribution, target disk, hardware, execution model,
-  security policy, or software stack has yet been selected for LinuxDev.
+No partitioning, OS reinstall, package baseline, new VMs or guest migrations
+are authorized by this concept draft.
