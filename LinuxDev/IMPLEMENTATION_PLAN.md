@@ -11,7 +11,7 @@ authorized.** Tracking: [Linux issue #17](https://github.com/evanmih-cmd/linux/i
 | Local GPU inference | **llama.cpp (ROCm/HIP, gfx1151)**, native server; Ubuntu ROCm distro packages first; AMD ROCm 7.14.1 optional pinned version when needed |
 | Factory & child workloads | original persistent **WSL2 ext4.vhdx** environments; native Linux invocation via **qemu-nbd + systemd-nspawn** is the leading direct-use path; runtime compatibility not accepted yet |
 | Shared AI user/work data | inherited **NTFS shared capacity pool -> dynamically expanding ext4 VHDX**; WSL2 native `wsl --mount --vhd`, Linux `ntfs3 -> qemu-nbd -> ext4` |
-| Factory CI service | **ephemerd for Linux**, embedded containerd and same Factory OCI runner image; security boundaries reviewed separately |
+| Factory CI isolation | **One guest-privileged but host-isolated KVM/libvirt Linux VM** running ephemerd Linux/embedded containerd; authorized Factory directly administers only the guest, no special LinuxDev-root updater |
 | Physical SSD2 storage | **Existing AMD RAIDXpert2 LUN**, not a blank disk; no accepted Linux driver or installation layout yet |
 | Dual-boot | independent firmware-selectable boot and recovery paths; Windows Home and Pro retained untouched |
 
@@ -112,19 +112,54 @@ and end-to-end agent-serving behavior for acceptance. Main native runtime:
 `llama-server` with `gfx1151` ROCm; Vulkan alternative assessed only
 where it materially helps.
 
-## P3 — Ephemerd without obsolete Windows layers
+## P3 — Ephemerd in ONE guest-privileged, host-isolated VM
 
-Factory's current deployment pins **ephemerd v0.2.20** for WinOps with
-Windows HCS/Hyper-V Linux VM and uses the Factory-production OCI runner image.
-On Linux run the product's existing **embedded-containerd OCI backend**;
-do **not** recreate a Hyper-V VM or invent a permanent Docker runner stack.
+**Revised from the previous bare-host service assumption on 2026-10-17.**
+The aim is Factory guest self-administration without LinuxDev host privilege.
 
-Map the existing Factory GitHub App identity, image, DIND, dispatch, tokens,
-secrets, network policy and Workbench/runner isolation onto the Linux
-service. The Linux host uses a shared kernel rather than Windows ephemerd's
-VM kernel boundary, so **do not assert identical security from OCI alone**.
-Representative Factory CI Product/Technical jobs must actually complete,
-with candidate-controlled code confined to its intended Workbench boundary.
+**Preferred Product composition:** Ubuntu 26.04 Desktop -> KVM/QEMU/libvirt
+(one bounded minimal Linux VM) -> unmodified ephemerd **Linux** backend
+(embedded containerd/BuildKit) -> disposable OCI runners/Workbench.
+
+Factory's independent trusted control plane retains authenticated
+**guest admin over SSH**, but cannot operate the host libvirt socket,
+RAIDXpert2, LinuxDev GPU/GUI, shared AI workspace or Windows data.
+Ordinary untrusted candidate jobs do NOT receive the admin key or
+ephemerd/GitHub App secrets. No custom trusted updater/synchronizer on
+the physical host: Factory updates itself using the guest's `systemd`
+and its own image lifecycle, even when CI is stopped/contradictory.
+
+The VM guest can manage privileged runtime mechanics safely relative to
+the host kernel; `dind.allow_privileged=false` remains the default and
+ordinary candidate jobs still use the accepted Workbench isolation. Guest
+admin compromise still endangers guest credentials and job integrity.
+
+Host libvirt owns ONLY: immutable VM resource isolation, network egress
+firewall, launch/stop and exceptional operator-initiated rollback/rebuild
+after **whole guest** failure. The default NAT bridge alone does NOT
+block VM->host or VM->LAN; explicit deny policy required, while preserving
+only necessary GitHub/registry DNS/HTTPS and independent controller->VM
+maintenance connectivity. No host filesystem/socket passthrough and
+no direct GPU assignment.
+
+**Acceptance exercises:**
+1. Real Factory Linux job using existing OCI production image, no host socket.
+2. Factory-controller guest-admin updates or repairs ephemerd **while
+   ephemerd service is offline**, using ordinary guest tools and no new
+   host updater or CI-dependent bootstrap.
+3. Ordinary untrusted job cannot acquire guest-admin key, host-root,
+   host network/private data, guest containerd direct authority or a
+   host libvirt capability.
+4. Guest memory/CPU/IO overhead measured while serving LLMs. Prefer
+   runtime balloon or stop VM for maximum LLM capacity; no asserted
+   zero-cost concurrency.
+5. Force a broken **guest** state; recover via stock host GUI/libvirt
+   snapshot/restore without touching either Windows or their WSL2 VHDX.
+
+An unprivileged system container remains a lower-memory alternative only
+if its nested embedded-containerd security/operation and guest-admin
+semantics are genuinely proven without broad host capabilities. Incus VM
+is a second mature VM-lifecycle product candidate, not a new obligation.
 
 ## P4 — rollback and release, after P0-P3 gates
 
@@ -148,3 +183,6 @@ with candidate-controlled code confined to its intended Workbench boundary.
 - [AMD Ubuntu RAID guide: supported platform families](https://docs.amd.com/api/khub/documents/l_VvImC0IX9mjsLPOPymFw/content)
 - [community Linux rcraid](https://github.com/joeytroy/amd-raid-driver)
 - [Ephemerd Linux/Windows backend](https://github.com/ephpm/ephemerd)
+- [Ephemerd security and privileged Docker warning](https://github.com/ephpm/ephemerd/security)
+- [Libvirt VM network and firewall](https://libvirt.org/firewall.html)
+- [Incus VM versus container isolation](https://linuxcontainers.org/incus/docs/main/explanation/containers_and_vms/)

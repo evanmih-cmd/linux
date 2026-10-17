@@ -21,7 +21,9 @@ It has exactly three product roles:
    LLM inference, without unnecessary virtualization or GPU mediation.
    
 **Ephemerd** must also run on LinuxDev with Factory's relevant CI contract intact.
-It is a host service supporting role 1, not an independent fourth product role.
+It is an execution service supporting role 1, not an independent fourth
+product role. **Leading isolation proposal:** run ephemerd inside one minimal
+KVM/Linux guest, leaving LinuxDev's physical OS and GPU independent.
 
 Workloads inside Factory determine the requirements of their child environments,
 **not the distro, application stack, or daily desktop software of LinuxDev**.
@@ -58,7 +60,9 @@ native AMD GPU/UMA driver support.
   of Factory or individual child projects.
 - Existing WSL2 working environments must continue across Linux/Windows
   transitions, preserving changes in both directions.
-- Ephemerd must be supported on Linux.
+- Ephemerd must be supported on Linux and **isolated from the host OS**;
+  authorized Factory administration must directly repair/update its own guest
+  domain without a bespoke privileged host updater.
 - Local LLM inference uses the physical GPU and shared memory as directly and
   efficiently as practical.
 - Product First / Economy First: favor supported products, minimize lifetime
@@ -72,8 +76,9 @@ native AMD GPU/UMA driver support.
   placement/unlock across OSes, including crash consistency.
 - How WSL-specific host integrations and existing Factory runner services map
   to Linux containers or another compatible runtime.
-- Ephemerd Linux isolation equivalence / acceptable differences relative to
-  its Windows Hyper-V backend.
+- Confirmed libvirt/KVM outer boundary, usable in-guest Factory administration
+  and exact costs against 64 GB of shared GPU/CPU memory; no unconditional
+  promise of zero overhead or identical Windows-Hyper-V security.
 - Native inference backend and realistic maximum model weights+KV-cache size
   without exhausting memory needed by host/child workloads.
 - Host installation and rollback strategy that leaves Windows recoverable.

@@ -53,6 +53,30 @@ respecting the relevant Factory runner image, dispatch policy and job contracts.
 **Security condition:** Container isolation is not automatically equivalent to
 Hyper-V VM isolation. Any change in accepted trust boundaries must be explicit.
 
+## BR-5A: Ephemerd must not administer the LinuxDev host
+
+**Requirement:** A compromised or intentionally guest-root-controlling Factory
+execution stack must not acquire root, host filesystem, host storage/RAID, GPU,
+host credentials, operator desktop or virtualization-admin authority on
+LinuxDev merely because it can manage the runner substrate.
+
+**Requirement:** Authorized Factory administration can directly install,
+configure, update, repair, replace and restart ephemerd, its Linux guest OS,
+OCI images, credentials and job machinery **inside a bounded Factory-owned
+execution domain**, including exceptional recovery actions outside a normal
+CI cycle. This must not require a custom trusted host updater/synchronizer.
+
+**Critical distinction:** Authorized Factory control-plane administration
+is NOT the same trust category as untrusted candidate code in ordinary CI
+jobs. Candidate jobs do not receive the VM admin key, guest root rights,
+host virtualizer control or access to Ephemerd's GitHub App private key.
+
+**Practicality:** Favor a standard, low-overhead isolation product, minimizing
+RAM/CPU/storage overhead that competes with 64 GB UMA local LLM inference.
+Retain ordinary manual host-owned VM rollback when Factory's entire execution
+domain is unrecoverably broken; this is a last-resort recovery operation,
+not a permanent host-side Factory update service.
+
 ## BR-6: Operator desktop
 
 **Requirement:** Provide a comfortable and fully functional graphical Linux
@@ -94,9 +118,12 @@ A. An existing WSL2 environment is run under LinuxDev without re-creating
    and are present on the next Windows WSL2 launch; the reverse direction
    is proven too. Include the separately persisted artifacts actually used
    by the current Factory environment.
-B. Ephemerd executes a representative Factory Linux CI job on LinuxDev with
-   the intended image and network/security policy, not only `--version`
-   or daemon startup.
+B. Ephemerd executes a representative Factory Linux CI job inside its bounded
+   execution domain with the intended image and network/security policy,
+   not only `--version` or daemon startup. Factory can also self-update or
+   repair ephemerd independently of the daemon's health without privileged
+   administration of the physical LinuxDev OS. An ordinary untrusted CI
+   job has no access to this administration route.
 C. Actual LLM inference on the ASUS exceeds the Windows 48 GB *usable-memory
    constraint* for a materially larger workload while retaining system
    stability and useful token throughput.

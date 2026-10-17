@@ -18,8 +18,13 @@ Business authority: [BUSINESS_REQUIREMENTS.md](BUSINESS_REQUIREMENTS.md).
               │ existing  │             │
               │ WSL2 FS   │             │
               ├───────────┴─────────────┤
-              │ ephemerd (Linux)        │
-              │ embedded containerd/OCI │
+              │ QEMU/KVM (libvirt)      │
+              │ ┌───────────────────┐  │
+              │ │Factory Linux guest│  │
+              │ │ ephemerd          │  │
+              │ │ embedded containerd│ │
+              │ │ isolated OCI jobs │  │
+              │ └───────────────────┘  │
               └─────────────────────────┘
 
 Windows WSL2 <— exclusive ownership of persistent ext4.vhdx —> LinuxDev
@@ -152,35 +157,138 @@ a default architecture; preserving Git sources alone is not enough.
 - Linux kernel ntfs3: https://docs.kernel.org/filesystems/ntfs3.html
 - NTFS dual-boot/hibernation safety: https://manpages.debian.org/bookworm/ntfs-3g/mount.ntfs.8.en.html
 
-## Ephemerd — direct Linux backend
+## Ephemerd — self-administering Factory VM, host-isolated
 
-Factory currently pins **ephemerd v0.2.20** in
-`evanmih-cmd/factory:infra/ephemerd/windows/settings.json`. Its Windows
-bootstrap uses a Windows service and HCS/Hyper-V Linux VM with a VHDX.
+**Status: leading architecture proposal, not yet qualified. Product-owner
+clarification 2026-10-17:** The problem to solve is **not just OCI job
+isolation**, but the authority/lifecycle boundary of ephemerd **itself**.
+Today's Windows ephemerd is a host-resident service. Factory therefore needs
+a separate, specially privileged Windows updater/synchronizer and must
+avoid modifying the sensitive physical Windows substrate. LinuxDev should
+remove that coupling, not reproduce it with privileged root on LinuxDev.
 
-Upstream ephemerd also supports **native Linux**, with embedded containerd and
-OCI job containers directly on the Linux host, systemd service integration and
-Linux runner images. The existing Factory runner image configuration names
-`ghcr.io/evanmih-cmd/factory-github-runner:production` and permits DIND via
-ephemerd's fake Docker API. These are Factory-owned contracts, not LinuxDev
-developer tools.
+### Preferred minimum composition
 
-Proposed LinuxDev role:
-- run ephemerd as a controlled Linux host service;
-- use the Linux containerd backend rather than reproducing Windows HCS VM;
-- bind Factory dispatch/image/credentials to an appropriate Linux configuration;
-- preserve Factory's trust separation, avoid exposing host/Windows secrets,
-  and explicitly assess **container shared-kernel isolation vs Hyper-V VM
-  isolation** before accepting untrusted workflow execution.
+```text
+LinuxDev / Ubuntu Desktop (operator-owned physical trust domain)
+│
+├── GPU / ROCm / llama.cpp: direct host I/O, no GPU virtualization
+├── original WSL2 environments: direct-user child/Factory controller
+└── QEMU/KVM + libvirt (HOST-OWNED lifecycle and network)
+    │ no host/home/AI private mounts, no libvirt socket, no /dev/kvm
+    └── one small, persistent minimal Linux VM = FACTORY EXECUTION DOMAIN
+        ├── guest systemd/SSH, guest-owned filesystem + OCI caches
+        ├── ephemerd Linux binary/service + embedded containerd/BuildKit
+        ├── transient OCI CI runners & workbench (untrusted candidate route)
+        └── guest root authority (trusted Factory maintenance route ONLY)
 
-The upstream existence of the Linux backend does **not** constitute acceptance
-of Factory's exact v0.2.20 configuration on the target host.
+Factory controller (outside ephemerd) --guest-admin SSH--> Factory VM
+VM --github/registry public endpoints--> Internet
+VM -X-> LinuxDev host, other Windows OS data, private LAN/VPN
+```
 
-Sources:
-- https://github.com/ephpm/ephemerd
-- https://github.com/ephpm/ephemerd/security
-- https://github.com/evanmih-cmd/factory/blob/main/infra/ephemerd/config.toml
-- https://github.com/evanmih-cmd/factory/blob/main/infra/ephemerd/windows/settings.json
+**No custom trusted host updater.** The normal Linux `systemd` service manager
+inside the VM and ephemerd's stock lifecycle/upgrade commands handle normal
+maintenance. When standard CI cannot resolve a contradiction, **the already
+running independent Factory controller** authenticates to the VM over ordinary
+SSH and can repair/update **anything inside that VM**, including ephemerd,
+containerd state, runner images, accounts and guest system services. If that
+repair must restart ephemerd, the maintenance command does not depend on the
+ephemerd runner process being alive: a host-of-jobs CI workflow must **never be
+the sole entrypoint capable of repairing itself**. A detached guest systemd
+service or interactive SSH session is acceptable stock product plumbing, not
+a bespoke Windows-like trusted update layer.
+
+**Factory control access is not candidate-code access.** A dedicated VM-admin
+credential is held only by an authorized Factory control-plane environment,
+not exposed to ordinary untrusted CI candidate jobs, any runner mounts, task
+logs or the GitHub repository. The guest's GitHub App identity is scoped to
+its required repos/capabilities. The Ephemerd Linux fake Docker API and
+`dind.allow_privileged=false` remain separately enforced. Factory has power
+over the **guest** only; permission to manage the guest is not permission to
+alter the host trust boundary. An attacker compromising the whole guest may
+still steal **guest-held** GitHub credentials and affect its jobs, so they must
+be separately scoped and recoverable; a VM is not a panacea.
+
+### Why a whole VM instead of systemd-nspawn or Incus system container?
+
+Ephemerd's Linux backend creates OCI containers through *embedded containerd*,
+configures networking, manages image snapshots and implements Docker CLI
+compatibility. Outer unprivileged system-container nesting can constrain
+mounts, overlayfs, cgroups, networking and some operations; granting a
+container exceptional host-level privileges to fix nesting erodes the
+very security boundary being purchased. Upstream nspawn explicitly says its
+sandbox can be circumvented without user namespaces. A VM allows privileged
+container management against **its own kernel**, while hardware virtualization
+protects the host; a complete VM does use more RAM than a container.
+
+**Product choice:** stock **QEMU/KVM + libvirt** on Ubuntu 26.04, preferably
+operated through stock `virt-manager` on the desktop and ordinary libvirt
+CLI/API as the host lifecycle product. A minimal guest Ubuntu Server is a
+candidate; the host/guest Ubuntu versions need not be identical. The
+alternative **Incus VM** offers excellent VM lifecycle and memory controls,
+but introduces an additional instance-management daemon and access model;
+choose it only if it reduces total ownership cost relative to libvirt.
+`systemd-vmspawn` is a smaller modern QEMU wrapper but has a younger
+management/GUI/snapshot ecosystem; no demonstrated reason to replace
+libvirt's mature workflow yet.
+
+This VM is NOT an unnecessary virtualization layer on the LLM hot path:
+native GPU inference stays on LinuxDev. It **does** consume host RAM from the
+same physical 64 GB used by the GPU, plus some idle CPU and disk. Prefer
+one VM, modest on-demand vCPU assignment, guest memory balloon where
+supported, and the ability to suspend/stop the VM when maximal LLM memory is
+needed. **Do not claim a zero-overhead VM or an invented 1–2 GB minimum**:
+capacity must be measured against Factory's simultaneous job working set
+and host inference target.
+
+### Host and network boundary
+
+- No raw NVMe/RAIDXpert2 block devices, host home, host VHDX,
+  operator secrets, GPU/DRM devices, shared clipboard, guest-agent command
+  execution into host, hypervisor socket or host root filesystems.
+- A dedicated VM disk is **guest-owned**, supports ordinary snapshot/rebuild
+  and does not become a host filesystem authority.
+- libvirt default NAT network is **not a host/LAN firewall**. It permits
+  normal guest egress and may allow guest connections to host services;
+  define explicit host firewall rules for the VM interface to deny
+  guest -> host/private subnets/VPN, while selectively permitting DNS,
+  DHCP and the required GitHub/registry network path.
+- Host -> guest admin SSH is scoped to the independent Factory controller
+  (never to candidate-execution containers). Do not pass any
+  host-privileged management socket back into the guest.
+- Guest `root` is a **deliberately expendable** authority boundary: repair,
+  replace or even destroy the guest without modifying LinuxDev/Windows
+  encryption, boot, RAID, partitions or physical desktop.
+
+### Failure and restart contract
+
+| Scenario | Owner / mechanism |
+| --- | --- |
+| Normal job/image update | Factory CI inside guest; stock OCI/ephemerd lifecycle |
+| Ephemerd code/version defect but guest healthy | Factory control-plane SSH -> guest systemd/ephemerd, independent of ephemerd runner status |
+| Guest root filesystem/service broken | Host operator uses stock libvirt snapshot rollback / disposable guest reprovision; not a resident automatic host updater |
+| LinuxDev/RAID/boot defect | Physical host recovery, never delegated to the Factory VM |
+
+**Acceptance requires** successful Factory-authorized guest-root repair while
+ordinary Ephemerd CI is intentionally stopped, denied privilege escalation
+for an untrusted CI job, denied VM->host/LAN access, real Factory Linux OCI
+job completion, and empirical concurrent-LLM overhead measurement.
+
+### Primary sources
+
+- Ephemerd Linux/Windows architecture: https://github.com/ephpm/ephemerd
+- Ephemerd explicit privileged DinD host-risk warning:
+  https://github.com/ephpm/ephemerd/security
+- QEMU/libvirt on Ubuntu 26.04:
+  https://documentation.ubuntu.com/release-notes/26.04/changes-since-previous-interim/
+- Libvirt NAT is not isolation:
+  https://libvirt.org/formatnetwork.html
+- Libvirt guest-host firewall model: https://libvirt.org/firewall.html
+- Incus VM vs container distinction:
+  https://linuxcontainers.org/incus/docs/main/explanation/containers_and_vms/
+- systemd-nspawn userns warning:
+  https://man7.org/linux/man-pages/man1/systemd-nspawn.1.html
 
 ## GPU / local inference — native, memory-aware
 
@@ -205,8 +313,9 @@ a target on this ASUS.
   is the documented **leading host selection**; validation of the full
   FA401EA hardware and its RAID/boot topology remains a release gate.
 - GPU memory has to leave usable headroom for host GUI, processes, Ephemerd
-  and child environments; assess actual loaded model+KV cache, speed and memory
-  pressure rather than a BIOS/driver allocation label.
+  and child environments, including the independent Factory VM; assess actual
+  loaded model+KV cache, speed and memory pressure rather than a BIOS/driver
+  allocation label.
 
 Sources:
 - ASUS target: https://www.asus.com/de/laptops/for-gaming/tuf-gaming/asus-tuf-gaming-a14-2026-fa401ea/
@@ -317,8 +426,10 @@ selection unless they prove a **host-specific, unavoidable dependency**.
 2. Use Ubuntu 26.04 LTS Desktop + stock amdgpu as the working baseline,
    with packaged ROCm first and newer pinned AMD ROCm only where necessary;
    validate exact ASUS peripherals, resume and graphical session.
-3. Map Factory's pinned ephemerd version/config to the Linux backend and
-   explicitly assess Linux container security/isolation.
+3. Instantiate one **host-isolated Factory KVM VM** as the leading solution;
+   map Factory's pinned ephemerd version to its guest Linux backend, give
+   independent Factory controller guest-admin (NOT host-admin) access, and
+   measure guest RAM cost and isolation/security behavior.
 4. Set functional acceptance criteria using actual existing environment
    continuity, representative Ephemerd job execution, and real >48 GB LLM
    usable-memory operation, plus a fully usable graphical session.
