@@ -6,27 +6,17 @@ Business authority: [BUSINESS_REQUIREMENTS.md](BUSINESS_REQUIREMENTS.md).
 ## Boundaries
 
 ```text
-                  ASUS TUF A14 FA401EA
-                      native LinuxDev
-              ┌─────────────────────────┐
-              │ Graphical Linux desktop │
-              │ Host lifecycle/security │
-              ├───────────┬─────────────┤
-              │ Child envs│ Native LLMs │
-              │ Factory   │ 8060S / UMA │
-              │ projects  │ ROCm/Vulkan │
-              │ existing  │             │
-              │ WSL2 FS   │             │
-              ├───────────┴─────────────┤
-              │ systemd-nspawn (lead)   │
-              │ ┌───────────────────┐  │
-              │ │ Original WSL2 FS  │  │
-              │ │ Factory control   │  │
-              │ │ Ephemerd + OCI    │  │
-              │ └───────────────────┘  │
-              └─────────────────────────┘
+LinuxDev (Ubuntu 26.04 + native GPU/LLM)
+  │ host-owned launch, storage exposure, cgroup policy
+  └─ systemd-nspawn: factory-manager (Factory-owned authority)
+       ├─ unprivileged libvirt qemu:///session, /dev/kvm only
+       └─ QEMU/KVM: ONE common Factory Linux VM
+            ├─ systemd-nspawn: ephemerd (embedded containerd + OCI)
+            ├─ systemd-nspawn: WSL distro A (its original ext4.vhdx)
+            ├─ systemd-nspawn: WSL distro B (its original ext4.vhdx)
+            └─ systemd-nspawn: WSL distro N (... independent images)
 
-Windows WSL2 <— exclusive ownership of persistent ext4.vhdx —> LinuxDev
+Each VHDX is shared in TIME between Windows WSL2 and LinuxDev.
 ```
 
 No Factory compiler, build tool, agent framework or project-specific SDK belongs
@@ -126,7 +116,7 @@ Windows: WSL2 launches original ext4.vhdx
          ↓ shut down WSL and Windows filesystem access safely
 Shared canonical VHDX on mutually accessible persistent storage
          ↓ LinuxDev obtains exclusive writable ownership
-Linux:   QEMU VHDX block layer → ext4 mount → nspawn child OS
+Linux:   direct QEMU VHDX virtual disks → guest mounts each ext4 → per-distro nspawn
          ↓ stop guest, unmount, flush, detach cleanly
 Windows: WSL2 resumes same ext4.vhdx with Linux modifications
 ```
@@ -168,185 +158,179 @@ a default architecture; preserving Git sources alone is not enough.
 - Linux kernel ntfs3: https://docs.kernel.org/filesystems/ntfs3.html
 - NTFS dual-boot/hibernation safety: https://manpages.debian.org/bookworm/ntfs-3g/mount.ntfs.8.en.html
 
-## Unified Factory child: namespace-first and memory-elastic
+## Selected virtualization and authority topology (2026-10-17)
 
-**Updated research direction, 2026-10-17:** The owner prefers no preallocated
-guest RAM. **First candidate** is **one systemd-nspawn system container**
-hosting the canonical *original* Factory WSL2 filesystem **and** Linux
-Ephemerd with its embedded containerd/OCI. There is no separate Ephemerd
-VM, and VHDX by itself does not require a VM. This is a leading hypothesis
-**conditional on a real nested-containerd and security proof**, not an
-already accepted LinuxDev release.
-
-### Host topology, one physical kernel
+**This supersedes the earlier nspawn-only Ephemerd candidate and the
+incorrect one-WSL-distro-equals-the-VM-root design.**
+The final architecture is **LinuxDev -> host nspawn management domain ->
+unprivileged QEMU/KVM -> one common guest -> multiple guest nspawn
+containers**, including a *separate* Ephemerd. Host and Factory
+administration boundaries are deliberately different.
 
 ```text
-Windows booted                              LinuxDev booted
-  WSL2 VM                                     Ubuntu Desktop
-     |                                         GPU + ROCm/LLM
-original WSL2 ext4.vhdx                            |
-     |   (EXCLUSIVE, time-alternating RW)      NTFS -> qemu-nbd
-     +---------------------------------------------+
-                                                   |
-                                            systemd-nspawn
-                                            (Factory user namespace)
-                                               | original WSL OS tree
-                                               | trusted Factory control
-                                               | Ephemerd Linux service
-                                               | embedded containerd
-                                               +-- isolated OCI jobs
+PHYSCAL ASUS                 HOST-OWNED (Ubuntu 26.04 Desktop)
+├─ GPU / LLM / operator GUI   (no KVM on hot inference path)
+├─ AMD RAID LUNs / disk mount / BitLocker read access (root-only)
+├─ host firewall / nspawn launch / cgroup-v2 resource policy
+└─ systemd-nspawn factory-manager              ← FACTORY AUTHORITY START
+   ├─ non-root UID mapping and private namespaces
+   ├─ /dev/kvm ONLY (no nvme, RAID, DRI, libvirt system socket)
+   ├─ allowed set of Factory-owned VHDX image files only
+   ├─ per-user libvirt qemu:///session
+   └─ ONE QEMU/KVM Factory guest
+      ├─ tiny independent Linux supervisor root image
+      ├─ guest nspawn: ephemerd
+      │  └─ stock embedded containerd → OCI JIT jobs/Workbench
+      ├─ guest nspawn: WSL distribution 1 → *original* ext4.vhdx
+      ├─ guest nspawn: WSL distribution 2 → *original* ext4.vhdx
+      └─ guest nspawn: WSL distribution N → *original* ext4.vhdx
 ```
 
-The LinuxDev host owns only the supported VHDX mount/attach/unmount
-lifecycle, nspawn service/machine lifecycle, kernel isolation policy and
-host RAM/swap. It is NOT a bespoke updater. The independent trusted
-Factory controller in the Factory system container can use in-child
-systemd/admin privileges to repair/upgrade Ephemerd when Ephemerd itself
-is broken or stopped. Untrusted CI jobs get no controller credentials
-or privileged direct embedded-containerd access.
+### Exact authority boundary
 
-**Container guardrails (all required, not magic feature names):**
-- Distinct, non-identity `--private-users=pick` UID/GID mapping with
-  `--private-users-ownership=map` (idmapped mount), **never `chown` or
-  `auto` fallback to recursive `chown`**: the same WSL2 ext4.vhdx must
-  keep original numeric UID/GID ownership across Windows/Linux boots.
-  If mapping is unavailable for the real mount path, this candidate
-  **fails closed**, rather than silently rewriting WSL filesystem metadata.
-- Isolated mount/PID/network/IPC namespaces, minimal delegated capabilities
-  and seccomp, host-enforced AppArmor profile, private devices and
-  read-only/no-bind exposure of LinuxDev/Windows operator storage, secrets,
-  RAID and libvirt sockets. Factory root must be root **only in its user
-  namespace**, not initial host namespace; ordinary CI jobs are further
-  isolated and less privileged.
-- Private veth/bridge with host firewall denying host, LAN and VPN access
-  except explicitly required Factory control and allowed GitHub/registry
-  egress. Do not assume `--private-network` alone gives working OCI CNI
-  or protects local host services.
-- cgroup-v2 delegation is narrowly scoped. Nested containerd/runc requires
-  actual mount, overlayfs, CNI/iptables/netfilter, namespaces, cgroup and
-  AppArmor behavior to be proven under this user namespace; **do not**
-  hand the nspawn child broad host `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`,
-  `--privileged` or a host Docker/containerd socket as a workaround.
+1. **LinuxDev owner (physical host):** provisions/starts only the
+   outer `factory-manager` system container and its host-enforced
+   resource/security policy. Owns filesystem carrier unlock/NTFS
+   visibility and mounts, RAID, EFI, boot, system-wide firewall and
+   list of Factory-exposed image files. No routine Ephemerd or guest
+   image update/synchronization responsibility.
+2. **Factory management `nspawn`:** distinct user namespace, private
+   mount/process/network space, AppArmor and restrictive host
+   cgroup. Explicit bind of `/dev/kvm` plus device cgroup permission
+   grants *that* container KVM use. Uses **libvirt `qemu:///session`**
+   whose daemon and guest processes operate as the Factory non-root
+   user. No connection to `qemu:///system` and no host libvirt socket.
+   QEMU backing files and firmware live in this confined container's
+   storage view; Factory can autonomously define/create/start/stop,
+   reconfigure and repair its own QEMU VMs, with no privilege escalation
+   to physical root. The authority is **not per-VM restricted** inside
+   the Factory-owned account: the relevant restriction is the
+   user/mount/device namespace and deliberately exposed storage.
+3. **Factory common guest:** tiny independent Linux system/root image,
+   not the original WSL2 root. Guest kernel/systemd own multiple
+   separately named `nspawn` containers, one for each authorized
+   WSL2 distro and **another for Ephemerd**. They share a **virtual
+   kernel**, not a root filesystem, not UID/GID namespace, not
+   packages or working state. Ordinary sibling mounts are not
+   exposed to each other. The trusted Factory controller may
+   still administer the guest and its mounted Factory-owned disks.
+4. **Ephemerd:** guest-contained Linux service and embedded
+   containerd/overlayfs/CNI. Nested OCI runs against the **VM guest
+   kernel**, not the physical LinuxDev kernel. A privileged guest
+   runtime would therefore endanger the **Factory guest** and its
+   accessible disks, not gain host root merely through capabilities.
+   Guest `nspawn` isolation is defense-in-depth; a guest
+   kernel escape remains possible in principle. Candidate CI jobs
+   have separate unprivileged caps, seccomp, restricted network and
+   approved Factory Workbench isolation.
+5. **Host kernel attack surface:** the Factory nspawn has explicit
+   `/dev/kvm` access, which is a hardware-virtualization kernel ioctl
+   attack surface. User namespaces/DAC do **not** make KVM exploits
+   impossible; the trusted Factory controller is in scope, while
+   untrusted candidate jobs are kept below the guest boundary.
+   No raw NVMe, host /dev/dri, host KVM management sockets or
+   private host paths. Do not promise "host totally inaccessible".
 
-**Concrete upstream blocker to qualify:** Ephemerd Linux embeds a complete
-containerd server and uses runc, overlayfs and CNI with iptables. Its job
-AppArmor layer is documented as **best-effort**: if profile installation
-fails, jobs can proceed without that layer. Nested userns/container
-AppArmor support must therefore be inspected and negatively tested
-explicitly, never inferred from "ephemerd supports Linux". Its own
-`[dind].allow_privileged=false` remains necessary but insufficient to
-prove the outer host boundary.
+**Product evidence rather than invention:** an upstream systemd issue
+documents an actual working `qemu-kvm` inside `nspawn` with bind-mounted
+`/dev/kvm` and `DeviceAllow=/dev/kvm rw` (issue #38297).
+Ubuntu/libvirt documents that `qemu:///session` runs daemon and guests
+under the session user's DAC privileges, unlike root-controlled
+`qemu:///system`. This proves the *individual mechanisms*. Their
+combined hardening under this exact Ubuntu/ASUS configuration is
+still an acceptance requirement; do not invent completed E2E results.
 
-The Ubuntu **26.04 systemd-container package is from systemd 259.5**,
-whereas newer systemd **260** userns `--private-users-delegate=`
-enhancements must NOT be assumed available. If the existing product
-cannot support the required nested userns/cgroup features without unsafe
-host privilege, reject namespace-only Ephemerd containment and use the
-KVM fallback. No bespoke host reimplementation of Ephemerd or 260-only
-patching by default.
+### Multiple independent WSL2 images, without re-provisioning
 
-### Shared elastic memory: OS scheduling, not VM partitioning
+Each WSL2 system owns exactly **one canonical root `ext4.vhdx`**
+plus any separate durable data image (e.g. Factory Btrfs volume).
+The KVM guest receives them **directly as QEMU virtio block disks**
+using the VHDX format; `qemu-nbd` is not required for that image's
+guest-side presentation. Guest kernel mounts its ext4 tree at a unique
+system-container root path; `systemd-nspawn` launches that particular
+distro with its original OS users, packages, UID/GID and state. Its
+installed kernel, bootloader or Windows WSL launcher are not assumed
+to reside inside the VHDX. The guest supervisor OS and kernel are
+separate from all WSL roots.
 
-The **physical** 64 GB is one CPU/iGPU UMA pool. Factory child, GUI, LLM
-and Ephemerd allocate memory **on demand** from the same Linux allocator.
-No RAM block is reserved for an idle system container.
+The shared-VHDX contract is still **exclusive one-writer**, not shared
+access: on Windows, WSL2 owns it; on native Linux, Factory QEMU owns it.
+All guest nspawn services must shut down; every attached filesystem
+unmount, guest powerdown, QEMU disk close, NTFS flush and Windows
+clean shutdown must happen before changing the owning host.
+No `wsl --export`, clone synchronization or on-disk ownership
+conversion for routine switches. Guest idmapped nspawn root mounts
+where required must preserve numeric WSL UID/GID; automatic recursive
+chown fallback is prohibited.
 
-- **cgroup v2** and stock systemd slices control reclaim priority:
-  `MemoryLow=` gives best-effort protection to operator desktop and
-  active native LLM cgroups; use `MemoryMin=` only for a narrow host
-  survival floor. Do not assign a fake fixed minimum to all processes.
-- Factory/background container groups have weaker protection; `MemoryHigh=`
-  is a **soft throttle/reclaim ceiling** when it is justified and should
-  not be confused with preallocation. `MemoryMax=` is a final runaway
-  guard, not the primary RAM-distribution mechanism. It may remain
-  unset for ordinary elastic work when no useful cap is demonstrated.
-  `MemorySwapMax=` can enforce swap ceilings where relevant.
-- The kernel reclaims cache and pageable anonymous memory by priority.
-  **zswap with real native-Linux NVMe-backed swap** is a leading
-  economical mechanism: compressed cold pages stay in a *dynamic*
-  cache first, with writeback to a real swap device/file when needed.
-  zram-only swap holds compressed pages in RAM and by itself is not
-  a substitute for disk-backed overcommit. Exact swap location,
-  encryption and capacity must respect RAID/Windows data safety; do
-  not put a writeable swapfile on a hibernated NTFS or VHDX carrier.
-- Stock **systemd-oomd / PSI** catches sustained memory pressure and
-  selects eligible lower-priority units for termination when reclaim
-  and swapping are insufficient. It is NOT a memory allocator or
-  a guarantee that no process will be OOM-killed. Configure control
-  groups so a CI workload does not drag down the desktop session.
-- LLM model weights/KV cache and especially GPU mappings may be pinned
-  or otherwise non-pageable; swap is for pageable **background CPU
-  process memory**, not a way to fit arbitrarily large GPUs in RAM.
-  Measure real concurrency and recovered RAM, stalls/PSI, NVMe I/O,
-  OOM outcomes and token throughput without made-up memory numbers.
-  Activating a huge model may still require pausing/killing Factory
-  jobs, but **not** stopping a VM merely to reclaim its idle reservation.
+Factory can register multiple authorized WSL distributions and
+manage each independently within the common guest (start/stop,
+packages, lifecycle, separate data paths). Some WSL roots may be
+operator-owned rather than Factory-owned. They are **not** offered
+to Factory management without a distinct trust/authorization decision.
+Anyone with Factory management authority can read/write permitted
+VHDX images via QEMU; sibling namespace isolation is NOT a secrecy
+boundary against that administrator.
 
-The host's memory priority policy belongs to LinuxDev, never to a
-guest-controlled global `/sys/fs/cgroup` or kernel tunables. Factory
-may tune its **delegated inner cgroups only**, if supported.
+### No privileged host updater or control socket
 
-### VM fallback without a false fixed-RAM dichotomy
+The Factory manager is not a host service with LinuxDev root power.
+It *can* update, repair or replace guest root, guest controllers,
+nspawn configs, Ephemerd, OCI images and running WSL services by
+direct libvirt session management, guest SSH/console and stock
+guest systemd. Repair access exists even if Ephemerd service and CI
+are entirely stopped. The host does not install a custom syncd,
+repair proxy or per-image updater. Host responsibilities remain
+generic device/isolation/physical OS lifecycle only.
 
-If the userns+nested containerd configuration requires dangerous
-permissions, the fallback is **one** KVM/libvirt Factory guest sharing
-the same original VHDX root and in-guest Ephemerd; no second VM for
-the daemon. KVM can also support guest memory **ballooning /
-virtio-mem**, so it does not inherently require forever reserving an
-entire declared maximum in resident host RAM. However the extra guest
-kernel/page caches, cooperation of a balloon driver, dual host/guest
-swap and recovery latency add operational overhead and make global
-priority control less transparent than native cgroups. No claim that
-all guest RAM can always be returned on demand. The VM is selected on
-measured isolation/runtime grounds, NOT on a fictitious static-RAM
-requirement.
+**Outbound guest network:** session-libvirt's documented
+per-user mode uses user-mode networking, not system libvirt NAT
+bridges. Do not expose host/private LAN/VPN access by assuming
+NAT is a security boundary. Host-owned network filtering and
+nspawn-visible networking restrict allowed destinations; guest
+CNI firewalls separately restrict hostile JIT jobs. Management
+transport is guest-internal console/virtio-serial or confined
+management network, not an arbitrary host control socket.
 
-### Cross-Windows simplification
+### Elastic memory and minimum footprint
 
-After acceptance on Linux, evaluate running Ephemerd's Linux backend
-from the **same** original Factory WSL2 distribution under Windows,
-retiring the present privileged Windows-host service/updater.
-This is a separate conditional migration: kernel/containerd/CNI,
-app-service permissions, bootstrap and autonomous WSL lifetime must
-be proven. Microsoft cautions that mere systemd services do not
-keep WSL alive. Do not disable today's working service prematurely.
+The host owns the **single 64 GB UMA allocator** and direct
+Radeon/ROCm inference. QEMU/VM memory is *demand-paged* and
+limited by the host's cgroup-v2 pressure policy, not allocated as
+a permanently resident fixed partition. Use stock
+**virtio-balloon free-page reporting**, which returns pages that
+the guest has truly freed, and conventional ballooning/reclaim
+capabilities; QEMU's guest-visible maximum is only an upper bound.
 
-### Required product discrimination before declaring acceptance
+- LinuxDev uses systemd slice priorities with `MemoryLow` protection
+  for GUI/active inference, `MemoryHigh` soft reclaim for background
+  Factory pressure, and host `zswap` backed by encrypted native
+  NVMe swap where the finalized physical layout allows it.
+- The guest also runs cgroup-v2 to manage individual WSL distros
+  and Ephemerd independently, with guest swap policy. Owner can
+  suspend lower-priority workloads before huge models when
+  reclaim alone is insufficient.
+- Caveat: free-page reporting does **not** automatically reclaim
+  guest page cache, and host anonymous-swap reclamation is not
+  equivalent to a no-latency memory hot-unplug. GPU-pinned
+  memory cannot be assumed pageable. Do not disable host swap,
+  use preallocated/locked hugepages or promise the complete
+  64 GB is usable by one model.
+- Avoid an elaborate self-authored RAM balancing daemon. Measure
+  RSS/PSS, guest cache retention, host PSI, swap I/O, effective
+  model throughput and guest QoS under real concurrency.
 
-Use a **disposable copy** of a representative WSL image, never the only
-running Factory filesystem. Prove that nspawn starts the original distro,
-normal user identity is preserved without on-disk `chown`, Linux
-Ephemerd v0.2.20 runs its embedded containerd/BuildKit and real jobs,
-nested OCI works without initial-host-namespace privilege, AppArmor
-and outer restrictions actually enforce, guest/root cannot write
-LinuxDev host/Windows storage or change host firewall, and the
-independent Factory controller repairs Ephemerd when it is stopped.
+### Source evidence
 
-Then measure concurrent GUI + real native >48 GB inference +
-background Factory jobs: prove cold pages are reclaimed/swapped,
-interactive latency is acceptable, and model allocations/active
-jobs survive or fail with predictable priority under memory pressure.
-Finally do an **exclusive-owner WSL2 roundtrip** using the *real*
-original VHDX only after the disposable route is accepted.
-
-**Sources**
-- systemd-nspawn userns/idmapped ownership:
-  https://manpages.ubuntu.com/manpages/resolute/man1/systemd-nspawn.1.html
-- Ubuntu 26.04 systemd-container 259.5:
-  https://packages.ubuntu.com/resolute/systemd-container
-- Kernel cgroup-v2 limits / reclaim:
-  https://docs.kernel.org/admin-guide/cgroup-v2.html
-- systemd cgroup resource controls:
-  https://man7.org/linux/man-pages/man5/systemd.resource-control.5.html
-- Kernel zswap: https://docs.kernel.org/admin-guide/mm/zswap.html
-- Ephemerd embedded containerd:
+- Actual KVM in nspawn with `/dev/kvm` bound: https://github.com/systemd/systemd/issues/38297
+- Ubuntu libvirt unprivileged `qemu:///session`: https://ubuntu.com/server/docs/how-to/virtualisation/libvirt/
+- QEMU process privilege separation: https://www.qemu.org/docs/master/system/security.html
+- QEMU free-page reporting: https://wiki.archlinux.org/title/QEMU
+- WSL VHDX canonical ownership: https://learn.microsoft.com/en-us/windows/wsl/wsl2-mount-disk
+- Libvirt URI/permissions: https://libvirt.org/drvqemu.html
+- systemd-nspawn nested system containers: https://man7.org/linux/man-pages/man1/systemd-nspawn.1.html
+- Ephemerd Linux embedded containerd:
   https://github.com/ephpm/ephemerd/blob/main/docs/architecture/embedded-containerd.md
-- Ephemerd security and AppArmor best-effort fallback:
-  https://github.com/ephpm/ephemerd/blob/main/docs/guides/security.md
-- Ephemerd Linux CNI bridge:
-  https://github.com/ephpm/ephemerd/blob/main/pkg/networking/network_linux.go
-- QEMU/KVM memory hotplug alternative:
-  https://virtio-mem.gitlab.io/user-guide/user-guide-libvirt.html
 
 ## GPU / local inference — native, memory-aware
 
@@ -415,6 +399,41 @@ Sources:
 - https://documentation.ubuntu.com/release-notes/26.04/changes-since-previous-interim/
 - https://rocm.docs.amd.com/en/docs-7.2.0/how-to/system-optimization/strixhalo.html
 
+### Established AMD Linux RAID product line — evidence correction (2026-10-17)
+
+The earlier assertion that RAIDXpert2 had only an experimental community
+Linux driver was **wrong**. AMD maintains vendor Linux `rcraid`
+drivers and documented installation/SDK update flows:
+- AMD publicly distributes Linux RAID driver 9.3.0.00276 for
+  Ubuntu 20.04, and AMD RAID Ubuntu guide revision 1.01 (2025)
+  documents 9.3.2/9.3.3 drivers, DKMS, driver_sdk and kernel
+  upgrades, including signed/MOK workflows.
+- Lenovo publishes an official OEM **AMD Software Based RAID Linux
+  Utility 9.3.3** dated 2025-11-19 for Ubuntu 24/RHEL9. Its
+  *description says Utility*; inspecting that package's actual
+  kernel-driver payload is required before claiming it installs a
+  driver compatible with the ASUS. This supports continued OEM
+  maintenance; not proof for Ubuntu 26.04.
+- AMD Windows driver 9.3.3.00291 (2026) explicitly includes the
+  AMD Ryzen AI Max 300 family; this describes a **Windows driver**
+  and says nothing automatic about the matching Linux kernel module.
+- The community reimplementation has real TRX50 evidence but
+  is **not first choice** over the vendor product line.
+
+**Specific residual integration evidence:** identify the real ASUS
+RAID PCI ID and existing multiple-single-NVMe LUN layout, and
+check vendor driver/SDK 9.3.3 compatibility against the selected
+Ubuntu 26.04 kernel, Secure Boot module signature and boot-time
+LUN enumeration. Kernel updates must not strand the root FS.
+The vendor-supported Ubuntu 24 package does not yet establish
+Ubuntu 26.04 support on the physical ASUS.
+
+Links:
+- https://www.amd.com/en/support/downloads/drivers.html/chipsets/strx4/trx40.html
+- https://docs.amd.com/api/khub/documents/l_VvImC0IX9mjsLPOPymFw/content
+- https://support.lenovo.com/us/en/downloads/ds578298-amd-software-based-raid-linux-utility
+- https://www.amd.com/en/support/downloads/drivers.html/chipsets/am5/x870.html
+
 ### Physical ASUS storage — a newly discovered binding prerequisite
 
 **Physical reality, established in Windows issue #9:** the second SSD is not
@@ -448,8 +467,9 @@ Evidence on 2026-10-17:
   Assuming stock `mdadm` can import AMD RAIDXpert2 metadata as Intel IMSM
   would be unsupported.
 
-**Safety gate:** Do not offer the Linux installer the raw NM790 4TB as an empty
-target. Do not change AMD RAID firmware settings, WinOps LUN allocation or
+**Safety gate:** Prefer the supported vendor Linux RAID driver line,
+not reverse engineering. Do not offer the Linux installer the raw NM790
+4TB as an empty target. Do not change AMD RAID firmware settings, WinOps LUN allocation or
 SSD1 until native safe access is established with exact array identity and
 independent recovery. A distinct Linux root on a genuinely accessible
 non-member partition/disk may be investigated as an alternative, but neither
@@ -487,11 +507,11 @@ selection unless they prove a **host-specific, unavoidable dependency**.
 2. Use Ubuntu 26.04 LTS Desktop + stock amdgpu as the working baseline,
    with packaged ROCm first and newer pinned AMD ROCm only where necessary;
    validate exact ASUS peripherals, resume and graphical session.
-3. Prove **one nspawn Factory system container** for the original WSL root
-   and embedded-containerd Ephemerd under strict user namespaces/host
-   confinement, plus elastic cgroups-v2/zswap/host swap under LLM
-   pressure. Keep **one common KVM guest** only as a warranted isolation
-   fallback. Factory administration must never become host administration.
+3. Use one host-bound **Factory manager nspawn** with `/dev/kvm` and
+   `libvirt qemu:///session`, managing **one common KVM guest** with
+   multiple distinct guest-side WSL nspawn environments and a separate
+   Ephemerd nspawn. No privileged physical-host updater; verify host
+   cgroups/ballooning/zswap/swap priorities under LLM load.
 4. Set functional acceptance criteria using actual existing environment
    continuity, representative Ephemerd job execution, and real >48 GB LLM
    usable-memory operation, plus a fully usable graphical session.

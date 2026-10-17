@@ -53,46 +53,53 @@ respecting the relevant Factory runner image, dispatch policy and job contracts.
 **Security condition:** Container isolation is not automatically equivalent to
 Hyper-V VM isolation. Any change in accepted trust boundaries must be explicit.
 
-## BR-5A: Ephemerd must not administer the LinuxDev host
+## BR-5A: Delegated Factory virtualization authority, no host authority
 
-**Requirement:** A compromised or intentionally guest-root-controlling Factory
-execution stack must not acquire root, host filesystem, host storage/RAID, GPU,
-host credentials, operator desktop or virtualization-admin authority on
-LinuxDev merely because it can manage the runner substrate.
+**Requirement:** Factory can autonomously create/update/stop/restart, repair,
+snapshot and remove **its own** QEMU guests, images and execution environments.
+This includes maintenance when Ephemerd and ordinary CI are unavailable.
+Factory must **not** receive host root, host `qemu:///system`,
+host libvirt/virtnetworkd/virtstoraged administration, raw NVMe/RAID,
+host filesystem, host GPU, operator desktop, host secrets or control of
+other people's VM definitions/disks.
 
-**Requirement:** Authorized Factory administration can directly install,
-configure, update, repair, replace and restart ephemerd, its Linux guest OS,
-OCI images, credentials and job machinery **inside a bounded Factory-owned
-execution domain**, including exceptional recovery actions outside a normal
-CI cycle. This must not require a custom trusted host updater/synchronizer.
+**Requirement:** One host-owned **systemd-nspawn management container** is
+Factory's explicit authority boundary. QEMU and unprivileged
+`libvirt qemu:///session` run *inside that container* using narrowly
+granted `/dev/kvm`, user namespaces, host network/device limits and
+only the Factory-owned VHDX storage catalog.
 
-**Critical distinction:** Authorized Factory control-plane administration
-is NOT the same trust category as untrusted candidate code in ordinary CI
-jobs. Candidate jobs do not receive Factory-container administrative
-authority, host administrator authority, privileged containerd sockets,
-hypervisor control or Ephemerd's GitHub App private key.
+**Requirement:** Factory may run **multiple distinct original WSL2 Linux
+distributions** at once inside **one shared KVM guest**. Each distribution
+has its own file system, packages, users and durable VHDX disk; an isolated
+guest-side system container is used per distro. Ephemerd is a **separate
+guest-side system container**, not co-located by default inside a particular
+WSL distro. Additional guest VM instances are not needed for ordinary
+distro multiplicity.
 
-**Practicality:** First qualify **one systemd-nspawn Factory child** using
-the existing Factory WSL2 root, with privileged Ephemerd operations limited
-by user namespaces, capability restrictions, seccomp, AppArmor, cgroups,
-filesystem and network isolation. Neither nspawn nor rootless claims alone
-prove embedded-containerd compatibility or security. Use **one shared KVM
-guest** for the same Factory root and Ephemerd only if the no-VM variant
-cannot meet the verified contract. Never allocate a second Ephemerd VM as
-a default. Factory administrative authority reaches Factory-owned data
-inside its own child, but not any unrelated protected WSL filesystems.
+**Security semantics:** Trusted Factory administrator controls its own
+virtual machine and its allowed disks; that necessarily implies read/write
+authority over *those* disks. Host controls which images are accessible.
+CI candidates do not get host/nspawn manager/libvirt/QMP permissions,
+Factory administrator tokens or Ephemerd's GitHub App private key.
+Isolation among nested guest containers is not an integrity boundary
+against the separately authorized Factory VM administrator. Personal
+or differently trusted WSL disks never enter this Factory-owned catalog
+without a separate intentional authorization.
 
-**Resource requirement:** LinuxDev shall share its physical 64 GB unified
-RAM elastically between desktop, native inference and children with no
-permanently carved-out RAM quota for idle Factory/Ephemerd. It shall
-prioritize interactive/active LLM work using stock cgroup-v2/systemd
-controls, reclaim cache and inactive memory, and permit appropriately
-lower-priority anonymous pages to enter compressed/disk-backed swap.
-Host usability and data integrity must survive memory pressure without
-a bespoke resident memory-redistribution daemon. GPU-pinned/non-pageable
-allocations and the finite speed/size of swap are real limits; validate
-with representative concurrent loads. No automatic host root rights
-are delegated to Factory to change memory/isolation policy.
+**Lifecycle:** Maintenance uses ordinary libvirt/session QEMU, guest systemd,
+SSH/management console and stock Linux packages; no permanent
+privileged host updater, hand-synchronized WSL clones, or guest-OS
+rollback silently replacing a canonical original `ext4.vhdx`.
+
+**Memory requirement:** LinuxDev's 64 GB UMA is an elastic common pool.
+A high guest-visible memory ceiling must not become a matching fixed
+reservation of resident host RAM. Support host cgroups v2 priorities,
+guest free-page reporting/ballooning, compressed host swap backed by
+real NVMe swap and guest demand paging. Cold background memory should
+yield to GUI/native LLM needs. GPU pinned allocations and VM guest
+cache reclaim remain limits; do not promise arbitrary no-latency
+oversubscription.
 
 ## BR-6: Operator desktop
 
@@ -135,12 +142,11 @@ A. An existing WSL2 environment is run under LinuxDev without re-creating
    and are present on the next Windows WSL2 launch; the reverse direction
    is proven too. Include the separately persisted artifacts actually used
    by the current Factory environment.
-B. Ephemerd executes a representative Factory Linux CI job inside its bounded
-   execution domain with the intended image and network/security policy,
-   not only `--version` or daemon startup. Factory can also self-update or
-   repair ephemerd independently of the daemon's health without privileged
-   administration of the physical LinuxDev OS. An ordinary untrusted CI
-   job has no access to this administration route.
+B. Factory manages QEMU from its bounded host nspawn via unprivileged
+   session libvirt; an untrusted CI job cannot use that control. One KVM guest
+   hosts **at least two separate original WSL2 system containers** and a
+   separate Linux Ephemerd container completing a real Factory CI job.
+   Factory repairs Ephemerd while it is down, without LinuxDev-root access.
 C. Actual LLM inference on the ASUS exceeds the Windows 48 GB *usable-memory
    constraint* for a materially larger workload while retaining system
    stability and useful token throughput.
