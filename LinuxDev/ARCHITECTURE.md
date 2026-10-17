@@ -64,9 +64,15 @@ This design aims for **one canonical mutable image**, no `wsl --export` /
 and no guest reinstallation.
 
 **Blocking questions before approval:**
-- VHDX physical placement and mount accessibility from BOTH operating systems;
-  BitLocker-encrypted NTFS volumes cannot simply be assumed writable from Linux
-  without a supported unlock procedure.
+- VHDX physical placement and mount accessibility from BOTH operating systems.
+  Linux already has **cryptsetup BITLK** support for BitLocker-compatible
+  encrypted volumes and **ntfs3** read/write NTFS filesystem support; these
+  are concrete candidates for accessing an encrypted NTFS volume holding the
+  canonical VHDX, not a reason to abandon the requirement. The specific
+  Windows volume/protectors and safe write workflow remain to be designed.
+  Linux must not mount a hibernated/Fast-Startup Windows NTFS volume writable,
+  and the host should not expose unrelated protected Windows OS contents to
+  child workloads.
 - Consistency of NTFS hosting the VHDX, clean Windows shutdown (hibernation /
   Fast Startup), ext4 journal handling, and exclusive access semantics.
 - Existing WSL distro registration and absolute paths on Windows: moving a
@@ -86,6 +92,9 @@ a default architecture; preserving Git sources alone is not enough.
 - QEMU images: https://www.qemu.org/docs/master/system/images
 - QEMU image utility: https://www.qemu.org/docs/master/tools/qemu-img.html
 - systemd-nspawn: https://man7.org/linux/man-pages/man1/systemd-nspawn.1.html
+- cryptsetup BitLocker support: https://man7.org/linux/man-pages/man8/cryptsetup-luksopen.8.html
+- Linux kernel ntfs3: https://docs.kernel.org/filesystems/ntfs3.html
+- NTFS dual-boot/hibernation safety: https://manpages.debian.org/bookworm/ntfs-3g/mount.ntfs.8.en.html
 
 ## Ephemerd — direct Linux backend
 
